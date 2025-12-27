@@ -1,0 +1,109 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: ai-agent-standalone
+  
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: 0
+    timeout: 5000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+
+# AI Agent 配置
+aiagent:
+  # LLM配置
+  llm:
+    api-key: ${OPENAI_API_KEY:}
+    base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+    default-model: ${DEFAULT_MODEL:gpt-4o-mini}
+  
+  # 模型配置
+  model:
+    default-model-id: ${DEFAULT_MODEL_ID:gpt-4o-mini}
+    task-model-mapping:
+      SIMPLE_CHAT: ${DEFAULT_MODEL_ID:gpt-4o-mini}
+      RAG_QUERY: ${DEFAULT_MODEL_ID:gpt-4o-mini}
+      TOOL_CALL: ${TOOL_MODEL_ID:gpt-4o}
+      COMPLEX_WORKFLOW: ${TOOL_MODEL_ID:gpt-4o}
+  
+  memory:
+    short-term-expire-hours: 24
+    context-expire-hours: 1
+    max-context-window: 20
+  
+  rag:
+    default-top-k: 5
+    default-min-score: 0.5
+  
+  tools:
+    enabled-by-default: true
+  
+  # MCP工具配置
+  mcp:
+    # 是否启用MCP功能
+    enabled: true
+    
+    # MCP服务器列表
+    servers:
+      # 服务器1：设备管理
+      - id: device-mcp-server
+        name: 设备管理
+        description: 提供设备控制、状态查询等能力
+        group: device  # 分组名称
+        enabled: true
+        connection:
+          type: local  # local: 本地注解扫描 | remote: 远程MCP服务器
+      
+      # 服务器2：数据分析
+      - id: analytics-mcp-server
+        name: 数据分析
+        description: 提供数据分析、报表生成等能力
+        group: analytics
+        enabled: true
+        connection:
+          type: local
+      
+      # 服务器3：文件操作
+      - id: file-mcp-server
+        name: 文件操作
+        description: 提供文件读写、管理等能力
+        group: file
+        enabled: false  # 默认禁用
+        connection:
+          type: local
+      
+      # 远程MCP服务器示例（注释掉，需要时启用）
+      # - id: remote-mcp-server
+      #   name: 远程服务
+      #   description: 外部MCP服务
+      #   group: remote
+      #   enabled: true
+      #   connection:
+      #     type: remote
+      #     url: http://localhost:8081/mcp/message  # 远程MCP服务器端点
+      #     api-key: ${REMOTE_MCP_API_KEY:}  # API密钥（可选，从环境变量读取）
+      #     # 连接配置
+      #     timeout: 10000  # 连接超时（毫秒），默认10秒
+      #     read-timeout: 30000  # 读取超时（毫秒），默认30秒
+      #     retry-count: 3  # 重试次数，默认3次
+      #     retry-interval: 1000  # 重试间隔（毫秒），默认1秒
+      #     # 缓存配置
+      #     cache-enabled: true  # 是否启用缓存，默认true
+      #     cache-ttl: 300  # 缓存时间（秒），默认5分钟
+
+# SpringDoc API 文档
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+
