@@ -1,5 +1,6 @@
 package com.aiagent.storage;
 
+import com.aiagent.vo.ConversationInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -25,8 +26,41 @@ public class ConversationStorage {
     private static final long CONVERSATION_TTL_DAYS = 7;
     
     /**
-     * 保存对话信息
+     * 保存对话信息（使用ConversationInfo对象）
      */
+    public void saveConversation(ConversationInfo conversationInfo) {
+        if (conversationInfo == null || conversationInfo.getId() == null) {
+            log.warn("对话信息为空或缺少ID，无法保存");
+            return;
+        }
+        
+        try {
+            String conversationId = conversationInfo.getId();
+            String key = CONVERSATION_PREFIX + conversationId;
+            
+            // 设置创建时间和更新时间
+            Date now = new Date();
+            if (conversationInfo.getCreateTime() == null) {
+                conversationInfo.setCreateTime(now);
+            }
+            conversationInfo.setUpdateTime(now);
+            
+            // 转换为Map存储到Redis
+            Map<String, Object> conversationData = convertToMap(conversationInfo);
+            redisTemplate.opsForHash().putAll(key, conversationData);
+            redisTemplate.expire(key, CONVERSATION_TTL_DAYS, TimeUnit.DAYS);
+            
+            log.debug("保存对话: conversationId={}", conversationId);
+        } catch (Exception e) {
+            log.error("保存对话失败: conversationId={}", conversationInfo.getId(), e);
+        }
+    }
+    
+    /**
+     * 保存对话信息（兼容旧方法，使用Map）
+     * @deprecated 建议使用 saveConversation(ConversationInfo)
+     */
+    @Deprecated
     public void saveConversation(String conversationId, Map<String, Object> conversationData) {
         try {
             String key = CONVERSATION_PREFIX + conversationId;
@@ -44,6 +78,38 @@ public class ConversationStorage {
         } catch (Exception e) {
             log.error("保存对话失败: conversationId={}", conversationId, e);
         }
+    }
+    
+    /**
+     * 将ConversationInfo转换为Map
+     */
+    private Map<String, Object> convertToMap(ConversationInfo conversationInfo) {
+        Map<String, Object> map = new HashMap<>();
+        if (conversationInfo.getId() != null) {
+            map.put("id", conversationInfo.getId());
+        }
+        if (conversationInfo.getTitle() != null) {
+            map.put("title", conversationInfo.getTitle());
+        }
+        if (conversationInfo.getStatus() != null) {
+            map.put("status", conversationInfo.getStatus());
+        }
+        if (conversationInfo.getMessageCount() != null) {
+            map.put("messageCount", conversationInfo.getMessageCount());
+        }
+        if (conversationInfo.getModelId() != null) {
+            map.put("modelId", conversationInfo.getModelId());
+        }
+        if (conversationInfo.getModelName() != null) {
+            map.put("modelName", conversationInfo.getModelName());
+        }
+        if (conversationInfo.getCreateTime() != null) {
+            map.put("createTime", conversationInfo.getCreateTime());
+        }
+        if (conversationInfo.getUpdateTime() != null) {
+            map.put("updateTime", conversationInfo.getUpdateTime());
+        }
+        return map;
     }
     
     /**

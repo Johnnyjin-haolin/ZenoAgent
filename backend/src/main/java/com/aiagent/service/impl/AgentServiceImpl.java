@@ -1,7 +1,6 @@
 package com.aiagent.service.impl;
 
 import com.aiagent.constant.AgentConstants;
-import com.aiagent.model.AgentState;
 import com.aiagent.service.*;
 import com.aiagent.storage.ConversationStorage;
 import com.aiagent.util.LocalCache;
@@ -9,6 +8,7 @@ import com.aiagent.util.StringUtils;
 import com.aiagent.util.UUIDGenerator;
 import com.aiagent.vo.*;
 import com.alibaba.fastjson2.JSON;
+import dev.langchain4j.data.message.UserMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -16,7 +16,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -100,13 +99,16 @@ public class AgentServiceImpl implements IAgentService {
         if (StringUtils.isEmpty(request.getConversationId())) {
             try {
                 String conversationId = context.getConversationId();
-                Map<String, Object> conversationData = new HashMap<>();
-                conversationData.put("id", conversationId);
-                conversationData.put("title", generateTitle(request.getContent()));
-                conversationData.put("status", "active");
-                conversationData.put("messageCount", 0);
                 
-                conversationStorage.saveConversation(conversationId, conversationData);
+                // 使用ConversationInfo对象替代Map
+                ConversationInfo conversationInfo = ConversationInfo.builder()
+                    .id(conversationId)
+                    .title(generateTitle(request.getContent()))
+                    .status("active")
+                    .messageCount(0)
+                    .build();
+                
+                conversationStorage.saveConversation(conversationInfo);
                 request.setConversationId(conversationId);
                 
                 log.info("创建新对话: conversationId={}", conversationId);
@@ -116,8 +118,7 @@ public class AgentServiceImpl implements IAgentService {
         }
         
         // 2. 保存用户消息到记忆
-        dev.langchain4j.data.message.UserMessage userMessage = 
-            new dev.langchain4j.data.message.UserMessage(request.getContent());
+        UserMessage userMessage = new UserMessage(request.getContent());
         memorySystem.saveShortTermMemory(context.getConversationId(), userMessage);
         if (context.getMessages() == null) {
             context.setMessages(new java.util.ArrayList<>());
@@ -128,7 +129,7 @@ public class AgentServiceImpl implements IAgentService {
         if (context.getVariables() == null) {
             context.setVariables(new HashMap<>());
         }
-        context.getVariables().put("modelId", 
+        context.getVariables().put("modelId",
             StringUtils.getString(request.getModelId(), "gpt-4o-mini"));
         context.getVariables().put("enabledMcpGroups", request.getEnabledMcpGroups());
         context.getVariables().put("knowledgeIds", request.getKnowledgeIds());
