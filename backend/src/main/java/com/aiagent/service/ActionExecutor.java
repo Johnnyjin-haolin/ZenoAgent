@@ -3,14 +3,14 @@ package com.aiagent.service;
 import com.aiagent.util.StringUtils;
 import com.aiagent.vo.AgentContext;
 import com.aiagent.vo.AgentKnowledgeResult;
+import com.aiagent.vo.McpToolInfo;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 /**
  * 动作执行器
@@ -30,6 +30,12 @@ public class ActionExecutor {
     
     @Autowired
     private MemorySystem memorySystem;
+    
+    @Autowired
+    private McpToolExecutor mcpToolExecutor;
+    
+    @Autowired
+    private IntelligentToolSelector toolSelector;
     
     /**
      * 执行动作
@@ -70,30 +76,76 @@ public class ActionExecutor {
     private ActionResult executeToolCall(AgentAction action, AgentContext context, long startTime) {
         try {
             String toolName = action.getName();
-            Object params = action.getParams();
+            Map<String, Object> paramsObj = action.getParams();
             
-            // TODO: 实现完整的工具调用逻辑
-            // 当前简化实现：返回工具调用信息
-            String result = "工具调用: " + toolName + ", 参数: " + params;
+            // 转换参数为Map
+            Map<String, Object> params;
+            params = Objects.requireNonNullElseGet(paramsObj, HashMap::new);
+            
+            // 查找工具信息
+            McpToolInfo toolInfo = toolSelector.getToolByName(toolName);
+            if (toolInfo == null) {
+                throw new IllegalArgumentException("工具未找到: " + toolName);
+            }
+            
+            log.info("执行工具调用: name={}, params={}", toolName, params);
+            
+            // 使用McpToolExecutor执行工具
+            Object toolResult = mcpToolExecutor.execute(toolInfo, params);
+            
+            // 将结果转换为字符串（用于记录和返回）
+            String resultStr = parseToolResult(toolResult);
             
             // 记录工具调用历史
-            memorySystem.recordToolCall(context, toolName, 
-                params != null ? (java.util.Map<String, Object>) params : new java.util.HashMap<>(),
-                result);
+            memorySystem.recordToolCall(context, toolName, params, toolResult);
             
             long duration = System.currentTimeMillis() - startTime;
-            ActionResult actionResult = ActionResult.success("tool_call", toolName, result);
+            ActionResult actionResult = ActionResult.success("tool_call", toolName, toolResult);
             actionResult.setDuration(duration);
-            actionResult.setMetadata(java.util.Map.of("toolName", toolName, "params", params));
+            actionResult.setMetadata(java.util.Map.of(
+                "toolName", toolName, 
+                "params", params,
+                "resultStr", resultStr
+            ));
             
+            log.info("工具调用成功: name={}, duration={}ms", toolName, duration);
             return actionResult;
             
         } catch (Exception e) {
             log.error("工具调用失败", e);
             long duration = System.currentTimeMillis() - startTime;
-            return ActionResult.failure("tool_call", action.getName(),
+            ActionResult result = ActionResult.failure("tool_call", action.getName(),
                 e.getMessage(), "TOOL_CALL_ERROR");
+            result.setDuration(duration);
+            return result;
         }
+    }
+    
+    /**
+     * 解析工具执行结果为字符串
+     */
+    private String parseToolResult(Object toolResult) {
+        if (toolResult == null) {
+            return "工具执行完成，但未返回结果";
+        }
+        
+        // 如果是字符串，直接返回
+        if (toolResult instanceof String) {
+            return (String) toolResult;
+        }
+        
+        // 如果是Map或List，转换为JSON
+        if (toolResult instanceof java.util.Map || toolResult instanceof java.util.List) {
+            try {
+                return com.alibaba.fastjson2.JSON.toJSONString(toolResult);
+            } catch (Exception e) {
+                log.warn("工具结果JSON序列化失败", e);
+                return toolResult.toString();
+            }
+        }
+        
+        // 其他类型，转换为字符串
+        return toolResult.toString();
     }
     
     /**
@@ -107,8 +159,7 @@ public class ActionExecutor {
             }
             
             // 获取知识库ID列表
-            @SuppressWarnings("unchecked")
-            List<String> knowledgeIds = (List<String>) action.getParams().getOrDefault("knowledgeIds", 
+            List<String> knowledgeIds = (List<String>) action.getParams().getOrDefault("knowledgeIds",
                 new ArrayList<>());
             
             // 执行RAG检索
@@ -129,8 +180,10 @@ public class ActionExecutor {
         } catch (Exception e) {
             log.error("RAG检索失败", e);
             long duration = System.currentTimeMillis() - startTime;
-            return ActionResult.failure("rag_retrieve", "rag_retrieve",
+            ActionResult result = ActionResult.failure("rag_retrieve", "rag_retrieve",
                 e.getMessage(), "RAG_RETRIEVE_ERROR");
+            result.setDuration(duration);
+            return result;
         }
     }
     
@@ -163,8 +216,10 @@ public class ActionExecutor {
         } catch (Exception e) {
             log.error("LLM生成失败", e);
             long duration = System.currentTimeMillis() - startTime;
-            return ActionResult.failure("llm_generate", "llm_generate",
+            ActionResult result = ActionResult.failure("llm_generate", "llm_generate",
                 e.getMessage(), "LLM_GENERATE_ERROR");
+            result.setDuration(duration);
+            return result;
         }
     }
     
