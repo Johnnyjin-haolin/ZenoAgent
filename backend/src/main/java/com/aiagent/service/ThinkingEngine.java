@@ -1,6 +1,8 @@
 package com.aiagent.service;
 
-import com.aiagent.constant.AgentConstants;
+import com.aiagent.service.action.LLMGenerateParams;
+import com.aiagent.service.action.RAGRetrieveParams;
+import com.aiagent.service.action.ToolCallParams;
 import com.aiagent.util.StringUtils;
 import com.aiagent.vo.AgentContext;
 import com.alibaba.fastjson2.JSON;
@@ -123,14 +125,56 @@ public class ThinkingEngine {
         prompt.append("2. RAG_RETRIEVE - 检索知识库（如果需要查询信息）\n");
         prompt.append("3. LLM_GENERATE - 生成回复（如果可以直接回答）\n");
         prompt.append("4. COMPLETE - 完成任务（如果目标已达成）\n\n");
-        prompt.append("请以JSON格式返回你的决定：\n");
+        prompt.append("请严格按照以下JSON格式返回你的决定：\n\n");
+        
+        prompt.append("### TOOL_CALL 格式：\n");
         prompt.append("{\n");
-        prompt.append("  \"actionType\": \"动作类型\",\n");
-        prompt.append("  \"actionName\": \"动作名称\",\n");
+        prompt.append("  \"actionType\": \"TOOL_CALL\",\n");
+        prompt.append("  \"actionName\": \"工具名称\",\n");
         prompt.append("  \"reasoning\": \"为什么选择这个动作\",\n");
-        prompt.append("  \"params\": {动作参数}\n");
+        prompt.append("  \"toolCallParams\": {\n");
+        prompt.append("    \"toolName\": \"工具名称（可选，如果与actionName相同可省略）\",\n");
+        prompt.append("    \"toolParams\": {\n");
+        prompt.append("      \"参数名1\": \"参数值1\",\n");
+        prompt.append("      \"参数名2\": \"参数值2\"\n");
+        prompt.append("    }\n");
+        prompt.append("  }\n");
         prompt.append("}\n\n");
-        prompt.append("如果目标已达成，返回 {\"actionType\": \"COMPLETE\", \"reasoning\": \"完成原因\"}");
+        
+        prompt.append("### RAG_RETRIEVE 格式：\n");
+        prompt.append("{\n");
+        prompt.append("  \"actionType\": \"RAG_RETRIEVE\",\n");
+        prompt.append("  \"actionName\": \"rag_retrieve\",\n");
+        prompt.append("  \"reasoning\": \"为什么需要检索知识库\",\n");
+        prompt.append("  \"ragRetrieveParams\": {\n");
+        prompt.append("    \"query\": \"检索查询文本\",\n");
+        prompt.append("    \"knowledgeIds\": [\"知识库ID1\", \"知识库ID2\"]（可选，如果不提供将从上下文获取）,\n");
+        prompt.append("    \"maxResults\": 10（可选）,\n");
+        prompt.append("    \"similarityThreshold\": 0.8（可选）\n");
+        prompt.append("  }\n");
+        prompt.append("}\n\n");
+        
+        prompt.append("### LLM_GENERATE 格式：\n");
+        prompt.append("{\n");
+        prompt.append("  \"actionType\": \"LLM_GENERATE\",\n");
+        prompt.append("  \"actionName\": \"llm_generate\",\n");
+        prompt.append("  \"reasoning\": \"为什么可以直接生成回复\",\n");
+        prompt.append("  \"llmGenerateParams\": {\n");
+        prompt.append("    \"prompt\": \"生成提示词\",\n");
+        prompt.append("    \"systemPrompt\": \"系统提示词（可选）\",\n");
+        prompt.append("    \"temperature\": 0.7（可选）,\n");
+        prompt.append("    \"maxTokens\": 1000（可选）\n");
+        prompt.append("  }\n");
+        prompt.append("}\n\n");
+        
+        prompt.append("### COMPLETE 格式：\n");
+        prompt.append("{\n");
+        prompt.append("  \"actionType\": \"COMPLETE\",\n");
+        prompt.append("  \"actionName\": \"complete\",\n");
+        prompt.append("  \"reasoning\": \"任务已完成的原因\"\n");
+        prompt.append("}\n\n");
+        
+        prompt.append("注意：请确保返回的JSON格式正确，只包含对应动作类型所需的参数字段。");
         
         return prompt.toString();
     }
@@ -165,26 +209,32 @@ public class ThinkingEngine {
     }
     
     /**
-     * 生成默认思考结果（临时实现）
+     * 生成默认思考结果（降级方案）
      */
     private String generateDefaultThinking(String goal, AgentContext context) {
         // 简单逻辑：如果有工具可用，尝试工具调用；否则生成回复
         List<String> availableTools = toolSelector.getAvailableToolNames();
         
         if (!availableTools.isEmpty() && (goal.contains("执行") || goal.contains("调用"))) {
-            return JSON.toJSONString(java.util.Map.of(
-                "actionType", "TOOL_CALL",
-                "actionName", availableTools.get(0),
-                "reasoning", "检测到需要执行操作，选择调用工具",
-                "params", new HashMap<>()
-            ));
+            String toolName = availableTools.get(0);
+            Map<String, Object> defaultResult = new HashMap<>();
+            defaultResult.put("actionType", "TOOL_CALL");
+            defaultResult.put("actionName", toolName);
+            defaultResult.put("reasoning", "检测到需要执行操作，选择调用工具");
+            Map<String, Object> toolCallParams = new HashMap<>();
+            toolCallParams.put("toolName", toolName);
+            toolCallParams.put("toolParams", new HashMap<>());
+            defaultResult.put("toolCallParams", toolCallParams);
+            return JSON.toJSONString(defaultResult);
         } else {
-            return JSON.toJSONString(java.util.Map.of(
-                "actionType", "LLM_GENERATE",
-                "actionName", "llm_generate",
-                "reasoning", "可以直接生成回复",
-                "params", java.util.Map.of("prompt", goal)
-            ));
+            Map<String, Object> defaultResult = new HashMap<>();
+            defaultResult.put("actionType", "LLM_GENERATE");
+            defaultResult.put("actionName", "llm_generate");
+            defaultResult.put("reasoning", "可以直接生成回复");
+            Map<String, Object> llmParams = new HashMap<>();
+            llmParams.put("prompt", goal);
+            defaultResult.put("llmGenerateParams", llmParams);
+            return JSON.toJSONString(defaultResult);
         }
     }
     
@@ -197,7 +247,6 @@ public class ThinkingEngine {
             String actionType = json.getString("actionType");
             String actionName = json.getString("actionName");
             String reasoning = json.getString("reasoning");
-            Map<String, Object> params = json.getObject("params", Map.class);
             
             if (StringUtils.isEmpty(actionType)) {
                 log.warn("思考结果中缺少actionType");
@@ -212,17 +261,137 @@ public class ThinkingEngine {
                 return null;
             }
             
-            return AgentAction.builder()
-                .type(type)
-                .name(actionName != null ? actionName : type.name().toLowerCase())
-                .reasoning(reasoning)
-                .params(params != null ? params : new java.util.HashMap<>())
-                .build();
+            // 根据动作类型解析对应的参数
+            AgentAction action = null;
+            switch (type) {
+                case TOOL_CALL:
+                    action = parseToolCallAction(json, actionName, reasoning, context);
+                    break;
+                case RAG_RETRIEVE:
+                    action = parseRAGRetrieveAction(json, actionName, reasoning, context);
+                    break;
+                case LLM_GENERATE:
+                    action = parseLLMGenerateAction(json, actionName, reasoning, context);
+                    break;
+                case COMPLETE:
+                    action = AgentAction.complete(reasoning != null ? reasoning : "任务已完成");
+                    break;
+                default:
+                    log.warn("不支持的动作类型: {}", type);
+                    return null;
+            }
+            
+            if (action != null && StringUtils.isEmpty(action.getName())) {
+                action.setName(actionName != null ? actionName : type.name().toLowerCase());
+            }
+            
+            return action;
                 
         } catch (Exception e) {
-            log.error("解析思考结果失败", e);
+            log.error("解析思考结果失败: {}", thinkingResult, e);
             return null;
         }
+    }
+    
+    /**
+     * 解析工具调用动作
+     */
+    private AgentAction parseToolCallAction(JSONObject json, String actionName, String reasoning, AgentContext context) {
+        JSONObject toolCallParamsJson = json.getJSONObject("toolCallParams");
+        if (toolCallParamsJson == null) {
+            log.warn("TOOL_CALL动作缺少toolCallParams");
+            return null;
+        }
+        
+        // 获取工具名称（优先使用toolCallParams中的，否则使用actionName）
+        String toolName = toolCallParamsJson.getString("toolName");
+        if (StringUtils.isEmpty(toolName)) {
+            toolName = actionName;
+        }
+        if (StringUtils.isEmpty(toolName)) {
+            log.warn("TOOL_CALL动作缺少工具名称");
+            return null;
+        }
+        
+        // 获取工具参数
+        @SuppressWarnings("unchecked")
+        Map<String, Object> toolParams = (Map<String, Object>) toolCallParamsJson.getObject("toolParams", Map.class);
+        if (toolParams == null) {
+            toolParams = new HashMap<>();
+        }
+        
+        ToolCallParams toolCallParams = ToolCallParams.builder()
+            .toolName(toolName)
+            .toolParams(toolParams)
+            .build();
+        
+        return AgentAction.toolCall(toolName, toolCallParams, reasoning);
+    }
+    
+    /**
+     * 解析RAG检索动作
+     */
+    private AgentAction parseRAGRetrieveAction(JSONObject json, String actionName, String reasoning, AgentContext context) {
+        JSONObject ragParamsJson = json.getJSONObject("ragRetrieveParams");
+        if (ragParamsJson == null) {
+            log.warn("RAG_RETRIEVE动作缺少ragRetrieveParams");
+            return null;
+        }
+        
+        String query = ragParamsJson.getString("query");
+        if (StringUtils.isEmpty(query)) {
+            log.warn("RAG_RETRIEVE动作缺少query");
+            return null;
+        }
+        
+        // 获取knowledgeIds，如果未提供则从上下文获取
+        List<String> knowledgeIds = new ArrayList<>();
+        if (ragParamsJson.containsKey("knowledgeIds")) {
+            knowledgeIds = ragParamsJson.getList("knowledgeIds", String.class);
+        }
+        
+        // 如果knowledgeIds为空，从上下文获取
+        if (knowledgeIds == null || knowledgeIds.isEmpty()) {
+            if (context != null && context.getKnowledgeIds() != null) {
+                knowledgeIds = context.getKnowledgeIds();
+                log.debug("从上下文获取knowledgeIds: {}", knowledgeIds);
+            }
+        }
+        
+        RAGRetrieveParams ragParams = RAGRetrieveParams.builder()
+            .query(query)
+            .knowledgeIds(knowledgeIds != null ? knowledgeIds : new ArrayList<>())
+            .maxResults(ragParamsJson.getInteger("maxResults"))
+            .similarityThreshold(ragParamsJson.getDouble("similarityThreshold"))
+            .build();
+        
+        return AgentAction.ragRetrieve(ragParams, reasoning);
+    }
+    
+    /**
+     * 解析LLM生成动作
+     */
+    private AgentAction parseLLMGenerateAction(JSONObject json, String actionName, String reasoning, AgentContext context) {
+        JSONObject llmParamsJson = json.getJSONObject("llmGenerateParams");
+        if (llmParamsJson == null) {
+            log.warn("LLM_GENERATE动作缺少llmGenerateParams");
+            return null;
+        }
+        
+        String prompt = llmParamsJson.getString("prompt");
+        if (StringUtils.isEmpty(prompt)) {
+            log.warn("LLM_GENERATE动作缺少prompt");
+            return null;
+        }
+        
+        LLMGenerateParams llmParams = LLMGenerateParams.builder()
+            .prompt(prompt)
+            .systemPrompt(llmParamsJson.getString("systemPrompt"))
+            .temperature(llmParamsJson.getDouble("temperature"))
+            .maxTokens(llmParamsJson.getInteger("maxTokens"))
+            .build();
+        
+        return AgentAction.llmGenerate(llmParams, reasoning);
     }
 }
 

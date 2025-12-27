@@ -1,10 +1,15 @@
 package com.aiagent.service;
 
+import com.aiagent.service.action.LLMGenerateParams;
+import com.aiagent.service.action.RAGRetrieveParams;
+import com.aiagent.service.action.ToolCallParams;
 import com.aiagent.util.StringUtils;
 import com.aiagent.vo.AgentContext;
 import com.aiagent.vo.AgentKnowledgeResult;
 import com.aiagent.vo.McpToolInfo;
+import com.alibaba.fastjson2.JSON;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -76,23 +81,29 @@ public class ActionExecutor {
     private ActionResult executeToolCall(AgentAction action, AgentContext context, long startTime) {
         try {
             String toolName = action.getName();
-            Map<String, Object> paramsObj = action.getParams();
             
-            // 转换参数为Map
+            // 获取工具调用参数
+            ToolCallParams toolCallParams = action.getToolCallParams();
             Map<String, Object> params;
-            params = Objects.requireNonNullElseGet(paramsObj, HashMap::new);
+            if (toolCallParams==null){
+                throw new IllegalArgumentException("参数错误,toolCallParams为空");
+            }
             
+            // 使用特定类型参数
+            params = Objects.requireNonNullElseGet(toolCallParams.getToolParams(), HashMap::new);
+            // 如果toolCallParams中有toolName，优先使用
+            toolName = toolCallParams.getToolName();
             // 查找工具信息
             McpToolInfo toolInfo = toolSelector.getToolByName(toolName);
             if (toolInfo == null) {
                 throw new IllegalArgumentException("工具未找到: " + toolName);
             }
             
-            log.info("执行工具调用: name={}, params={}", toolName, params);
+            log.info("执行工具调用: name={}, params={}", toolName, toolCallParams);
             
             // 使用McpToolExecutor执行工具
-            Object toolResult = mcpToolExecutor.execute(toolInfo, params);
-            
+            Object toolResult = mcpToolExecutor.execute(toolInfo, toolCallParams.getToolParams());
+
             // 将结果转换为字符串（用于记录和返回）
             String resultStr = parseToolResult(toolResult);
             
@@ -102,7 +113,7 @@ public class ActionExecutor {
             long duration = System.currentTimeMillis() - startTime;
             ActionResult actionResult = ActionResult.success("tool_call", toolName, toolResult);
             actionResult.setDuration(duration);
-            actionResult.setMetadata(java.util.Map.of(
+            actionResult.setMetadata(Map.of(
                 "toolName", toolName, 
                 "params", params,
                 "resultStr", resultStr
@@ -135,9 +146,9 @@ public class ActionExecutor {
         }
         
         // 如果是Map或List，转换为JSON
-        if (toolResult instanceof java.util.Map || toolResult instanceof java.util.List) {
+        if (toolResult instanceof Map || toolResult instanceof List) {
             try {
-                return com.alibaba.fastjson2.JSON.toJSONString(toolResult);
+                return JSON.toJSONString(toolResult);
             } catch (Exception e) {
                 log.warn("工具结果JSON序列化失败", e);
                 return toolResult.toString();
@@ -153,14 +164,21 @@ public class ActionExecutor {
      */
     private ActionResult executeRAGRetrieve(AgentAction action, AgentContext context, long startTime) {
         try {
-            String query = (String) action.getParams().getOrDefault("query", "");
+            // 获取RAG检索参数（优先使用特定类型参数）
+            RAGRetrieveParams ragParams = action.getRagRetrieveParams();
+            String query = "";
+            List<String> knowledgeIds = List.of();
+            
+            if (ragParams != null) {
+                // 使用特定类型参数
+                query = ragParams.getQuery();
+                knowledgeIds = Objects.requireNonNullElseGet(ragParams.getKnowledgeIds(), ArrayList::new);
+            }
+            
+            // 如果query为空，使用reasoning作为查询
             if (StringUtils.isEmpty(query)) {
                 query = action.getReasoning();
             }
-            
-            // 获取知识库ID列表
-            List<String> knowledgeIds = (List<String>) action.getParams().getOrDefault("knowledgeIds",
-                new ArrayList<>());
             
             // 执行RAG检索
             AgentKnowledgeResult knowledgeResult = ragEnhancer.retrieve(query, knowledgeIds);
@@ -172,7 +190,7 @@ public class ActionExecutor {
             long duration = System.currentTimeMillis() - startTime;
             ActionResult result = ActionResult.success("rag_retrieve", "rag_retrieve", knowledgeResult);
             result.setDuration(duration);
-            result.setMetadata(java.util.Map.of("query", query, "count", 
+            result.setMetadata(Map.of("query", query, "count",
                 knowledgeResult != null ? knowledgeResult.getTotalCount() : 0));
             
             return result;
@@ -192,24 +210,41 @@ public class ActionExecutor {
      */
     private ActionResult executeLLMGenerate(AgentAction action, AgentContext context, long startTime) {
         try {
-            String prompt = (String) action.getParams().getOrDefault("prompt", "");
+            // 获取LLM生成参数（优先使用特定类型参数）
+            LLMGenerateParams llmParams = action.getLlmGenerateParams();
+            String prompt;
+            String systemPrompt = null;
+            
+            if (llmParams == null) {
+               throw  new IllegalArgumentException("llmParams 不能为空");
+            }
+            // 使用特定类型参数
+            prompt = llmParams.getPrompt();
+            systemPrompt = llmParams.getSystemPrompt();
+            // 如果prompt为空，使用reasoning作为prompt
             if (StringUtils.isEmpty(prompt)) {
                 prompt = action.getReasoning();
             }
             
             // 准备消息列表
             List<ChatMessage> messages = new ArrayList<>();
+            if (StringUtils.isNotEmpty(systemPrompt)) {
+                messages.add(new SystemMessage(systemPrompt));
+            }
             messages.add(new UserMessage(prompt));
             
-            // 调用LLM（简化实现：这里需要非流式调用）
-            // TODO: 实现非流式LLM调用
-            log.warn("LLM生成使用简化实现");
+            // 调用LLM（非流式调用）
+            String modelId = context != null ? context.getModelId() : null;
+            if (StringUtils.isEmpty(modelId)) {
+                modelId = "gpt-4o-mini";
+            }
             
-            // 临时返回成功结果
+            String llmResponse = llmChatHandler.chatNonStreaming(modelId, messages);
+            
             long duration = System.currentTimeMillis() - startTime;
-            ActionResult result = ActionResult.success("llm_generate", "llm_generate", 
-                "LLM生成功能待完善");
+            ActionResult result = ActionResult.success("llm_generate", "llm_generate", llmResponse);
             result.setDuration(duration);
+            result.setMetadata(Map.of("prompt", prompt, "modelId", modelId));
             
             return result;
             

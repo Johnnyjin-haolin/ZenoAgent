@@ -1,5 +1,8 @@
 package com.aiagent.service;
 
+import com.aiagent.service.action.LLMGenerateParams;
+import com.aiagent.service.action.RAGRetrieveParams;
+import com.aiagent.service.action.ToolCallParams;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -35,9 +38,19 @@ public class AgentAction {
     private String description;
     
     /**
-     * 动作参数
+     * 工具调用参数（当type为TOOL_CALL时使用）
      */
-    private Map<String, Object> params;
+    private ToolCallParams toolCallParams;
+    
+    /**
+     * RAG检索参数（当type为RAG_RETRIEVE时使用）
+     */
+    private RAGRetrieveParams ragRetrieveParams;
+    
+    /**
+     * LLM生成参数（当type为LLM_GENERATE时使用）
+     */
+    private LLMGenerateParams llmGenerateParams;
     
     /**
      * 推理过程（为什么选择这个动作）
@@ -85,42 +98,81 @@ public class AgentAction {
     }
     
     /**
-     * 创建工具调用动作
+     * 创建工具调用动作（使用特定参数类型）
      */
-    public static AgentAction toolCall(String toolName, Map<String, Object> params, String reasoning) {
+    public static AgentAction toolCall(String toolName, ToolCallParams params, String reasoning) {
         return AgentAction.builder()
             .type(ActionType.TOOL_CALL)
             .name(toolName)
-            .params(params)
+            .toolCallParams(params)
             .reasoning(reasoning)
             .description("调用工具: " + toolName)
             .build();
     }
     
     /**
-     * 创建RAG检索动作
+     * 创建工具调用动作（兼容旧版本，使用Map）
+     * @deprecated 建议使用 toolCall(String, ToolCallParams, String)
      */
-    public static AgentAction ragRetrieve(String query, Map<String, Object> params, String reasoning) {
+    @Deprecated
+    public static AgentAction toolCall(String toolName, Map<String, Object> params, String reasoning) {
+        ToolCallParams toolCallParams = ToolCallParams.builder()
+            .toolName(toolName)
+            .toolParams(params)
+            .build();
+        return toolCall(toolName, toolCallParams, reasoning);
+    }
+    
+    /**
+     * 创建RAG检索动作（使用特定参数类型）
+     */
+    public static AgentAction ragRetrieve(RAGRetrieveParams params, String reasoning) {
         return AgentAction.builder()
             .type(ActionType.RAG_RETRIEVE)
             .name("rag_retrieve")
-            .params(params)
+            .ragRetrieveParams(params)
             .reasoning(reasoning)
-            .description("检索知识库: " + query)
+            .description("检索知识库: " + (params != null ? params.getQuery() : ""))
             .build();
     }
     
     /**
-     * 创建LLM生成动作
+     * 创建RAG检索动作（兼容旧版本，使用Map）
+     * @deprecated 建议使用 ragRetrieve(RAGRetrieveParams, String)
      */
-    public static AgentAction llmGenerate(String prompt, String reasoning) {
+    @Deprecated
+    @SuppressWarnings("unchecked")
+    public static AgentAction ragRetrieve(String query, Map<String, Object> params, String reasoning) {
+        RAGRetrieveParams ragParams = RAGRetrieveParams.builder()
+            .query(query)
+            .knowledgeIds((java.util.List<String>) params.getOrDefault("knowledgeIds", new java.util.ArrayList<>()))
+            .build();
+        return ragRetrieve(ragParams, reasoning);
+    }
+    
+    /**
+     * 创建LLM生成动作（使用特定参数类型）
+     */
+    public static AgentAction llmGenerate(LLMGenerateParams params, String reasoning) {
         return AgentAction.builder()
             .type(ActionType.LLM_GENERATE)
             .name("llm_generate")
-            .params(Map.of("prompt", prompt))
+            .llmGenerateParams(params)
             .reasoning(reasoning)
             .description("生成回复")
             .build();
+    }
+    
+    /**
+     * 创建LLM生成动作（兼容旧版本，使用String prompt）
+     * @deprecated 建议使用 llmGenerate(LLMGenerateParams, String)
+     */
+    @Deprecated
+    public static AgentAction llmGenerate(String prompt, String reasoning) {
+        LLMGenerateParams params = LLMGenerateParams.builder()
+            .prompt(prompt)
+            .build();
+        return llmGenerate(params, reasoning);
     }
     
     /**
@@ -135,4 +187,5 @@ public class AgentAction {
             .build();
     }
 }
+
 
