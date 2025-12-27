@@ -25,23 +25,23 @@ public class ObservationEngine {
         log.debug("观察动作结果: {} - {}", result.getActionType(), 
             result.isSuccess() ? "成功" : "失败");
         
-        // 更新上下文变量
-        if (context.getVariables() == null) {
-            context.setVariables(new java.util.HashMap<>());
-        }
-        
-        // 记录最后一次动作结果
-        context.getVariables().put("lastActionResult", result);
-        context.getVariables().put("lastActionSuccess", result.isSuccess());
+        // 更新上下文变量（使用具体属性）
+        context.setLastActionResult(result);
+        context.setLastActionSuccess(result.isSuccess());
         
         if (result.isSuccess()) {
             // 成功：保存结果到上下文
-            context.getVariables().put("lastActionData", result.getData());
+            context.setLastActionData(result.getData());
+            // 清除错误信息
+            context.setLastActionError(null);
+            context.setLastActionErrorType(null);
             log.debug("动作执行成功，结果已保存到上下文");
         } else {
             // 失败：记录错误信息
-            context.getVariables().put("lastActionError", result.getError());
-            context.getVariables().put("lastActionErrorType", result.getErrorType());
+            context.setLastActionError(result.getError());
+            context.setLastActionErrorType(result.getErrorType());
+            // 清除数据
+            context.setLastActionData(null);
             log.debug("动作执行失败，错误信息已记录: {}", result.getError());
         }
         

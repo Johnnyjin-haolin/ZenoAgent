@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -125,14 +124,10 @@ public class AgentServiceImpl implements IAgentService {
         }
         context.getMessages().add(userMessage);
         
-        // 3. 设置上下文变量
-        if (context.getVariables() == null) {
-            context.setVariables(new HashMap<>());
-        }
-        context.getVariables().put("modelId",
-            StringUtils.getString(request.getModelId(), "gpt-4o-mini"));
-        context.getVariables().put("enabledMcpGroups", request.getEnabledMcpGroups());
-        context.getVariables().put("knowledgeIds", request.getKnowledgeIds());
+        // 3. 设置上下文变量（使用具体属性）
+        context.setModelId(StringUtils.getString(request.getModelId(), "gpt-4o-mini"));
+        context.setEnabledMcpGroups(request.getEnabledMcpGroups());
+        context.setKnowledgeIds(request.getKnowledgeIds());
         
         // 4. 注册状态变更监听器
         stateMachine.initialize(context, newState -> {
@@ -206,7 +201,6 @@ public class AgentServiceImpl implements IAgentService {
                 .toolCallHistory(new java.util.ArrayList<>())
                 .ragRetrieveHistory(new java.util.ArrayList<>())
                 .iterations(0)
-                .variables(new HashMap<>())
                 .build();
         }
         

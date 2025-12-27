@@ -58,8 +58,50 @@ public class AgentContext implements Serializable {
     private Integer iterations;
     
     /**
-     * 上下文变量
+     * 模型ID
      */
+    private String modelId;
+    
+    /**
+     * 启用的MCP分组列表
+     */
+    private List<String> enabledMcpGroups;
+    
+    /**
+     * 知识库ID列表
+     */
+    private List<String> knowledgeIds;
+    
+    /**
+     * 最后一次动作结果
+     */
+    private com.aiagent.service.ActionResult lastActionResult;
+    
+    /**
+     * 最后一次动作是否成功
+     */
+    private Boolean lastActionSuccess;
+    
+    /**
+     * 最后一次动作数据
+     */
+    private Object lastActionData;
+    
+    /**
+     * 最后一次动作错误信息
+     */
+    private String lastActionError;
+    
+    /**
+     * 最后一次动作错误类型
+     */
+    private String lastActionErrorType;
+    
+    /**
+     * 上下文变量（已废弃，请使用具体属性）
+     * @deprecated 请使用具体的属性字段，如modelId、enabledMcpGroups等
+     */
+    @Deprecated
     private Map<String, Object> variables;
     
     /**
