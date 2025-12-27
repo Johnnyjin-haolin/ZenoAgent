@@ -140,13 +140,26 @@ public class ThinkingEngine {
      */
     private String callLLMForThinking(String prompt, AgentContext context) {
         try {
-            // TODO: 实现非流式LLM调用方法
-            // 临时实现：返回一个默认动作
-            log.warn("LLM思考调用未完全实现，使用默认逻辑");
-            return generateDefaultThinking(prompt, context);
+            // 准备消息列表
+            List<ChatMessage> messages = new ArrayList<>();
+            messages.add(new SystemMessage("你是一个智能Agent的思考模块，需要分析情况并做出决策。请严格按照JSON格式返回结果。"));
+            messages.add(new UserMessage(prompt));
+            
+            // 获取模型ID（从上下文或使用默认值）
+            String modelId = context != null ? context.getModelId() : null;
+            if (StringUtils.isEmpty(modelId)) {
+                modelId = "gpt-4o-mini";
+            }
+            
+            // 调用非流式LLM获取完整响应
+            String response = llmChatHandler.chatNonStreaming(modelId, messages);
+            
+            log.debug("LLM思考响应: {}", response);
+            return response;
             
         } catch (Exception e) {
-            log.error("LLM思考调用失败", e);
+            log.error("LLM思考调用失败，使用默认逻辑", e);
+            // 失败时降级为默认逻辑
             return generateDefaultThinking(prompt, context);
         }
     }
