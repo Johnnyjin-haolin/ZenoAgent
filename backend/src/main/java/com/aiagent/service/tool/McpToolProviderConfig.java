@@ -1,4 +1,4 @@
-package com.aiagent.service;
+package com.aiagent.service.tool;
 
 import dev.langchain4j.service.tool.ToolProvider;
 import lombok.extern.slf4j.Slf4j;

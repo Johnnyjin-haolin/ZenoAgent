@@ -1,4 +1,4 @@
-package com.aiagent.service;
+package com.aiagent.service.tool;
 
 import com.aiagent.vo.McpToolInfo;
 import com.alibaba.fastjson2.JSON;

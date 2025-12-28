@@ -1,4 +1,4 @@
-package com.aiagent.service;
+package com.aiagent.service.tool;
 
 import com.aiagent.config.McpServerConfig;
 import dev.langchain4j.mcp.client.transport.McpTransport;

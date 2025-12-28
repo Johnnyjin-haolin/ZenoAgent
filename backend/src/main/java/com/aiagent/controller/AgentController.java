@@ -3,11 +3,10 @@ package com.aiagent.controller;
 import com.aiagent.config.AgentConfig;
 import com.aiagent.service.IAgentService;
 import com.aiagent.service.MemorySystem;
+import com.aiagent.service.tool.McpGroupManager;
 import com.aiagent.storage.ConversationStorage;
-import com.aiagent.util.StringUtils;
 import com.aiagent.vo.AgentRequest;
 import com.aiagent.vo.ConversationInfo;
-import com.aiagent.vo.MessageDTO;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
@@ -44,7 +43,7 @@ public class AgentController {
     private AgentConfig agentConfig;
     
     @Autowired
-    private com.aiagent.service.McpGroupManager mcpGroupManager;
+    private McpGroupManager mcpGroupManager;
     
     /**
      * 执行Agent任务

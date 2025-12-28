@@ -3,6 +3,7 @@ package com.aiagent.service;
 import com.aiagent.service.action.LLMGenerateParams;
 import com.aiagent.service.action.RAGRetrieveParams;
 import com.aiagent.service.action.ToolCallParams;
+import com.aiagent.service.tool.McpToolExecutor;
 import com.aiagent.util.StringUtils;
 import com.aiagent.vo.AgentContext;
 import com.aiagent.vo.AgentKnowledgeResult;
@@ -80,8 +81,6 @@ public class ActionExecutor {
      */
     private ActionResult executeToolCall(AgentAction action, AgentContext context, long startTime) {
         try {
-            String toolName = action.getName();
-            
             // 获取工具调用参数
             ToolCallParams toolCallParams = action.getToolCallParams();
             Map<String, Object> params;
@@ -92,7 +91,7 @@ public class ActionExecutor {
             // 使用特定类型参数
             params = Objects.requireNonNullElseGet(toolCallParams.getToolParams(), HashMap::new);
             // 如果toolCallParams中有toolName，优先使用
-            toolName = toolCallParams.getToolName();
+            String toolName = toolCallParams.getToolName();
             // 查找工具信息
             McpToolInfo toolInfo = toolSelector.getToolByName(toolName);
             if (toolInfo == null) {

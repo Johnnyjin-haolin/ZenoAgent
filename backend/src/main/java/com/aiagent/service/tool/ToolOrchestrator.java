@@ -1,12 +1,8 @@
-package com.aiagent.service;
+package com.aiagent.service.tool;
 
 import com.aiagent.vo.McpToolInfo;
 import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONArray;
-import com.alibaba.fastjson2.JSONObject;
-import com.aiagent.constant.AgentConstants;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -24,7 +20,6 @@ import java.util.*;
 @Component
 public class ToolOrchestrator {
     
-    @Autowired
     private McpGroupManager mcpGroupManager;
     
     /**
@@ -57,13 +52,6 @@ public class ToolOrchestrator {
         List<Object> tools = new ArrayList<>(availableTools);
         
         return tools;
-    }
-    
-    /**
-     * 智能选择工具（重载方法，兼容旧代码）
-     */
-    public List<Object> selectTools(String userIntent, String modelId) {
-        return selectTools(userIntent, modelId, null);
     }
     
     /**

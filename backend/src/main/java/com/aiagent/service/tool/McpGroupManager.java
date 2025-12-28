@@ -1,8 +1,9 @@
-package com.aiagent.service;
+package com.aiagent.service.tool;
 
 import com.aiagent.config.McpServerConfig;
 import com.aiagent.vo.McpGroupInfo;
 import com.aiagent.vo.McpToolInfo;
+import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.mcp.client.McpClient;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -133,10 +134,10 @@ public class McpGroupManager {
                     
                     // 从MCP客户端获取工具列表
                     // 注意：这里仅用于展示，工具注册由McpToolProvider自动处理
-                    List<dev.langchain4j.agent.tool.ToolSpecification> toolSpecs = client.listTools();
+                    List<ToolSpecification> toolSpecs = client.listTools();
                     
                     // 转换为本地工具定义
-                    for (dev.langchain4j.agent.tool.ToolSpecification toolSpec : toolSpecs) {
+                    for (ToolSpecification toolSpec : toolSpecs) {
                         McpToolInfo toolInfo = convertToLocalTool(toolSpec, server);
                         tools.add(toolInfo);
                     }
@@ -180,12 +181,14 @@ public class McpGroupManager {
     private McpToolInfo convertToLocalTool(dev.langchain4j.agent.tool.ToolSpecification toolSpec, 
                                           McpServerConfig.McpServerDefinition server) {
         McpToolInfo toolInfo = new McpToolInfo();
-        toolInfo.setId(server.getId() + ":" + toolSpec.name()); // 唯一ID
+        // 唯一ID
+        toolInfo.setId(server.getId() + ":" + toolSpec.name());
         toolInfo.setName(toolSpec.name());
         toolInfo.setDescription(toolSpec.description() != null ? toolSpec.description() : "");
         toolInfo.setGroupId(server.getGroup());
         toolInfo.setEnabled(true);
-        toolInfo.setVersion("1.0"); // 默认版本
+        // 默认版本
+        toolInfo.setVersion("1.0");
         toolInfo.setServerId(server.getId());
         toolInfo.setConnectionType(server.getConnection().getType());
         
