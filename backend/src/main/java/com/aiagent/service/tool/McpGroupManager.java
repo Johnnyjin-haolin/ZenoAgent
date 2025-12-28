@@ -72,6 +72,27 @@ public class McpGroupManager {
         scanAndRegisterTools();
         
         log.info("MCP分组管理器初始化完成，共 {} 个分组", groupCache.size());
+        
+        // 注册配置变更监听器，支持热加载
+        mcpConfig.getConfigLoader().addConfigChangeListener(this::reload);
+    }
+    
+    /**
+     * 重新加载配置（用于热加载）
+     */
+    public void reload() {
+        log.info("重新加载MCP配置...");
+        
+        // 清空缓存
+        groupCache.clear();
+        toolsByGroup.clear();
+        serverClients.clear();
+        
+        // 重新扫描
+        scanAndRegisterGroups();
+        scanAndRegisterTools();
+        
+        log.info("MCP配置重新加载完成，共 {} 个分组", groupCache.size());
     }
     
     /**
