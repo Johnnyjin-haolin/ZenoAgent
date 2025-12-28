@@ -108,12 +108,23 @@ public class ThinkingEngine {
             }
         }
         
-        // 可用工具
-        List<String> availableTools = toolSelector.getAvailableToolNames();
+        // 可用工具（包含参数定义，便于大模型理解如何调用）
+        List<com.aiagent.vo.McpToolInfo> availableTools = toolSelector.selectTools(goal, 
+            context != null ? context.getEnabledMcpGroups() : null);
         if (!availableTools.isEmpty()) {
             prompt.append("\n## 可用工具\n");
-            for (String tool : availableTools) {
-                prompt.append("- ").append(tool).append("\n");
+            for (com.aiagent.vo.McpToolInfo tool : availableTools) {
+                prompt.append("### ").append(tool.getName()).append("\n");
+                if (StringUtils.isNotEmpty(tool.getDescription())) {
+                    prompt.append("描述: ").append(tool.getDescription()).append("\n");
+                }
+                // 添加参数定义（JSON Schema格式）
+                if (tool.getParameters() != null && !tool.getParameters().isEmpty()) {
+                    prompt.append("参数定义: ").append(com.alibaba.fastjson2.JSON.toJSONString(tool.getParameters())).append("\n");
+                } else {
+                    prompt.append("参数: 无参数\n");
+                }
+                prompt.append("\n");
             }
         }
         
@@ -213,10 +224,12 @@ public class ThinkingEngine {
      */
     private String generateDefaultThinking(String goal, AgentContext context) {
         // 简单逻辑：如果有工具可用，尝试工具调用；否则生成回复
-        List<String> availableTools = toolSelector.getAvailableToolNames();
+        List<com.aiagent.vo.McpToolInfo> availableTools = toolSelector.selectTools(goal, 
+            context != null ? context.getEnabledMcpGroups() : null);
         
         if (!availableTools.isEmpty() && (goal.contains("执行") || goal.contains("调用"))) {
-            String toolName = availableTools.get(0);
+            com.aiagent.vo.McpToolInfo firstTool = availableTools.get(0);
+            String toolName = firstTool.getName();
             Map<String, Object> defaultResult = new HashMap<>();
             defaultResult.put("actionType", "TOOL_CALL");
             defaultResult.put("actionName", toolName);

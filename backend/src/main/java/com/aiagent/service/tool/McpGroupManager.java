@@ -3,6 +3,8 @@ package com.aiagent.service.tool;
 import com.aiagent.config.McpServerConfig;
 import com.aiagent.vo.McpGroupInfo;
 import com.aiagent.vo.McpToolInfo;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.mcp.client.McpClient;
 import lombok.extern.slf4j.Slf4j;
@@ -178,7 +180,7 @@ public class McpGroupManager {
     /**
      * 将LangChain4j的ToolSpecification转换为本地McpToolInfo
      */
-    private McpToolInfo convertToLocalTool(dev.langchain4j.agent.tool.ToolSpecification toolSpec, 
+    private McpToolInfo convertToLocalTool(ToolSpecification toolSpec,
                                           McpServerConfig.McpServerDefinition server) {
         McpToolInfo toolInfo = new McpToolInfo();
         // 唯一ID
@@ -192,7 +194,91 @@ public class McpGroupManager {
         toolInfo.setServerId(server.getId());
         toolInfo.setConnectionType(server.getConnection().getType());
         
+        // 转换参数定义（JsonObjectSchema -> Map）
+        // 这对于大模型理解如何调用工具非常重要
+        if (toolSpec.parameters() != null) {
+            try {
+                Map<String, Object> parametersMap = convertParametersToMap(toolSpec.parameters());
+                toolInfo.setParameters(parametersMap);
+                log.debug("工具 {} 的参数定义已转换: {}", toolSpec.name(), parametersMap);
+            } catch (Exception e) {
+                log.warn("转换工具参数定义失败: toolName={}", toolSpec.name(), e);
+                // 参数转换失败不影响工具注册，但大模型可能无法正确调用
+            }
+        } else {
+            log.debug("工具 {} 没有参数定义", toolSpec.name());
+        }
+        
         return toolInfo;
+    }
+    
+    /**
+     * 将ToolSpecification的parameters转换为Map
+     * parameters是JsonObjectSchema类型，包含工具参数的JSON Schema定义
+     */
+    private Map<String, Object> convertParametersToMap(Object parameters) {
+        if (parameters == null) {
+            return new HashMap<>();
+        }
+        
+        try {
+            // 方法1：尝试使用FastJSON2直接序列化
+            // JsonObjectSchema应该可以被序列化为JSON
+            String jsonString = JSON.toJSONString(parameters);
+            JSONObject jsonObject = JSON.parseObject(jsonString);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> result = jsonObject.toJavaObject(Map.class);
+            
+            // 确保返回的是标准的JSON Schema格式
+            if (result != null && !result.isEmpty()) {
+                return result;
+            }
+        } catch (Exception e) {
+            log.debug("使用FastJSON2序列化参数失败，尝试其他方式", e);
+        }
+        
+        // 方法2：尝试使用反射获取properties和required
+        try {
+            Map<String, Object> result = new HashMap<>();
+            result.put("type", "object");
+            
+            // 尝试获取properties
+            try {
+                java.lang.reflect.Method propertiesMethod = parameters.getClass().getMethod("properties");
+                Object properties = propertiesMethod.invoke(parameters);
+                if (properties != null) {
+                    // 将properties转换为Map
+                    String propsJson = JSON.toJSONString(properties);
+                    JSONObject propsObj = JSON.parseObject(propsJson);
+                    result.put("properties", propsObj.toJavaObject(Map.class));
+                } else {
+                    result.put("properties", new HashMap<>());
+                }
+            } catch (NoSuchMethodException e) {
+                result.put("properties", new HashMap<>());
+            }
+            
+            // 尝试获取required
+            try {
+                java.lang.reflect.Method requiredMethod = parameters.getClass().getMethod("required");
+                Object required = requiredMethod.invoke(parameters);
+                if (required != null) {
+                    result.put("required", required);
+                }
+            } catch (NoSuchMethodException e) {
+                // required字段可选
+            }
+            
+            return result;
+        } catch (Exception e) {
+            log.warn("使用反射提取参数定义失败", e);
+        }
+        
+        // 方法3：返回默认结构
+        Map<String, Object> defaultResult = new HashMap<>();
+        defaultResult.put("type", "object");
+        defaultResult.put("properties", new HashMap<>());
+        return defaultResult;
     }
     
     /**

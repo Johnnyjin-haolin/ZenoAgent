@@ -2,12 +2,14 @@ package com.aiagent.vo;
 
 import lombok.Data;
 
+import java.util.Map;
+
 /**
  * MCP工具信息VO
  * 用于工具列表展示和前端展示
  * 
  * 注意：LangChain4j的McpToolProvider会自动处理工具注册和执行
- * 这里只保留基本信息用于展示和分组管理
+ * 这里保留基本信息用于展示和分组管理，包括参数定义供大模型使用
  * 
  * @author aiagent
  */
@@ -28,6 +30,12 @@ public class McpToolInfo {
      * 工具描述
      */
     private String description;
+    
+    /**
+     * 工具参数定义（JSON Schema格式，用于大模型理解如何调用工具）
+     * 格式：Map<String, Object>，包含properties、required等字段
+     */
+    private Map<String, Object> parameters;
     
     /**
      * 工具分组
