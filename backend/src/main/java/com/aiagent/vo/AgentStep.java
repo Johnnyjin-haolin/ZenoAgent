@@ -1,6 +1,6 @@
 package com.aiagent.vo;
 
-import com.aiagent.model.StepType;
+import com.aiagent.enums.StepType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

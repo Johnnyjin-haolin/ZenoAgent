@@ -1,6 +1,6 @@
 package com.aiagent.service;
 
-import com.aiagent.model.AgentState;
+import com.aiagent.enums.AgentState;
 import com.aiagent.vo.AgentContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

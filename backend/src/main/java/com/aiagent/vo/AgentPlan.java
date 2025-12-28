@@ -1,6 +1,6 @@
 package com.aiagent.vo;
 
-import com.aiagent.model.TaskType;
+import com.aiagent.enums.TaskType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

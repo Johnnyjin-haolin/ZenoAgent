@@ -5,6 +5,7 @@ import com.aiagent.service.action.RAGRetrieveParams;
 import com.aiagent.service.action.ToolCallParams;
 import com.aiagent.util.StringUtils;
 import com.aiagent.vo.AgentContext;
+import com.aiagent.vo.McpToolInfo;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import dev.langchain4j.data.message.ChatMessage;
@@ -109,11 +110,11 @@ public class ThinkingEngine {
         }
         
         // 可用工具（包含参数定义，便于大模型理解如何调用）
-        List<com.aiagent.vo.McpToolInfo> availableTools = toolSelector.selectTools(goal, 
+        List<McpToolInfo> availableTools = toolSelector.selectTools(goal,
             context != null ? context.getEnabledMcpGroups() : null);
         if (!availableTools.isEmpty()) {
             prompt.append("\n## 可用工具\n");
-            for (com.aiagent.vo.McpToolInfo tool : availableTools) {
+            for (McpToolInfo tool : availableTools) {
                 prompt.append("### ").append(tool.getName()).append("\n");
                 if (StringUtils.isNotEmpty(tool.getDescription())) {
                     prompt.append("描述: ").append(tool.getDescription()).append("\n");

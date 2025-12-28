@@ -1,9 +1,7 @@
 package com.aiagent.service;
 
-import com.aiagent.constant.AgentConstants;
-import com.aiagent.model.TaskType;
+import com.aiagent.enums.TaskType;
 import com.aiagent.util.StringUtils;
-import com.aiagent.vo.AgentContext;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;

@@ -1,4 +1,4 @@
-package com.aiagent.model;
+package com.aiagent.enums;
 
 /**
  * Agent 执行状态枚举

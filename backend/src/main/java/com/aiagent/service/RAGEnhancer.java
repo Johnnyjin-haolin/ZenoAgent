@@ -1,5 +1,9 @@
 package com.aiagent.service;
 
+import com.aiagent.config.EmbeddingStoreConfiguration;
+import com.aiagent.model.KnowledgeBase;
+import com.aiagent.repository.KnowledgeBaseRepository;
+import com.aiagent.service.rag.EmbeddingProcessor;
 import com.aiagent.util.StringUtils;
 import com.aiagent.vo.AgentKnowledgeDocument;
 import com.aiagent.vo.AgentKnowledgeResult;
@@ -11,7 +15,6 @@ import dev.langchain4j.store.embedding.EmbeddingMatch;
 import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
 import dev.langchain4j.store.embedding.EmbeddingSearchResult;
 import dev.langchain4j.store.embedding.EmbeddingStore;
-import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,6 +25,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import static dev.langchain4j.store.embedding.filter.MetadataFilterBuilder.metadataKey;
 
 /**
  * RAG增强器
@@ -57,17 +62,18 @@ public class RAGEnhancer {
     @Value("${aiagent.rag.default-min-score:0.5}")
     private double defaultMinScore;
     
+    @Autowired
+    private EmbeddingStoreConfiguration embeddingStoreConfiguration;
+    
+    @Autowired
+    private KnowledgeBaseRepository knowledgeBaseRepository;
+    
+    
     /**
      * Embedding模型（用于生成文本向量）
      * 如果未注入，将使用OpenAI的Embedding模型
      */
     private EmbeddingModel embeddingModel;
-    
-    /**
-     * Embedding存储（用于向量检索）
-     * 如果未注入，将使用内存存储（仅用于演示）
-     */
-    private EmbeddingStore<TextSegment> embeddingStore;
     
     /**
      * 初始化Embedding模型
@@ -107,14 +113,6 @@ public class RAGEnhancer {
         log.info("注入自定义Embedding模型: {}", embeddingModel != null ? embeddingModel.getClass().getSimpleName() : "null");
     }
     
-    /**
-     * 注入自定义的Embedding存储
-     */
-    @Autowired(required = false)
-    public void setEmbeddingStore(EmbeddingStore<TextSegment> embeddingStore) {
-        this.embeddingStore = embeddingStore;
-        log.info("注入自定义Embedding存储: {}", embeddingStore != null ? embeddingStore.getClass().getSimpleName() : "null");
-    }
     
     /**
      * 检索相关知识
@@ -153,30 +151,55 @@ public class RAGEnhancer {
                 return createEmptyResult(query);
             }
             
-            // 2. 获取Embedding存储
-            EmbeddingStore<TextSegment> store = getOrCreateEmbeddingStore();
-            if (store == null) {
-                log.warn("Embedding存储不可用，返回空结果");
-                return createEmptyResult(query);
-            }
-            
-            // 3. 生成查询向量
+            // 2. 生成查询向量
             Embedding queryEmbedding = model.embed(query).content();
             
-            // 4. 从存储中检索相似文档
+            // 3. 从存储中检索相似文档（支持多知识库）
             int maxResults = defaultTopK > 0 ? defaultTopK : DEFAULT_TOP_K;
             double minScore = defaultMinScore > 0 ? defaultMinScore : DEFAULT_MIN_SCORE;
             
-            // 使用EmbeddingStore的search方法检索相似文档
-            // langchain4j的EmbeddingStore接口使用search方法，接受EmbeddingSearchRequest参数
-            EmbeddingSearchRequest searchRequest = EmbeddingSearchRequest.builder()
-                    .queryEmbedding(queryEmbedding)
-                    .maxResults(maxResults)
-                    .minScore(minScore)
-                    .build();
+            // 合并所有知识库的检索结果
+            List<EmbeddingMatch<TextSegment>> allMatches = new ArrayList<>();
             
-            EmbeddingSearchResult<TextSegment> searchResult = store.search(searchRequest);
-            List<EmbeddingMatch<TextSegment>> matches = searchResult.matches();
+            for (String knowledgeId : knowledgeIds) {
+                try {
+                    // 获取知识库信息
+                    KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeId)
+                            .orElse(null);
+                    
+                    if (knowledgeBase == null) {
+                        log.warn("Knowledge base not found: {}", knowledgeId);
+                        continue;
+                    }
+                    
+                    // 获取该知识库的EmbeddingStore
+                    EmbeddingStore<TextSegment> store = embeddingStoreConfiguration
+                            .createDefaultEmbeddingStore(model);
+                    
+                    // 构建搜索请求，按知识库ID过滤
+                    EmbeddingSearchRequest searchRequest = EmbeddingSearchRequest.builder()
+                            .queryEmbedding(queryEmbedding)
+                            .maxResults(maxResults)
+                            .minScore(minScore)
+                            .filter(metadataKey(EmbeddingProcessor.METADATA_KNOWLEDGE_ID).isEqualTo(knowledgeId))
+                            .build();
+                    
+                    EmbeddingSearchResult<TextSegment> searchResult = store.search(searchRequest);
+                    List<EmbeddingMatch<TextSegment>> matches = searchResult.matches();
+                    
+                    if (matches != null && !matches.isEmpty()) {
+                        allMatches.addAll(matches);
+                    }
+                } catch (Exception e) {
+                    log.error("Failed to search in knowledge base: {}", knowledgeId, e);
+                }
+            }
+            
+            // 按分数排序并取前N个
+            List<EmbeddingMatch<TextSegment>> matches = allMatches.stream()
+                    .sorted((a, b) -> Double.compare(b.score(), a.score()))
+                    .limit(maxResults)
+                    .collect(Collectors.toList());
             
             // 5. 转换为AgentKnowledgeResult
             return convertToKnowledgeResult(query, matches, knowledgeIds);
@@ -222,23 +245,6 @@ public class RAGEnhancer {
         prompt.append("如果知识库中没有相关信息，请明确说明。");
         
         return prompt.toString();
-    }
-    
-    /**
-     * 获取或创建Embedding存储
-     * 如果未注入，使用内存存储（仅用于演示，不支持持久化）
-     */
-    private EmbeddingStore<TextSegment> getOrCreateEmbeddingStore() {
-        if (embeddingStore != null) {
-            return embeddingStore;
-        }
-        
-        // 使用内存存储（仅用于演示）
-        // 实际生产环境应该使用持久化的存储（如PgVector）
-        log.warn("未注入Embedding存储，使用内存存储（仅用于演示，不支持持久化）");
-        embeddingStore = new InMemoryEmbeddingStore<>();
-        
-        return embeddingStore;
     }
     
     /**
@@ -379,15 +385,19 @@ public class RAGEnhancer {
                 return null;
             }
             
-            // Metadata接口可能没有直接的get方法
-            // 尝试通过反射获取值（作为最后手段）
+            // 尝试使用getString方法
             try {
-                java.lang.reflect.Method getMethod = metadata.getClass().getMethod("get", String.class);
-                Object value = getMethod.invoke(metadata, key);
-                return value != null ? value.toString() : null;
-            } catch (Exception e) {
-                log.debug("获取metadata值失败: key={}", key, e);
-                return null;
+                return metadata.getString(key);
+            } catch (Exception e1) {
+                // 如果getString不存在，尝试通过反射获取值
+                try {
+                    java.lang.reflect.Method getMethod = metadata.getClass().getMethod("get", String.class);
+                    Object value = getMethod.invoke(metadata, key);
+                    return value != null ? value.toString() : null;
+                } catch (Exception e2) {
+                    log.debug("获取metadata值失败: key={}", key, e2);
+                    return null;
+                }
             }
         } catch (Exception e) {
             log.debug("获取metadata值失败: key={}", key, e);

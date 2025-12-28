@@ -1,6 +1,6 @@
 package com.aiagent.vo;
 
-import com.aiagent.model.AgentMode;
+import com.aiagent.enums.AgentMode;
 import lombok.Data;
 
 import java.util.List;

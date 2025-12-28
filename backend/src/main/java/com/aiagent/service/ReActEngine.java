@@ -1,8 +1,7 @@
 package com.aiagent.service;
 
 import com.aiagent.constant.AgentConstants;
-import com.aiagent.model.AgentState;
-import com.aiagent.service.ReflectionEngine.ReflectionResult;
+import com.aiagent.enums.AgentState;
 import com.aiagent.vo.AgentContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

@@ -1,4 +1,4 @@
-package com.aiagent.model;
+package com.aiagent.enums;
 
 /**
  * 任务类型枚举

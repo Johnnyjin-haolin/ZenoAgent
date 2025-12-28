@@ -42,6 +42,26 @@ aiagent:
   rag:
     default-top-k: 5
     default-min-score: 0.5
+    # 向量存储配置
+    embedding-store:
+      host: ${PG_HOST:localhost}
+      port: ${PG_PORT:5432}
+      database: ${PG_DATABASE:aiagent}
+      user: ${PG_USER:postgres}
+      password: ${PG_PASSWORD:postgres}
+      table: embeddings
+      use-index: true
+      index-list-size: 100
+    # 文档分段配置
+    document:
+      segment-size: 1000
+      overlap-size: 50
+    # 文件上传配置
+    upload:
+      path: ${UPLOAD_PATH:./uploads}
+      max-file-size: 157286400  # 150MB
+      max-zip-size: 1073741824  # 1GB
+      max-zip-entries: 10000
   
   tools:
     enabled-by-default: true
