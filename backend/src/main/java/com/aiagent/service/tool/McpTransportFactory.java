@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * MCP传输工厂
@@ -33,7 +34,7 @@ public class McpTransportFactory {
      * @return MCP传输实例
      */
     public McpTransport createTransport(McpServerConfig.McpServerDefinition server) {
-        String type = server.getConnection().getType();
+        String type = server.getConnection().getType().getValue();
         String url = server.getConnection().getUrl();
         
         log.info("创建MCP传输: serverId={}, type={}", server.getId(), type);
@@ -72,20 +73,15 @@ public class McpTransportFactory {
         if (url == null || url.isEmpty()) {
             throw new IllegalArgumentException("Streamable HTTP传输需要配置URL: serverId=" + server.getId());
         }
-        
-        // 使用StreamableHttpMcpTransport（推荐，替代已废弃的HttpMcpTransport）
+        // 设置headers（包括Authorization等）
+        // 使用反射尝试设置headers，因为LangChain4j MCP的API可能不同版本有差异
+        Map<String, String> headers = server.getConnection().getHeaders();
+//        String apiKey = server.getConnection().getApiKey();
+
         StreamableHttpMcpTransport.Builder builder = StreamableHttpMcpTransport.builder()
-            .url(url)  // POST端点URL
-            .logRequests(true)
+            .url(url)
+            .logRequests(true).customHeaders(headers)
             .logResponses(true);
-        
-        // 如果有API Key，可以通过自定义HTTP客户端设置
-        String apiKey = server.getConnection().getApiKey();
-        if (apiKey != null && !apiKey.isEmpty()) {
-            // 注意：StreamableHttpMcpTransport可能需要通过自定义HTTP客户端设置认证
-            // 这里先记录，实际使用时可能需要扩展
-            log.debug("检测到API Key，StreamableHttpMcpTransport可能需要额外配置: serverId={}", server.getId());
-        }
         
         return builder.build();
     }

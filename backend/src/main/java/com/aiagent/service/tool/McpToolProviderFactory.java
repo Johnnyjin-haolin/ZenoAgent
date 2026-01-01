@@ -152,7 +152,7 @@ public class McpToolProviderFactory {
                 continue;
             }
             
-            String connectionType = server.getConnection().getType();
+            String connectionType = server.getConnection().getType().getValue();
             // 只处理支持的传输类型
             if (isSupportedTransportType(connectionType)) {
                 try {

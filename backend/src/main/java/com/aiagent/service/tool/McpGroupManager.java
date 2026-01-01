@@ -118,7 +118,7 @@ public class McpGroupManager {
             groupInfo.setDescription(server.getDescription());
             groupInfo.setEnabled(server.isEnabled());
             groupInfo.setServerId(server.getId());
-            groupInfo.setConnectionType(server.getConnection().getType());
+            groupInfo.setConnectionType(server.getConnection().getType().getValue());
             groupInfo.setToolCount(0); // 稍后更新
             
             groupCache.put(groupId, groupInfo);
@@ -141,7 +141,7 @@ public class McpGroupManager {
                 continue;
             }
             
-            String connectionType = server.getConnection().getType();
+            String connectionType = server.getConnection().getType().getValue();
             List<McpToolInfo> tools = new ArrayList<>();
             
             if ("local".equals(connectionType)) {
@@ -213,7 +213,7 @@ public class McpGroupManager {
         // 默认版本
         toolInfo.setVersion("1.0");
         toolInfo.setServerId(server.getId());
-        toolInfo.setConnectionType(server.getConnection().getType());
+        toolInfo.setConnectionType(server.getConnection().getType().getValue());
         
         // 转换参数定义（JsonObjectSchema -> Map）
         // 这对于大模型理解如何调用工具非常重要
