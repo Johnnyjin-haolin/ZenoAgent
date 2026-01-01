@@ -1,5 +1,6 @@
 package com.aiagent.config;
 
+import com.aiagent.model.ConnectionType;
 import com.aiagent.util.StringUtils;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -11,7 +12,6 @@ import javax.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 /**
@@ -90,17 +90,9 @@ public class McpServerConfig {
         // 转换连接配置
         ConnectionConfig connection = new ConnectionConfig();
         
-        // 转换类型：streamableHttp -> streamable-http
-        String type = jsonDef.getType();
-        if ("streamableHttp".equalsIgnoreCase(type)) {
-            connection.setType("streamable-http");
-        } else if ("stdio".equalsIgnoreCase(type)) {
-            connection.setType("stdio");
-        } else if ("websocket".equalsIgnoreCase(type) || "ws".equalsIgnoreCase(type)) {
-            connection.setType("websocket");
-        } else {
-            connection.setType(type != null ? type : "stdio");
-        }
+        // 转换类型：使用枚举解析，支持多种格式
+        ConnectionType connectionType = ConnectionType.fromString(jsonDef.getType());
+        connection.setType(connectionType);
         
         connection.setUrl(jsonDef.getUrl());
         
@@ -116,14 +108,26 @@ public class McpServerConfig {
             }
         }
         
-        // 处理headers（转换为apiKey或保留headers）
+        // 处理headers：保存完整的headers Map，同时提取apiKey便于单独使用
         if (jsonDef.getHeaders() != null && !jsonDef.getHeaders().isEmpty()) {
-            // 如果headers中有Authorization，提取为apiKey
+            // 保存完整的headers Map
+            connection.setHeaders(jsonDef.getHeaders());
+            
+            // 如果headers中有Authorization，提取token部分为apiKey（去掉"Bearer "前缀）
+            // 这样既保留了完整的headers，也方便某些场景直接使用纯token
             String authHeader = jsonDef.getHeaders().get("Authorization");
-            if (StringUtils.isNotEmpty(authHeader) && authHeader.startsWith("Bearer ")) {
-                connection.setApiKey(authHeader.substring(7)); // 移除 "Bearer " 前缀
+            if (StringUtils.isNotEmpty(authHeader)) {
+                // 移除 "Bearer " 前缀，只保留token
+                if (authHeader.startsWith("Bearer ")) {
+                    connection.setApiKey(authHeader.substring(7));
+                } else if (authHeader.startsWith("Basic ")) {
+                    // 移除 "Basic " 前缀
+                    connection.setApiKey(authHeader.substring(6));
+                } else {
+                    // 如果不是标准格式，直接使用整个值
+                    connection.setApiKey(authHeader);
+                }
             }
-            // 保留headers Map（如果需要的话，可以扩展ConnectionConfig）
         }
         
         // 设置超时和重试配置
@@ -181,13 +185,13 @@ public class McpServerConfig {
     @Data
     public static class ConnectionConfig {
         /**
-         * 连接类型：
-         * - streamable-http: Streamable HTTP传输（推荐，用于远程MCP服务器）
-         * - stdio: 标准输入输出传输（本地进程）
-         * - websocket: WebSocket传输（未来支持）
-         * - docker: Docker传输（未来支持）
+         * 连接类型
+         * - STREAMABLE_HTTP: Streamable HTTP传输（推荐，用于远程MCP服务器）
+         * - STDIO: 标准输入输出传输（本地进程）
+         * - WEBSOCKET: WebSocket传输（未来支持）
+         * - DOCKER: Docker传输（未来支持）
          */
-        private String type = "stdio";
+        private ConnectionType type = ConnectionType.STDIO;
         
         /**
          * 服务器URL或命令：
