@@ -23,6 +23,9 @@
         <java.version>17</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <langchain4j.version>1.9.1</langchain4j.version>
+        <!-- 升级Jackson版本以兼容langchain4j-mcp 1.9.1 -->
+        <!-- langchain4j-mcp需要ObjectNode.properties()方法，该方法在Jackson 2.15+中引入 -->
+        <jackson.version>2.15.2</jackson.version>
     </properties>
 
     <dependencies>
@@ -153,6 +156,31 @@
                 <version>1.9.1</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            
+            <!-- 显式指定Jackson版本，覆盖Spring Boot默认版本 -->
+            <!-- langchain4j-mcp 1.9.1需要Jackson 2.15+（ObjectNode.properties()方法） -->
+            <!-- Spring Boot 2.7.18默认使用Jackson 2.13.5，需要升级到2.15.2 -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-core</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-annotations</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <!-- Jackson JSR310模块（用于Java 8时间API支持） -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.datatype</groupId>
+                <artifactId>jackson-datatype-jsr310</artifactId>
+                <version>${jackson.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
