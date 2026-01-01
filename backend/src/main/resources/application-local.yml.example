@@ -1,0 +1,35 @@
+# 本地开发环境配置示例
+# 复制此文件为 application-local.yml 并修改配置值
+# application-local.yml 会被 .gitignore 忽略，不会被提交到Git
+
+# 注意：application-local.yml 会覆盖 application.yml 中的相同配置项
+
+aiagent:
+  # LLM配置
+  llm:
+    # 请在此处填写你的 OpenAI API Key
+    api-key: sk-your-openai-api-key-here
+    # 如果使用代理或兼容API，可以修改此URL
+    base-url: https://api.openai.com/v1
+    default-model: gpt-4o-mini
+  
+  # 模型配置
+  model:
+    default-model-id: gpt-4o-mini
+    task-model-mapping:
+      SIMPLE_CHAT: gpt-4o-mini
+      RAG_QUERY: gpt-4o-mini
+      TOOL_CALL: gpt-4o
+      COMPLEX_WORKFLOW: gpt-4o
+
+spring:
+  redis:
+    host: localhost
+    port: 6379
+    password: 
+    database: 0
+
+  # 如果需要在本地使用不同的PostgreSQL配置
+  # 可以在这里覆盖默认配置
+  # 注意：application.yml 中的配置会作为默认值
+

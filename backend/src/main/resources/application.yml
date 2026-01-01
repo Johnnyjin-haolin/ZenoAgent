@@ -6,9 +6,9 @@ spring:
     name: ai-agent-standalone
   
   redis:
-    host: ${REDIS_HOST:localhost}
-    port: ${REDIS_PORT:6379}
-    password: ${REDIS_PASSWORD:}
+    host: localhost
+    port: 6379
+    password: 
     database: 0
     timeout: 5000ms
     lettuce:
@@ -21,18 +21,21 @@ spring:
 aiagent:
   # LLM配置
   llm:
-    api-key: ${OPENAI_API_KEY:}
-    base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
-    default-model: ${DEFAULT_MODEL:gpt-4o-mini}
+    # OpenAI API Key（请在此处填写你的API Key）
+    api-key:
+    # OpenAI Base URL（支持代理或兼容API）
+    base-url: https://api.openai.com/v1
+    # 默认模型
+    default-model: gpt-4o-mini
   
   # 模型配置
   model:
-    default-model-id: ${DEFAULT_MODEL_ID:gpt-4o-mini}
+    default-model-id: gpt-4o-mini
     task-model-mapping:
-      SIMPLE_CHAT: ${DEFAULT_MODEL_ID:gpt-4o-mini}
-      RAG_QUERY: ${DEFAULT_MODEL_ID:gpt-4o-mini}
-      TOOL_CALL: ${TOOL_MODEL_ID:gpt-4o}
-      COMPLEX_WORKFLOW: ${TOOL_MODEL_ID:gpt-4o}
+      SIMPLE_CHAT: gpt-4o-mini
+      RAG_QUERY: gpt-4o-mini
+      TOOL_CALL: gpt-4o
+      COMPLEX_WORKFLOW: gpt-4o
   
   memory:
     short-term-expire-hours: 24
@@ -42,13 +45,13 @@ aiagent:
   rag:
     default-top-k: 5
     default-min-score: 0.5
-    # 向量存储配置
+    # 向量存储配置（PostgreSQL + pgvector）
     embedding-store:
-      host: ${PG_HOST:localhost}
-      port: ${PG_PORT:5432}
-      database: ${PG_DATABASE:aiagent}
-      user: ${PG_USER:postgres}
-      password: ${PG_PASSWORD:postgres}
+      host: localhost
+      port: 5432
+      database: aiagent
+      user: postgres
+      password: postgres
       table: embeddings
       use-index: true
       index-list-size: 100
@@ -58,7 +61,7 @@ aiagent:
       overlap-size: 50
     # 文件上传配置
     upload:
-      path: ${UPLOAD_PATH:./uploads}
+      path: ./uploads
       max-file-size: 157286400  # 150MB
       max-zip-size: 1073741824  # 1GB
       max-zip-entries: 10000

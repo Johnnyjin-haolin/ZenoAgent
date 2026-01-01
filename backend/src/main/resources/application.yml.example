@@ -1,0 +1,82 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: ai-agent-standalone
+  
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: 0
+    timeout: 5000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+
+# AI Agent 配置
+aiagent:
+  # LLM配置
+  llm:
+    # API Key从环境变量读取，如果未设置则使用空字符串
+    api-key: ${OPENAI_API_KEY:}
+    # Base URL，支持代理或兼容API
+    base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+    # 默认模型
+    default-model: ${DEFAULT_MODEL:gpt-4o-mini}
+  
+  # 模型配置
+  model:
+    default-model-id: ${DEFAULT_MODEL_ID:gpt-4o-mini}
+    task-model-mapping:
+      SIMPLE_CHAT: ${DEFAULT_MODEL_ID:gpt-4o-mini}
+      RAG_QUERY: ${DEFAULT_MODEL_ID:gpt-4o-mini}
+      TOOL_CALL: ${TOOL_MODEL_ID:gpt-4o}
+      COMPLEX_WORKFLOW: ${TOOL_MODEL_ID:gpt-4o}
+  
+  memory:
+    short-term-expire-hours: 24
+    context-expire-hours: 1
+    max-context-window: 20
+  
+  rag:
+    default-top-k: 5
+    default-min-score: 0.5
+    # 向量存储配置（需要PostgreSQL + pgvector扩展）
+    embedding-store:
+      host: ${PG_HOST:localhost}
+      port: ${PG_PORT:5432}
+      database: ${PG_DATABASE:aiagent}
+      user: ${PG_USER:postgres}
+      password: ${PG_PASSWORD:postgres}
+      table: embeddings
+      use-index: true
+      index-list-size: 100
+    # 文档分段配置
+    document:
+      segment-size: 1000
+      overlap-size: 50
+    # 文件上传配置
+    upload:
+      path: ${UPLOAD_PATH:./uploads}
+      max-file-size: 157286400  # 150MB
+      max-zip-size: 1073741824  # 1GB
+      max-zip-entries: 10000
+  
+  tools:
+    enabled-by-default: true
+  
+  # MCP工具配置
+  mcp:
+    enabled: true
+
+# SpringDoc API 文档
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+

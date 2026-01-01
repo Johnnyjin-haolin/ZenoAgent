@@ -39,4 +39,7 @@ Thumbs.db
 # Application
 application-local.yml
 application-prod.yml
+application-dev.yml
+# 本地配置文件（包含敏感信息）
+backend/src/main/resources/application-local.yml
 
