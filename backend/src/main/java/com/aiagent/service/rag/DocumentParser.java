@@ -10,6 +10,7 @@ import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.parser.ParseContext;
 import org.apache.tika.parser.Parser;
 import org.apache.tika.sax.BodyContentHandler;
+import org.springframework.stereotype.Service;
 import org.xml.sax.ContentHandler;
 
 import java.io.File;
@@ -24,6 +25,7 @@ import java.nio.file.Files;
  * @author aiagent
  */
 @Slf4j
+@Service
 public class DocumentParser {
     
     private static final Tika tika = new Tika();
@@ -38,7 +40,7 @@ public class DocumentParser {
         if (file == null || !file.exists()) {
             throw new IllegalArgumentException("File does not exist: " + file);
         }
-        
+
         try {
             String fileName = file.getName().toLowerCase();
             InputStream inputStream = Files.newInputStream(file.toPath());
