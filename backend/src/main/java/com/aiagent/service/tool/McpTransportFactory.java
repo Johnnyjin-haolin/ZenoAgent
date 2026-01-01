@@ -76,7 +76,6 @@ public class McpTransportFactory {
         // 设置headers（包括Authorization等）
         // 使用反射尝试设置headers，因为LangChain4j MCP的API可能不同版本有差异
         Map<String, String> headers = server.getConnection().getHeaders();
-//        String apiKey = server.getConnection().getApiKey();
 
         StreamableHttpMcpTransport.Builder builder = StreamableHttpMcpTransport.builder()
             .url(url)
