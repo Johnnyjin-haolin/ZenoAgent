@@ -101,8 +101,8 @@ public class AgentServiceFactory {
         return modelManager.getOrCreateStreamingModel(
             agentConfig.getModel().getDefaultModelId()
         );
-    }
-    
+        }
+        
     /**
      * 根据任务类型获取模型（支持故障转移）
      * 

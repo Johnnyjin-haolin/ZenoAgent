@@ -12,6 +12,7 @@ import com.alibaba.fastjson2.JSON;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.service.TokenStream;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -206,6 +207,7 @@ public class ActionExecutor {
     
     /**
      * 执行LLM生成
+     * 注意：此方法返回TokenStream用于流式输出，实际内容需要在调用方处理
      */
     private ActionResult executeLLMGenerate(AgentAction action, AgentContext context, long startTime) {
         try {
@@ -225,25 +227,54 @@ public class ActionExecutor {
                 prompt = action.getReasoning();
             }
             
-            // 准备消息列表
+            // 准备消息列表，包含完整的对话历史以保持上下文
             List<ChatMessage> messages = new ArrayList<>();
+            
+            // 1. 添加系统提示（如果有）
             if (StringUtils.isNotEmpty(systemPrompt)) {
                 messages.add(new SystemMessage(systemPrompt));
+            } else {
+                // 默认系统提示
+                messages.add(new SystemMessage("你是一个智能助手，能够帮助用户管理和查询阿里云资源。请用友好、专业的方式回答用户的问题。"));
             }
+            
+            // 2. 添加对话历史（保持上下文连贯性）
+            if (context != null && context.getMessages() != null && !context.getMessages().isEmpty()) {
+                List<ChatMessage> historyMessages = context.getMessages();
+                
+                // 保留最近的对话历史（避免token过多）
+                // 保留最近10轮对话（20条消息）
+                int maxHistoryMessages = 20;
+                int startIdx = Math.max(0, historyMessages.size() - maxHistoryMessages);
+                
+                for (int i = startIdx; i < historyMessages.size(); i++) {
+                    messages.add(historyMessages.get(i));
+                }
+                
+                log.debug("包含对话历史: {} 条消息", historyMessages.size() - startIdx);
+            }
+            
+            // 3. 添加当前的生成提示
             messages.add(new UserMessage(prompt));
             
-            // 调用LLM（非流式调用）
+            // 调用LLM（流式调用）
             String modelId = context != null ? context.getModelId() : null;
             if (StringUtils.isEmpty(modelId)) {
                 modelId = "gpt-4o-mini";
             }
             
-            String llmResponse = llmChatHandler.chatNonStreaming(modelId, messages);
+            // 使用流式调用，返回TokenStream
+            TokenStream tokenStream = llmChatHandler.chat(modelId, messages);
             
             long duration = System.currentTimeMillis() - startTime;
-            ActionResult result = ActionResult.success("llm_generate", "llm_generate", llmResponse);
+            ActionResult result = ActionResult.success("llm_generate", "llm_generate", tokenStream);
             result.setDuration(duration);
-            result.setMetadata(Map.of("prompt", prompt, "modelId", modelId));
+            result.setMetadata(Map.of(
+                "prompt", prompt, 
+                "modelId", modelId,
+                "historyMessageCount", messages.size() - 2, // 减去系统提示和当前提示
+                "streaming", true
+            ));
             
             return result;
             

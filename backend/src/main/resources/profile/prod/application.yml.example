@@ -14,8 +14,8 @@ aiagent:
       - id: gpt-4o
         name: GPT-4o
         provider: OPENAI
-        api-key: ${OPENAI_API_KEY}  # 建议使用环境变量
-        base-url: https://api.openai.com/v1
+        apiKey: ${OPENAI_API_KEY}  # 建议使用环境变量
+        baseUrl: https://api.openai.com/v1
       - id: gpt-4o-mini
         name: GPT-4o Mini
         provider: OPENAI

@@ -57,13 +57,13 @@ aiagent:
       - id: gpt-4o-mini
         name: GPT-4o Mini
         provider: OPENAI
-        api-key:
-        base-url: https://api.openai.com/v1
+        apiKey:
+        baseUrl: https://api.openai.com/v1
       - id: gpt-4o
         name: GPT-4o
         provider: OPENAI
-        api-key:
-        base-url: https://api.openai.com/v1
+        apiKey:
+        baseUrl: https://api.openai.com/v1
     # 默认模型ID（从上面的models列表中选择）
     default-model: gpt-4o-mini
   

@@ -8,8 +8,8 @@ aiagent:
       - id: gpt-4o-mini
         name: GPT-4o Mini
         provider: OPENAI
-        api-key: sk-test-api-key
-        base-url: https://api.openai.com/v1
+        apiKey: sk-test-api-key
+        baseUrl: https://api.openai.com/v1
     default-model: gpt-4o-mini
 
 spring:

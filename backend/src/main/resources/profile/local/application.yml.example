@@ -13,13 +13,13 @@ aiagent:
       - id: gpt-4o-mini
         name: GPT-4o Mini
         provider: OPENAI
-        api-key: sk-your-openai-api-key-here
-        base-url: https://api.openai.com/v1
+        apiKey: sk-your-openai-api-key-here
+        baseUrl: https://api.openai.com/v1
       - id: gpt-4o
         name: GPT-4o
         provider: OPENAI
-        api-key: sk-your-openai-api-key-here
-        base-url: https://api.openai.com/v1
+        apiKey: sk-your-openai-api-key-here
+        baseUrl: https://api.openai.com/v1
       
       # 智谱AI (ZHIPU)
       # - id: glm-4.7
