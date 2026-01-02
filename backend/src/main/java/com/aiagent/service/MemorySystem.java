@@ -147,12 +147,13 @@ public class MemorySystem {
      * @return Agent上下文
      */
     public AgentContext getContext(String conversationId) {
+        if (StringUtils.isEmpty(conversationId)) {
+            return null;
+        }
         String key = AgentConstants.CACHE_PREFIX_AGENT_CONTEXT + conversationId;
         
         try {
-            @SuppressWarnings("unchecked")
-            AgentContext context = (AgentContext) redisTemplate.opsForValue().get(key);
-            return context;
+            return (AgentContext) redisTemplate.opsForValue().get(key);
         } catch (Exception e) {
             log.error("获取Agent上下文失败", e);
             return null;

@@ -1,5 +1,6 @@
 package com.aiagent.vo;
 
+import com.aiagent.enums.ConnectionTypeEnums;
 import lombok.Data;
 
 import java.util.Map;
@@ -58,7 +59,7 @@ public class McpToolInfo {
     private String serverId;
     
     /**
-     * 连接类型（http/stdio/local）
+     * 连接类型（使用ConnectionType枚举）
      */
-    private String connectionType;
+    private ConnectionTypeEnums connectionType;
 }

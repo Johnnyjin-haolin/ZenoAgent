@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "aliyun-bailian-mcp": {
-      "type": "streamableHttp",
+      "type": "streamable-http",
       "url": "https://dashscope.aliyuncs.com/api/v1/mcps/mcp-OTRkODAzMmQwNzZl/mcp",
       "headers": {
         "Authorization": "Bearer sk-98aa5dd91ae54fb4a13d4d650c377658"

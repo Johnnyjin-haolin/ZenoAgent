@@ -1,6 +1,7 @@
 package com.aiagent.service.tool;
 
 import com.aiagent.config.McpServerConfig;
+import com.aiagent.enums.ConnectionTypeEnums;
 import dev.langchain4j.mcp.McpToolProvider;
 import dev.langchain4j.mcp.client.McpClient;
 import dev.langchain4j.service.tool.ToolProvider;
@@ -152,9 +153,9 @@ public class McpToolProviderFactory {
                 continue;
             }
             
-            String connectionType = server.getConnection().getType().getValue();
+            ConnectionTypeEnums connectionType = server.getConnection().getType();
             // 只处理支持的传输类型
-            if (isSupportedTransportType(connectionType)) {
+            if (connectionType != null && isSupportedTransportType(connectionType)) {
                 try {
                     // 获取或创建MCP客户端
                     McpClient client = mcpClientFactory.getOrCreateClient(server);
@@ -173,13 +174,21 @@ public class McpToolProviderFactory {
     
     /**
      * 检查是否为支持的传输类型
+     * 
+     * @param connectionType 连接类型枚举
+     * @return 是否支持
      */
-    private boolean isSupportedTransportType(String type) {
-        return "streamable-http".equalsIgnoreCase(type) ||
-               "http".equalsIgnoreCase(type) ||
-               "stdio".equalsIgnoreCase(type) ||
-               "remote".equalsIgnoreCase(type) ||
-               "local".equalsIgnoreCase(type);
+    private boolean isSupportedTransportType(ConnectionTypeEnums connectionType) {
+        if (connectionType == null) {
+            return false;
+        }
+        
+        // 支持所有MCP标准传输类型
+        return connectionType == ConnectionTypeEnums.STREAMABLE_HTTP ||
+               connectionType == ConnectionTypeEnums.STDIO ||
+               connectionType == ConnectionTypeEnums.WEBSOCKET ||
+               connectionType == ConnectionTypeEnums.SSE;
+               // DOCKER暂时不支持
     }
 }
 

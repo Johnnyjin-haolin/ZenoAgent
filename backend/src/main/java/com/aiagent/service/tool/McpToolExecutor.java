@@ -1,5 +1,6 @@
 package com.aiagent.service.tool;
 
+import com.aiagent.enums.ConnectionTypeEnums;
 import com.aiagent.vo.McpToolInfo;
 import com.alibaba.fastjson2.JSON;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
@@ -36,52 +37,79 @@ public class McpToolExecutor {
      * @return 执行结果
      */
     public Object execute(McpToolInfo toolInfo, Map<String, Object> params) {
-        String connectionType = toolInfo.getConnectionType();
+        ConnectionTypeEnums connectionType = toolInfo.getConnectionType();
         String serverId = toolInfo.getServerId();
         String toolName = toolInfo.getName();
         
+        // 如果connectionType为null，使用默认值
+        if (connectionType == null) {
+            log.warn("工具 {} 的connectionType为null，使用默认值STDIO", toolName);
+            connectionType = ConnectionTypeEnums.STDIO;
+        }
+        
         log.info("执行MCP工具: name={}, type={}, serverId={}", toolName, connectionType, serverId);
         
-        if ("http".equals(connectionType) || "stdio".equals(connectionType) || 
-            "remote".equals(connectionType)) {
-            // 使用LangChain4j MCP客户端执行工具
-            try {
-                McpClient client = mcpGroupManager.getMcpClient(serverId);
-                if (client == null) {
-                    throw new IllegalStateException("MCP客户端未找到: serverId=" + serverId);
-                }
-                
-                // 构建调用请求
-                // 注意：LangChain4j MCP客户端的API可能需要根据实际版本调整
-                ToolExecutionRequest request = ToolExecutionRequest.builder()
-                        .id(toolInfo.getId())
-                        .name(toolName)
-                        .arguments(JSON.toJSONString(params))
-                        .build();
+        // 根据连接类型执行工具
+        switch (connectionType) {
+            case STREAMABLE_HTTP:
+            case STDIO:
+            case WEBSOCKET:
+            case SSE:
+                // 使用LangChain4j MCP客户端执行工具（支持所有MCP标准传输类型）
+                return executeViaMcpClient(toolInfo, params, serverId, toolName, connectionType);
 
-                // 调用工具
-                ToolExecutionResult result = client.executeTool(request);
-                
-                log.info("MCP工具执行成功: name={}", toolName);
-                
-                // 返回结果内容
-                // 注意：根据LangChain4j MCP API，结果可能是McpCallToolResult
-                // 需要根据实际API调整
-                if (result != null && result.result() != null) {
-                    return result.result();
-                }
-                return result;
-                
-            } catch (Exception e) {
-                log.error("通过MCP客户端执行工具失败: name={}, serverId={}", toolName, serverId, e);
-                throw new RuntimeException("工具执行失败: " + e.getMessage(), e);
+            default:
+                throw new IllegalArgumentException(
+                    String.format("不支持的工具连接类型: %s, 工具: %s", connectionType, toolName));
+        }
+    }
+    
+    /**
+     * 通过MCP客户端执行工具
+     * 
+     * @param toolInfo 工具信息
+     * @param params 工具参数
+     * @param serverId 服务器ID
+     * @param toolName 工具名称
+     * @param connectionType 连接类型
+     * @return 执行结果
+     */
+    private Object executeViaMcpClient(McpToolInfo toolInfo, Map<String, Object> params, 
+                                       String serverId, String toolName, ConnectionTypeEnums connectionType) {
+        try {
+            McpClient client = mcpGroupManager.getMcpClient(serverId);
+            if (client == null) {
+                throw new IllegalStateException(
+                    String.format("MCP客户端未找到: serverId=%s, connectionType=%s", serverId, connectionType));
             }
             
-        } else if ("local".equals(connectionType)) {
-            // 本地工具执行（未来扩展）
-            throw new UnsupportedOperationException("本地工具执行器未实现，工具: " + toolName);
-        } else {
-            throw new IllegalArgumentException("不支持的工具类型: " + connectionType + ", 工具: " + toolName);
+            // 构建调用请求
+            // 注意：LangChain4j MCP客户端的API可能需要根据实际版本调整
+            ToolExecutionRequest request = ToolExecutionRequest.builder()
+                    .id(toolInfo.getId())
+                    .name(toolName)
+                    .arguments(JSON.toJSONString(params))
+                    .build();
+
+            // 调用工具
+            ToolExecutionResult result = client.executeTool(request);
+            
+            log.info("MCP工具执行成功: name={}, type={}, serverId={}", toolName, connectionType, serverId);
+            
+            // 返回结果内容
+            // 注意：根据LangChain4j MCP API，结果可能是McpCallToolResult
+            // 需要根据实际API调整
+            if (result != null && result.result() != null) {
+                return result.result();
+            }
+            return result;
+            
+        } catch (Exception e) {
+            log.error("通过MCP客户端执行工具失败: name={}, serverId={}, type={}", 
+                toolName, serverId, connectionType, e);
+            throw new RuntimeException(
+                String.format("工具执行失败: %s (serverId: %s, type: %s)", 
+                    e.getMessage(), serverId, connectionType), e);
         }
     }
     

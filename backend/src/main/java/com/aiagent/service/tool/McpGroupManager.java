@@ -1,6 +1,7 @@
 package com.aiagent.service.tool;
 
 import com.aiagent.config.McpServerConfig;
+import com.aiagent.enums.ConnectionTypeEnums;
 import com.aiagent.vo.McpGroupInfo;
 import com.aiagent.vo.McpToolInfo;
 import com.alibaba.fastjson2.JSON;
@@ -118,8 +119,10 @@ public class McpGroupManager {
             groupInfo.setDescription(server.getDescription());
             groupInfo.setEnabled(server.isEnabled());
             groupInfo.setServerId(server.getId());
-            groupInfo.setConnectionType(server.getConnection().getType().getValue());
-            groupInfo.setToolCount(0); // 稍后更新
+            // 设置连接类型（转换为字符串，用于前端展示）
+            groupInfo.setConnectionType(server.getConnection().getType() != null ? 
+                server.getConnection().getType().getValue() : ConnectionTypeEnums.STDIO.getValue());
+            groupInfo.setToolCount(0);
             
             groupCache.put(groupId, groupInfo);
             log.info("注册MCP分组: {} - {}", groupId, server.getName());
@@ -141,14 +144,17 @@ public class McpGroupManager {
                 continue;
             }
             
-            String connectionType = server.getConnection().getType().getValue();
+            ConnectionTypeEnums connectionType = server.getConnection().getType();
+            if (connectionType == null) {
+                connectionType = ConnectionTypeEnums.STDIO;
+            }
+            
             List<McpToolInfo> tools = new ArrayList<>();
             
-            if ("local".equals(connectionType)) {
-                // 本地工具（通过注解扫描，未来扩展）
-                // TODO: 扫描@McpTool注解的工具
-                tools.addAll(createPlaceholderTools(server));
-            } else if (isSupportedTransportType(connectionType)) {
+            // 注意：当前ConnectionType枚举中没有LOCAL类型
+            // 如果需要本地工具，可以考虑添加LOCAL枚举值，或使用其他方式标识
+            // 这里暂时跳过本地工具的处理
+            if (isSupportedTransportType(connectionType)) {
                 // 使用LangChain4j MCP客户端获取工具列表（用于展示）
                 try {
                     // 创建或获取MCP客户端
@@ -191,11 +197,23 @@ public class McpGroupManager {
     /**
      * 检查是否为支持的传输类型
      */
-    private boolean isSupportedTransportType(String type) {
-        return "streamable-http".equalsIgnoreCase(type) ||
-               "http".equalsIgnoreCase(type) ||
-               "stdio".equalsIgnoreCase(type) ||
-               "remote".equalsIgnoreCase(type);
+    /**
+     * 检查连接类型是否支持MCP传输
+     * 
+     * @param connectionType 连接类型枚举
+     * @return 是否支持
+     */
+    private boolean isSupportedTransportType(ConnectionTypeEnums connectionType) {
+        if (connectionType == null) {
+            return false;
+        }
+        
+        // 支持所有MCP标准传输类型
+        return connectionType == ConnectionTypeEnums.STREAMABLE_HTTP ||
+               connectionType == ConnectionTypeEnums.STDIO ||
+               connectionType == ConnectionTypeEnums.WEBSOCKET ||
+               connectionType == ConnectionTypeEnums.SSE;
+               // DOCKER暂时不支持
     }
     
     /**
@@ -213,7 +231,7 @@ public class McpGroupManager {
         // 默认版本
         toolInfo.setVersion("1.0");
         toolInfo.setServerId(server.getId());
-        toolInfo.setConnectionType(server.getConnection().getType().getValue());
+        toolInfo.setConnectionType(server.getConnection().getType());
         
         // 转换参数定义（JsonObjectSchema -> Map）
         // 这对于大模型理解如何调用工具非常重要
@@ -342,7 +360,8 @@ public class McpGroupManager {
         tool.setEnabled(true);
         tool.setVersion("1.0");
         tool.setServerId(serverId);
-        tool.setConnectionType("local");
+        // 占位工具使用STDIO类型（本地工具可以通过其他方式实现）
+        tool.setConnectionType(ConnectionTypeEnums.STDIO);
         return tool;
     }
     

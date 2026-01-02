@@ -1,6 +1,6 @@
 package com.aiagent.config;
 
-import com.aiagent.model.ConnectionType;
+import com.aiagent.enums.ConnectionTypeEnums;
 import com.aiagent.util.StringUtils;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -91,7 +91,7 @@ public class McpServerConfig {
         ConnectionConfig connection = new ConnectionConfig();
         
         // 转换类型：使用枚举解析，支持多种格式
-        ConnectionType connectionType = ConnectionType.fromString(jsonDef.getType());
+        ConnectionTypeEnums connectionType = ConnectionTypeEnums.fromString(jsonDef.getType());
         connection.setType(connectionType);
         
         connection.setUrl(jsonDef.getUrl());
@@ -191,7 +191,7 @@ public class McpServerConfig {
          * - WEBSOCKET: WebSocket传输（未来支持）
          * - DOCKER: Docker传输（未来支持）
          */
-        private ConnectionType type = ConnectionType.STDIO;
+        private ConnectionTypeEnums type = ConnectionTypeEnums.STDIO;
         
         /**
          * 服务器URL或命令：

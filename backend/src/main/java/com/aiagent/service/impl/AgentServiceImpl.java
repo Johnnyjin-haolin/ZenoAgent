@@ -186,10 +186,10 @@ public class AgentServiceImpl implements IAgentService {
      * 加载或创建上下文
      */
     private AgentContext loadOrCreateContext(AgentRequest request) {
-        String conversationId = StringUtils.getString(
-            request.getConversationId(), 
-            UUIDGenerator.generate()
-        );
+        String conversationId = request.getConversationId();
+        if (StringUtils.isEmpty(conversationId)) {
+            conversationId = UUIDGenerator.generate();
+        }
         
         AgentContext context = memorySystem.getContext(conversationId);
         

@@ -25,7 +25,7 @@ public class AgentRequest {
     private String conversationId;
     
     /**
-     * Agent配置ID
+     * Agent配置ID，暂未泳道功能，默认值为DEFAULT_AGENT_ID
      */
     private String agentId;
     
