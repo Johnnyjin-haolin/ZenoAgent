@@ -168,21 +168,23 @@ public class SimpleLLMChatHandler {
                 
                 @Override
                 public void onCompleteResponse(ChatResponse completeResponse) {
-                    synchronized (lock) {
-                        completed[0] = true;
-                        lock.notifyAll();
-                    }
-                    
                     String fullText = fullTextBuilder.toString();
                     log.debug("LLM真正流式对话完成，总长度: {}", fullText.length());
                     
-                    // 通知完成
+                    // 通知完成（这会触发SSE事件发送）
                     if (callback != null) {
                         try {
                             callback.onComplete(fullText);
                         } catch (Exception e) {
                             log.error("回调onComplete失败", e);
                         }
+                    }
+                    
+                    // onCompleteResponse 是在最后一个 onPartialResponse 之后被调用的
+                    // 此时所有token都已发送完成，可以安全地唤醒主线程
+                    synchronized (lock) {
+                        completed[0] = true;
+                        lock.notifyAll();
                     }
                 }
                 

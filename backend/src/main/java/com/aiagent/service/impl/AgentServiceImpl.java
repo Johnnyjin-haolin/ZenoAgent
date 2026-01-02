@@ -131,7 +131,8 @@ public class AgentServiceImpl implements IAgentService {
         context.setKnowledgeIds(request.getKnowledgeIds());
         context.setRequestId(requestId);
         
-        // 3.1 设置流式输出回调
+        // 3.1 设置流式输出回调（使用CountDownLatch确保流式完成后再关闭SSE）
+        java.util.concurrent.CountDownLatch streamingCompleteLatch = new java.util.concurrent.CountDownLatch(1);
         context.setStreamingCallback(new com.aiagent.service.StreamingCallback() {
             @Override
             public void onToken(String token) {
@@ -147,8 +148,15 @@ public class AgentServiceImpl implements IAgentService {
             @Override
             public void onComplete(String fullText) {
                 log.debug("LLM生成完成，文本长度: {}", fullText.length());
-                // 生成完成，不需要发送额外事件
-                // 完整文本会在ReAct循环结束后统一处理
+                // 发送流式完成事件，通知前端所有token都已发送
+                sendEvent(emitter, AgentEventData.builder()
+                    .requestId(requestId)
+                    .event(AgentConstants.EVENT_AGENT_STREAM_COMPLETE)
+                    .message("流式输出完成")
+                    .conversationId(context.getConversationId())
+                    .build());
+                // 释放锁，允许主线程继续执行并关闭SSE
+                streamingCompleteLatch.countDown();
             }
             
             @Override
@@ -160,6 +168,8 @@ public class AgentServiceImpl implements IAgentService {
                     .message("生成失败: " + error.getMessage())
                     .conversationId(context.getConversationId())
                     .build());
+                // 发生错误也要释放锁
+                streamingCompleteLatch.countDown();
             }
             
             @Override
@@ -224,7 +234,21 @@ public class AgentServiceImpl implements IAgentService {
                     .conversationId(context.getConversationId())
                     .build());
             } else {
-                log.debug("流式输出已完成，跳过重复发送完整内容");
+                log.debug("流式输出已完成，等待所有SSE事件发送完成...");
+                // 如果是流式输出，等待流式完成后再继续
+                // 这样可以确保所有token都通过SSE发送完毕，避免关闭SSE时还有残留事件
+                try {
+                    // 等待最多30秒（正常情况下应该很快完成）
+                    boolean completed = streamingCompleteLatch.await(30, java.util.concurrent.TimeUnit.SECONDS);
+                    if (completed) {
+                        log.debug("流式输出已完全结束，可以安全关闭SSE");
+                    } else {
+                        log.warn("等待流式输出完成超时（30秒），强制继续");
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.warn("等待流式输出完成被中断", e);
+                }
             }
         } else {
             sendEvent(emitter, AgentEventData.builder()
@@ -238,7 +262,7 @@ public class AgentServiceImpl implements IAgentService {
         // 7. 保存上下文
         memorySystem.saveContext(context);
         
-        // 8. 关闭SSE
+        // 8. 关闭SSE（此时所有流式事件都已发送完成）
         closeSSE(emitter, requestId);
     }
     
@@ -289,6 +313,9 @@ public class AgentServiceImpl implements IAgentService {
                 .name(eventData.getEvent())
                 .data(eventStr));
             log.debug("发送Agent事件: {}", eventData.getEvent());
+        } catch (IllegalStateException e) {
+            // SSE连接已关闭，这是正常的（流式输出异步完成时可能发生）
+            log.debug("SSE连接已关闭，忽略事件发送: {}", eventData.getEvent());
         } catch (IOException e) {
             log.error("发送SSE事件失败", e);
         }

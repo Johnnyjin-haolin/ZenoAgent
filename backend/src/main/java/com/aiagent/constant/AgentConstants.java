@@ -63,6 +63,7 @@ public class AgentConstants {
     public static final String EVENT_AGENT_TOOL_RESULT = "agent:tool_result";
     public static final String EVENT_AGENT_RAG_RETRIEVE = "agent:rag_retrieve";
     public static final String EVENT_AGENT_MESSAGE = "agent:message";
+    public static final String EVENT_AGENT_STREAM_COMPLETE = "agent:stream_complete";
     public static final String EVENT_AGENT_COMPLETE = "agent:complete";
     public static final String EVENT_AGENT_ERROR = "agent:error";
     
