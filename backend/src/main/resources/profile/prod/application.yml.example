@@ -1,0 +1,56 @@
+# 生产环境配置（profile: prod）
+# 复制此文件为 application.yml 并修改配置值
+# 此文件会被 .gitignore 忽略，不会被提交到Git
+
+# 使用方式：
+# 1. 复制此文件为 application.yml
+# 2. 填写真实的配置值（建议使用环境变量或配置中心）
+# 3. 启动时指定profile: java -jar app.jar --spring.profiles.active=prod
+
+aiagent:
+  # LLM配置
+  llm:
+    models:
+      - id: gpt-4o
+        name: GPT-4o
+        provider: OPENAI
+        api-key: ${OPENAI_API_KEY}  # 建议使用环境变量
+        base-url: https://api.openai.com/v1
+      - id: gpt-4o-mini
+        name: GPT-4o Mini
+        provider: OPENAI
+        api-key: ${OPENAI_API_KEY}
+        base-url: https://api.openai.com/v1
+    default-model: gpt-4o
+  
+  # 模型配置
+  model:
+    default-model-id: gpt-4o
+    task-model-mapping:
+      SIMPLE_CHAT:
+        - gpt-4o-mini
+      RAG_QUERY:
+        - gpt-4o-mini
+      TOOL_CALL:
+        - gpt-4o
+        - gpt-4o-mini
+      COMPLEX_WORKFLOW:
+        - gpt-4o
+        - gpt-4o-mini
+  
+  # RAG配置
+  rag:
+    embedding-store:
+      host: ${PG_HOST:localhost}
+      port: ${PG_PORT:5432}
+      database: ${PG_DATABASE:aiagent}
+      user: ${PG_USER:postgres}
+      password: ${PG_PASSWORD:}
+
+spring:
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: 0
+

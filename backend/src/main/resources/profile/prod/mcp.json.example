@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "aliyun-bailian-mcp": {
+      "type": "streamable-http",
+      "url": "https://dashscope.aliyuncs.com/api/v1/mcps/mcp-XXX/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ALIYUN_MCP_API_KEY}"
+      },
+      "name": "阿里云百炼MCP（生产环境）",
+      "description": "阿里云百炼模型服务MCP服务器（生产环境）",
+      "group": "aliyun",
+      "enabled": true,
+      "timeout": 10000,
+      "readTimeout": 30000,
+      "retryCount": 3,
+      "retryInterval": 1000
+    }
+  }
+}
+

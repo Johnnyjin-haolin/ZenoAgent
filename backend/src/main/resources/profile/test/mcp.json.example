@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "test-mcp-server": {
+      "type": "stdio",
+      "command": ["node", "test-mcp-server.js"],
+      "name": "测试MCP服务器",
+      "description": "测试环境MCP服务器",
+      "group": "test",
+      "enabled": true,
+      "timeout": 10000,
+      "readTimeout": 30000
+    }
+  }
+}
+

@@ -4,6 +4,7 @@ import com.aiagent.util.StringUtils;
 import com.alibaba.fastjson2.JSON;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
@@ -45,6 +46,11 @@ public class McpConfigLoader {
     private final ResourceLoader resourceLoader;
     
     /**
+     * Spring Environment（用于获取当前激活的profile）
+     */
+    private final Environment environment;
+    
+    /**
      * 配置变更监听器列表
      */
     private final List<Runnable> configChangeListeners = new CopyOnWriteArrayList<>();
@@ -75,10 +81,11 @@ public class McpConfigLoader {
     private long lastModifiedTime;
     
     /**
-     * 构造函数（注入 ResourceLoader）
+     * 构造函数（注入 ResourceLoader 和 Environment）
      */
-    public McpConfigLoader(ResourceLoader resourceLoader) {
+    public McpConfigLoader(ResourceLoader resourceLoader, Environment environment) {
         this.resourceLoader = resourceLoader;
+        this.environment = environment;
     }
     
     @PostConstruct
@@ -99,8 +106,10 @@ public class McpConfigLoader {
      * 确定配置文件路径
      * 优先级：
      * 1. 配置文件中指定的路径（aiagent.mcp.config-path，外部文件，支持热加载）
-     * 2. 项目根目录下的 config/mcp.json（外部文件，支持热加载）
-     * 3. resources/config/mcp.json（classpath 资源，不支持热加载）
+     * 2. 根据当前profile查找：profile/{profile}/mcp.json（外部文件，支持热加载）
+     * 3. 项目根目录下的 mcp.json（外部文件，支持热加载）
+     * 4. resources/profile/{profile}/mcp.json（classpath 资源，不支持热加载）
+     * 5. resources/config/mcp.json（classpath 资源，不支持热加载，向后兼容）
      */
     private Path determineConfigPath() {
         // 1. 优先使用配置文件中指定的路径（外部文件，支持热加载）
@@ -115,11 +124,47 @@ public class McpConfigLoader {
             }
         }
         
-        // 2. 尝试查找外部配置文件（支持热加载）
+        // 2. 根据当前激活的profile查找配置文件（优先级最高）
+        String[] activeProfiles = environment.getActiveProfiles();
+        if (activeProfiles.length > 0) {
+            String profile = activeProfiles[0]; // 使用第一个激活的profile
+            log.debug("当前激活的profile: {}", profile);
+            
+            // 尝试外部文件路径：profile/{profile}/mcp.json
+            String[] profilePaths = {
+                "profile/" + profile + "/mcp.json",
+                "../profile/" + profile + "/mcp.json",
+                System.getProperty("user.dir") + "/profile/" + profile + "/mcp.json"
+            };
+            
+            for (String pathStr : profilePaths) {
+                Path path = Paths.get(pathStr).toAbsolutePath();
+                if (Files.exists(path)) {
+                    log.info("找到profile配置文件: {}（profile: {}，支持热加载）", path.toAbsolutePath(), profile);
+                    isClasspathResource = false;
+                    return path;
+                }
+            }
+            
+            // 尝试classpath路径：classpath:profile/{profile}/mcp.json
+            try {
+                String classpathPath = "classpath:profile/" + profile + "/mcp.json";
+                Resource resource = resourceLoader.getResource(classpathPath);
+                if (resource.exists() && resource.isReadable()) {
+                    log.info("使用classpath profile配置文件: {}（profile: {}，不支持热加载）", classpathPath, profile);
+                    isClasspathResource = true;
+                    return Paths.get(classpathPath);
+                }
+            } catch (Exception e) {
+                log.debug("无法加载classpath profile配置文件: profile/{}/mcp.json", profile, e);
+            }
+        }
+        
+        // 3. 尝试查找外部默认配置文件（支持热加载）
         String[] externalPaths = {
-            "config/mcp.json",  // 项目根目录
-            "../config/mcp.json",  // 相对于backend目录
-            System.getProperty("user.dir") + "/config/mcp.json"  // 工作目录
+            "mcp.json",  // 项目根目录
+            "../mcp.json",  // 相对于backend目录
+            System.getProperty("user.dir") + "/mcp.json"  // 工作目录
         };
         
         for (String pathStr : externalPaths) {
@@ -131,23 +176,29 @@ public class McpConfigLoader {
             }
         }
         
-        // 4. 使用默认路径：resources/config/mcp.json（classpath 资源）
-        // 注意：classpath 资源在打包后无法修改，不支持热加载
+        // 4. 尝试classpath默认配置文件（向后兼容）
         try {
             Resource resource = resourceLoader.getResource("classpath:config/mcp.json");
             if (resource.exists() && resource.isReadable()) {
                 log.info("使用 classpath 资源: classpath:config/mcp.json（不支持热加载）");
                 isClasspathResource = true;
-                // 对于 classpath 资源，返回一个占位路径（实际读取时使用 Resource）
                 return Paths.get("classpath:config/mcp.json");
             }
         } catch (Exception e) {
             log.debug("无法加载 classpath 资源: classpath:config/mcp.json", e);
         }
         
-        // 5. 如果都不存在，使用默认路径（外部文件，首次运行需要创建）
-        Path defaultPath = Paths.get("config/mcp.json").toAbsolutePath();
-        log.warn("配置文件不存在，将使用默认路径: {}（首次运行需要创建，支持热加载）", defaultPath);
+        // 5. 如果都不存在，根据profile使用默认路径（外部文件，首次运行需要创建）
+        String[] activeProfilesForDefault = environment.getActiveProfiles();
+        Path defaultPath;
+        if (activeProfilesForDefault.length > 0) {
+            String profile = activeProfilesForDefault[0];
+            defaultPath = Paths.get("profile/" + profile + "/mcp.json").toAbsolutePath();
+            log.warn("配置文件不存在，将使用默认路径: {}（profile: {}，首次运行需要创建，支持热加载）", defaultPath, profile);
+        } else {
+            defaultPath = Paths.get("mcp.json").toAbsolutePath();
+            log.warn("配置文件不存在，将使用默认路径: {}（首次运行需要创建，支持热加载）", defaultPath);
+        }
         isClasspathResource = false;
         return defaultPath;
     }
@@ -161,19 +212,24 @@ public class McpConfigLoader {
             
             if (isClasspathResource) {
                 // 从 classpath 加载
-                Resource resource = resourceLoader.getResource("classpath:config/mcp.json");
-                if (!resource.exists() || !resource.isReadable()) {
-                    log.warn("classpath 配置文件不存在: classpath:config/mcp.json");
-                    currentConfig = new McpJsonConfig();
-                    return currentConfig;
+                String resourcePath = configFilePath.toString();
+                if (resourcePath.startsWith("classpath:")) {
+                    Resource resource = resourceLoader.getResource(resourcePath);
+                    if (!resource.exists() || !resource.isReadable()) {
+                        log.warn("classpath 配置文件不存在: {}", resourcePath);
+                        currentConfig = new McpJsonConfig();
+                        return currentConfig;
+                    }
+                    
+                    try (InputStream inputStream = resource.getInputStream()) {
+                        content = new String(inputStream.readAllBytes());
+                    }
+                    
+                    // classpath 资源无法获取修改时间，使用当前时间
+                    lastModifiedTime = System.currentTimeMillis();
+                } else {
+                    throw new IllegalStateException("无效的classpath路径: " + resourcePath);
                 }
-                
-                try (InputStream inputStream = resource.getInputStream()) {
-                    content = new String(inputStream.readAllBytes());
-                }
-                
-                // classpath 资源无法获取修改时间，使用当前时间
-                lastModifiedTime = System.currentTimeMillis();
                 
             } else {
                 // 从文件系统加载

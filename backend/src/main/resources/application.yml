@@ -5,6 +5,24 @@ spring:
   application:
     name: ai-agent-standalone
   
+  # 激活的配置文件（可通过环境变量或启动参数指定）
+  # 例如：java -jar app.jar --spring.profiles.active=dev
+  # 或者：export SPRING_PROFILES_ACTIVE=dev
+  # 默认：local（本地开发环境）
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  
+  # 配置文件导入（Spring Boot 2.4+）
+  # 根据激活的profile，自动导入对应的配置文件
+  # 配置文件位置：profile/{profile}/application.yml
+  # 
+  # 注意：由于需要在解析spring.profiles.active之后才能知道profile值
+  # 这里使用占位符，Spring Boot会自动替换
+  # 如果profile配置文件不存在，optional: 前缀会使其静默失败，使用默认配置
+  config:
+    import:
+      - optional:classpath:profile/${spring.profiles.active}/application.yml
+  
   # Redis配置（用于存储对话、文档元数据、知识库等）
   # 注意：本项目不使用MySQL，所有数据存储在Redis中
   redis:
@@ -103,17 +121,24 @@ aiagent:
   
   # MCP工具配置
   # 注意：MCP服务器配置已迁移到 JSON 文件
-  # 默认路径：resources/config/mcp.json（classpath 资源，不支持热加载）
-  # 可通过 config-path 指定外部文件路径以支持热加载
+  # 
+  # 配置文件路径优先级：
+  # 1. aiagent.mcp.config-path 指定的路径（如果配置）
+  # 2. profile/{profile}/mcp.json（根据当前激活的profile，推荐）
+  # 3. mcp.json（默认路径，向后兼容）
+  # 
+  # 示例：
+  # - profile=local: 使用 profile/local/mcp.json
+  # - profile=dev: 使用 profile/dev/mcp.json
+  # - profile=prod: 使用 profile/prod/mcp.json
   mcp:
     # 是否启用MCP功能
     enabled: true
-    # 配置文件路径（可选）
-    # 默认：classpath:config/mcp.json（resources/config/mcp.json）
-    # 如果指定外部文件路径，则支持热加载
-    # config-path: config/mcp.json
+    # 配置文件路径（可选，不配置则自动根据profile查找）
+    # 如果指定，将优先使用此路径，支持绝对路径和相对路径
+    # config-path: profile/local/mcp.json
     # 是否启用热加载（默认：true，仅对外部文件有效）
-    # hot-reload: true
+    hot-reload: true
 
 # SpringDoc API 文档
 springdoc:

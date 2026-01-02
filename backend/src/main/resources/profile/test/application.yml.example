@@ -1,0 +1,21 @@
+# 测试环境配置（profile: test）
+# 复制此文件为 application.yml 并修改配置值
+# 此文件会被 .gitignore 忽略，不会被提交到Git
+
+aiagent:
+  llm:
+    models:
+      - id: gpt-4o-mini
+        name: GPT-4o Mini
+        provider: OPENAI
+        api-key: sk-test-api-key
+        base-url: https://api.openai.com/v1
+    default-model: gpt-4o-mini
+
+spring:
+  redis:
+    host: localhost
+    port: 6379
+    password: 
+    database: 1  # 测试环境使用不同的数据库
+

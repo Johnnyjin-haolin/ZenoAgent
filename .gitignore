@@ -36,10 +36,26 @@ Thumbs.db
 .env.local
 .env.*.local
 
-# Application
+# Application配置文件（包含敏感信息）
+# 所有环境配置文件都不提交到Git（已迁移到 profile/ 目录）
 application-local.yml
-application-prod.yml
 application-dev.yml
-# 本地配置文件（包含敏感信息）
-backend/src/main/resources/application-local.yml
+application-prod.yml
+application-test.yml
+backend/src/main/resources/application-*.yml
+!backend/src/main/resources/application.yml
+
+# Profile目录下的配置文件（包含敏感信息）
+backend/src/main/resources/profile/*/application.yml
+backend/src/main/resources/profile/*/mcp.json
+!backend/src/main/resources/profile/*/application.yml.example
+!backend/src/main/resources/profile/*/mcp.json.example
+
+# MCP配置文件（包含敏感信息）
+# 所有环境的MCP配置文件都不提交到Git
+backend/src/main/resources/config/profile/*/mcp.json
+!backend/src/main/resources/config/profile/*/mcp.json.example
+# 根目录的MCP配置文件（如果存在）
+config/profile/*/mcp.json
+config/mcp.json
 

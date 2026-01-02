@@ -1,0 +1,30 @@
+{
+  "mcpServers": {
+    "aliyun-bailian-mcp": {
+      "type": "streamable-http",
+      "url": "https://dashscope.aliyuncs.com/api/v1/mcps/mcp-XXX/mcp",
+      "headers": {
+        "Authorization": "Bearer your-api-key-here"
+      },
+      "name": "阿里云百炼MCP",
+      "description": "阿里云百炼模型服务MCP服务器",
+      "group": "aliyun",
+      "enabled": true,
+      "timeout": 10000,
+      "readTimeout": 30000,
+      "retryCount": 3,
+      "retryInterval": 1000
+    },
+    "local-example": {
+      "type": "stdio",
+      "command": ["node", "mcp-server.js"],
+      "name": "本地示例服务器",
+      "description": "本地Stdio MCP服务器示例",
+      "group": "local",
+      "enabled": false,
+      "timeout": 10000,
+      "readTimeout": 30000
+    }
+  }
+}
+

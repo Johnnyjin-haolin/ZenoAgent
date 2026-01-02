@@ -1,8 +1,8 @@
-# 本地开发环境配置示例
-# 复制此文件为 application-local.yml 并修改配置值
-# application-local.yml 会被 .gitignore 忽略，不会被提交到Git
+# 本地开发环境配置（profile: local）
+# 复制此文件为 application.yml 并修改配置值
+# 此文件会被 .gitignore 忽略，不会被提交到Git
 
-# 注意：application-local.yml 会覆盖 application.yml 中的相同配置项
+# 注意：此配置文件会覆盖 application.yml 中的相同配置项
 
 aiagent:
   # LLM配置
@@ -22,8 +22,8 @@ aiagent:
         base-url: https://api.openai.com/v1
       
       # 智谱AI (ZHIPU)
-      # - id: glm-4
-      #   name: GLM-4
+      # - id: glm-4.7
+      #   name: GLM-4.7
       #   provider: ZHIPU
       #   api-key: your-zhipu-api-key
       #   base-url: https://open.bigmodel.cn/api/paas/v4/  # 可选，不配置会使用默认值
@@ -41,13 +41,6 @@ aiagent:
       #   provider: QWEN
       #   api-key: your-qwen-api-key
       #   base-url: https://dashscope.aliyuncs.com/compatible-mode/v1  # 可选
-      
-      # GLM模型（如果使用GLM作为provider）
-      # - id: glm-4.7
-      #   name: GLM-4.7
-      #   provider: GLM
-      #   api-key: your-glm-api-key
-      #   base-url: https://open.bigmodel.cn/api/paas/v4/
     # 默认模型ID（从上面的models列表中选择）
     default-model: gpt-4o-mini
   
