@@ -12,7 +12,6 @@ import com.alibaba.fastjson2.JSON;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.service.TokenStream;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -257,23 +256,34 @@ public class ActionExecutor {
             // 3. 添加当前的生成提示
             messages.add(new UserMessage(prompt));
             
-            // 调用LLM（流式调用）
+            // 调用LLM
             String modelId = context != null ? context.getModelId() : null;
             if (StringUtils.isEmpty(modelId)) {
                 modelId = "gpt-4o-mini";
             }
             
-            // 使用流式调用，返回TokenStream
-            TokenStream tokenStream = llmChatHandler.chat(modelId, messages);
+            String llmResponse;
+            boolean isStreaming = false;
+            
+            if (context != null && context.getStreamingCallback() != null) {
+                // 有回调，使用流式输出
+                isStreaming = true;
+                llmResponse = llmChatHandler.chatWithCallback(modelId, messages, context.getStreamingCallback());
+            } else {
+                // 如果没有回调，使用非流式调用
+                log.debug("没有流式回调，使用非流式模式获取LLM结果");
+                llmResponse = llmChatHandler.chatNonStreaming(modelId, messages);
+            }
             
             long duration = System.currentTimeMillis() - startTime;
-            ActionResult result = ActionResult.success("llm_generate", "llm_generate", tokenStream);
+            ActionResult result = ActionResult.success("llm_generate", "llm_generate", llmResponse);
             result.setDuration(duration);
             result.setMetadata(Map.of(
                 "prompt", prompt, 
                 "modelId", modelId,
-                "historyMessageCount", messages.size() - 2, // 减去系统提示和当前提示
-                "streaming", true
+                "historyMessageCount", messages.size() - 2,
+                "streaming", isStreaming,
+                "textLength", llmResponse.length()
             ));
             
             return result;

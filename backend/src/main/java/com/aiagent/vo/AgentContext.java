@@ -1,5 +1,6 @@
 package com.aiagent.vo;
 
+import com.aiagent.service.StreamingCallback;
 import dev.langchain4j.data.message.ChatMessage;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -108,6 +109,16 @@ public class AgentContext implements Serializable {
      * 用户名
      */
     private String username;
+    
+    /**
+     * 请求ID（用于关联SSE事件，不需要序列化）
+     */
+    private transient String requestId;
+    
+    /**
+     * 流式输出回调（运行时使用，不需要序列化）
+     */
+    private transient StreamingCallback streamingCallback;
     
     /**
      * 从 ChatMessage 列表设置消息（自动转换为DTO）

@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -128,6 +129,51 @@ public class AgentServiceImpl implements IAgentService {
         context.setModelId(StringUtils.getString(request.getModelId(), "gpt-4o-mini"));
         context.setEnabledMcpGroups(request.getEnabledMcpGroups());
         context.setKnowledgeIds(request.getKnowledgeIds());
+        context.setRequestId(requestId);
+        
+        // 3.1 设置流式输出回调
+        context.setStreamingCallback(new com.aiagent.service.StreamingCallback() {
+            @Override
+            public void onToken(String token) {
+                // 实时发送token到前端
+                sendEvent(emitter, AgentEventData.builder()
+                    .requestId(requestId)
+                    .event(AgentConstants.EVENT_AGENT_MESSAGE)
+                    .content(token)
+                    .conversationId(context.getConversationId())
+                    .build());
+            }
+            
+            @Override
+            public void onComplete(String fullText) {
+                log.debug("LLM生成完成，文本长度: {}", fullText.length());
+                // 生成完成，不需要发送额外事件
+                // 完整文本会在ReAct循环结束后统一处理
+            }
+            
+            @Override
+            public void onError(Throwable error) {
+                log.error("LLM流式输出错误", error);
+                sendEvent(emitter, AgentEventData.builder()
+                    .requestId(requestId)
+                    .event(AgentConstants.EVENT_AGENT_ERROR)
+                    .message("生成失败: " + error.getMessage())
+                    .conversationId(context.getConversationId())
+                    .build());
+            }
+            
+            @Override
+            public void onStart() {
+                log.debug("LLM开始生成");
+                // 可以发送一个开始生成的事件
+                sendEvent(emitter, AgentEventData.builder()
+                    .requestId(requestId)
+                    .event(AgentConstants.EVENT_AGENT_THINKING)
+                    .message("开始生成回复...")
+                    .conversationId(context.getConversationId())
+                    .build());
+            }
+        });
         
         // 4. 注册状态变更监听器
         stateMachine.initialize(context, newState -> {
@@ -160,12 +206,26 @@ public class AgentServiceImpl implements IAgentService {
             // 更新对话消息数量
             conversationStorage.incrementMessageCount(context.getConversationId());
             
-            sendEvent(emitter, AgentEventData.builder()
-                .requestId(requestId)
-                .event(AgentConstants.EVENT_AGENT_MESSAGE)
-                .content(finalResult.getData().toString())
-                .conversationId(context.getConversationId())
-                .build());
+            // 注意：如果是LLM_GENERATE且使用了流式输出，内容已经通过callback发送了
+            // 这里不再重复发送完整内容，只在metadata中标记streaming为false的情况下才发送
+            Object metadata = finalResult.getMetadata();
+            boolean isStreaming = false;
+            if (metadata instanceof Map) {
+                Map<?, ?> metaMap = (Map<?, ?>) metadata;
+                isStreaming = Boolean.TRUE.equals(metaMap.get("streaming"));
+            }
+            
+            if (!isStreaming) {
+                // 非流式结果（如工具调用结果），需要发送完整内容
+                sendEvent(emitter, AgentEventData.builder()
+                    .requestId(requestId)
+                    .event(AgentConstants.EVENT_AGENT_MESSAGE)
+                    .content(finalResult.getData().toString())
+                    .conversationId(context.getConversationId())
+                    .build());
+            } else {
+                log.debug("流式输出已完成，跳过重复发送完整内容");
+            }
         } else {
             sendEvent(emitter, AgentEventData.builder()
                 .requestId(requestId)
