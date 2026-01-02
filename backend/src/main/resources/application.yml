@@ -5,6 +5,8 @@ spring:
   application:
     name: ai-agent-standalone
   
+  # Redis配置（用于存储对话、文档元数据、知识库等）
+  # 注意：本项目不使用MySQL，所有数据存储在Redis中
   redis:
     host: localhost
     port: 6379
@@ -16,26 +18,52 @@ spring:
         max-active: 8
         max-idle: 8
         min-idle: 0
+  
+  # 注意：本项目不依赖MySQL
+  # DocumentRepository和KnowledgeBaseRepository都使用Redis实现
+  # 如需使用MySQL，需要添加以下依赖和配置：
+  # - spring-boot-starter-data-jpa
+  # - mysql-connector-java
+  # datasource:
+  #   url: jdbc:mysql://localhost:3306/aiagent?useUnicode=true&characterEncoding=utf8
+  #   username: root
+  #   password: password
+  #   driver-class-name: com.mysql.cj.jdbc.Driver
 
 # AI Agent 配置
 aiagent:
   # LLM配置
   llm:
-    # OpenAI API Key（请在此处填写你的API Key）
-    api-key:
-    # OpenAI Base URL（支持代理或兼容API）
-    base-url: https://api.openai.com/v1
-    # 默认模型
+    # 模型列表配置（支持多个模型，按id引用）
+    models:
+      - id: gpt-4o-mini
+        name: GPT-4o Mini
+        provider: OPENAI
+        api-key:
+        base-url: https://api.openai.com/v1
+      - id: gpt-4o
+        name: GPT-4o
+        provider: OPENAI
+        api-key:
+        base-url: https://api.openai.com/v1
+    # 默认模型ID（从上面的models列表中选择）
     default-model: gpt-4o-mini
   
   # 模型配置
   model:
     default-model-id: gpt-4o-mini
+    # 任务模型映射（值为模型ID列表，按顺序尝试，前面的失败会尝试后面的）
     task-model-mapping:
-      SIMPLE_CHAT: gpt-4o-mini
-      RAG_QUERY: gpt-4o-mini
-      TOOL_CALL: gpt-4o
-      COMPLEX_WORKFLOW: gpt-4o
+      SIMPLE_CHAT:
+        - gpt-4o-mini
+      RAG_QUERY:
+        - gpt-4o-mini
+      TOOL_CALL:
+        - gpt-4o
+        - gpt-4o-mini
+      COMPLEX_WORKFLOW:
+        - gpt-4o
+        - gpt-4o-mini
   
   memory:
     short-term-expire-hours: 24
@@ -46,6 +74,10 @@ aiagent:
     default-top-k: 5
     default-min-score: 0.5
     # 向量存储配置（PostgreSQL + pgvector）
+    # 注意：RAG功能需要PostgreSQL数据库并安装pgvector扩展
+    # 安装pgvector扩展命令：
+    #   CREATE EXTENSION vector;
+    # 如果不需要RAG功能，可以不配置此项
     embedding-store:
       host: localhost
       port: 5432

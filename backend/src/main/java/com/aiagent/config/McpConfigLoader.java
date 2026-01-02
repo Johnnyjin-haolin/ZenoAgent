@@ -27,8 +27,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class McpConfigLoader {
     
     /**
-     * 配置文件路径（可通过环境变量 MCP_CONFIG_PATH 指定）
-     * 默认：项目根目录下的 config/mcp.json
+     * 配置文件路径（可通过 application.yml 中的 aiagent.mcp.config-path 配置）
+     * 默认：如果未配置，会自动查找项目根目录下的 config/mcp.json 或 resources/config/mcp.json
      */
     @Value("${aiagent.mcp.config-path:}")
     private String configPath;
@@ -98,8 +98,8 @@ public class McpConfigLoader {
     /**
      * 确定配置文件路径
      * 优先级：
-     * 1. 配置文件中指定的路径（外部文件，支持热加载）
-     * 2. 环境变量 MCP_CONFIG_PATH（外部文件，支持热加载）
+     * 1. 配置文件中指定的路径（aiagent.mcp.config-path，外部文件，支持热加载）
+     * 2. 项目根目录下的 config/mcp.json（外部文件，支持热加载）
      * 3. resources/config/mcp.json（classpath 资源，不支持热加载）
      */
     private Path determineConfigPath() {
@@ -115,18 +115,7 @@ public class McpConfigLoader {
             }
         }
         
-        // 2. 检查环境变量（外部文件，支持热加载）
-        String envPath = System.getenv("MCP_CONFIG_PATH");
-        if (StringUtils.isNotEmpty(envPath)) {
-            Path path = Paths.get(envPath);
-            if (Files.exists(path)) {
-                log.info("使用环境变量指定的配置文件路径: {}", path.toAbsolutePath());
-                isClasspathResource = false;
-                return path;
-            }
-        }
-        
-        // 3. 尝试查找外部配置文件（支持热加载）
+        // 2. 尝试查找外部配置文件（支持热加载）
         String[] externalPaths = {
             "config/mcp.json",  // 项目根目录
             "../config/mcp.json",  // 相对于backend目录

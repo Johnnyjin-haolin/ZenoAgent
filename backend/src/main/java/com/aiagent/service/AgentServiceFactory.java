@@ -3,18 +3,14 @@ package com.aiagent.service;
 import com.aiagent.config.AgentConfig;
 import com.aiagent.service.tool.McpToolProviderFactory;
 import dev.langchain4j.model.chat.StreamingChatModel;
-import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.service.tool.ToolProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Agent服务工厂
@@ -37,16 +33,8 @@ public class AgentServiceFactory {
     @Autowired
     private McpToolProviderFactory mcpToolProviderFactory;
     
-    @Value("${aiagent.llm.api-key:}")
-    private String defaultApiKey;
-    
-    @Value("${aiagent.llm.base-url:https://api.openai.com/v1}")
-    private String defaultBaseUrl;
-    
-    /**
-     * 模型实例缓存（modelName -> StreamingChatLanguageModel）
-     */
-    private final Map<String, StreamingChatModel> modelCache = new ConcurrentHashMap<>();
+    @Autowired
+    private ModelManager modelManager;
     
     /**
      * 创建Agent服务接口
@@ -101,49 +89,36 @@ public class AgentServiceFactory {
     }
     
     /**
-     * 获取或创建模型实例
+     * 获取或创建模型实例（根据任务类型，支持故障转移）
      */
     private StreamingChatModel getOrCreateModel(String modelId) {
-        // 确定模型名称
-        String modelName = agentConfig.getModel().getDefaultModelId();
-        if (modelId != null && !modelId.isEmpty() && !modelId.equals(modelName)) {
-            modelName = modelId;
+        // 如果指定了modelId，直接使用
+        if (modelId != null && !modelId.isEmpty()) {
+            return modelManager.getOrCreateStreamingModel(modelId);
         }
         
-        // 检查缓存
-        if (modelCache.containsKey(modelName)) {
-            return modelCache.get(modelName);
-        }
-        
-        // 创建新模型实例
-        String apiKey = System.getenv("OPENAI_API_KEY");
-        if (apiKey == null || apiKey.isEmpty()) {
-            apiKey = defaultApiKey;
-        }
-        
-        if (apiKey == null || apiKey.isEmpty()) {
-            throw new RuntimeException("未配置OPENAI_API_KEY");
-        }
-
-        StreamingChatModel model = OpenAiStreamingChatModel.builder()
-            .apiKey(apiKey)
-            .baseUrl(defaultBaseUrl)
-            .modelName(modelName)
-            .temperature(0.7)
-            .build();
-        
-        // 缓存模型实例
-        modelCache.put(modelName, model);
-        
-        log.info("创建并缓存模型实例: modelName={}", modelName);
-        return model;
+        // 否则使用默认模型
+        return modelManager.getOrCreateStreamingModel(
+            agentConfig.getModel().getDefaultModelId()
+        );
+    }
+    
+    /**
+     * 根据任务类型获取模型（支持故障转移）
+     * 
+     * @param taskType 任务类型
+     * @return 模型实例
+     */
+    public StreamingChatModel getModelForTask(String taskType) {
+        List<String> modelIds = modelManager.getModelIdsForTask(taskType);
+        return (StreamingChatModel) modelManager.tryModelsWithFallback(modelIds, true);
     }
     
     /**
      * 清除模型缓存
      */
     public void clearModelCache() {
-        modelCache.clear();
+        modelManager.clearModelCache();
         log.info("模型缓存已清除");
     }
 }

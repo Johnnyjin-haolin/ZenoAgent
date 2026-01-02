@@ -7,29 +7,84 @@
 aiagent:
   # LLM配置
   llm:
-    # 请在此处填写你的 OpenAI API Key
-    api-key: sk-your-openai-api-key-here
-    # 如果使用代理或兼容API，可以修改此URL
-    base-url: https://api.openai.com/v1
+    # 模型列表配置（支持多个模型，按id引用）
+    models:
+      # OpenAI官方模型
+      - id: gpt-4o-mini
+        name: GPT-4o Mini
+        provider: OPENAI
+        api-key: sk-your-openai-api-key-here
+        base-url: https://api.openai.com/v1
+      - id: gpt-4o
+        name: GPT-4o
+        provider: OPENAI
+        api-key: sk-your-openai-api-key-here
+        base-url: https://api.openai.com/v1
+      
+      # 智谱AI (ZHIPU)
+      # - id: glm-4
+      #   name: GLM-4
+      #   provider: ZHIPU
+      #   api-key: your-zhipu-api-key
+      #   base-url: https://open.bigmodel.cn/api/paas/v4/  # 可选，不配置会使用默认值
+      
+      # DeepSeek
+      # - id: deepseek-chat
+      #   name: DeepSeek Chat
+      #   provider: DEEPSEEK
+      #   api-key: your-deepseek-api-key
+      #   base-url: https://api.deepseek.com/v1  # 可选
+      
+      # 通义千问 (QWEN)
+      # - id: qwen-turbo
+      #   name: Qwen Turbo
+      #   provider: QWEN
+      #   api-key: your-qwen-api-key
+      #   base-url: https://dashscope.aliyuncs.com/compatible-mode/v1  # 可选
+      
+      # GLM模型（如果使用GLM作为provider）
+      # - id: glm-4.7
+      #   name: GLM-4.7
+      #   provider: GLM
+      #   api-key: your-glm-api-key
+      #   base-url: https://open.bigmodel.cn/api/paas/v4/
+    # 默认模型ID（从上面的models列表中选择）
     default-model: gpt-4o-mini
   
   # 模型配置
   model:
     default-model-id: gpt-4o-mini
+    # 任务模型映射（值为模型ID列表，按顺序尝试，前面的失败会尝试后面的）
     task-model-mapping:
-      SIMPLE_CHAT: gpt-4o-mini
-      RAG_QUERY: gpt-4o-mini
-      TOOL_CALL: gpt-4o
-      COMPLEX_WORKFLOW: gpt-4o
+      SIMPLE_CHAT:
+        - gpt-4o-mini
+      RAG_QUERY:
+        - gpt-4o-mini
+      TOOL_CALL:
+        - gpt-4o
+        - gpt-4o-mini  # 如果gpt-4o失败，尝试gpt-4o-mini
+      COMPLEX_WORKFLOW:
+        - gpt-4o
+        - gpt-4o-mini  # 如果gpt-4o失败，尝试gpt-4o-mini
 
 spring:
+  # Redis配置（必需）
+  # 用于存储对话、文档元数据、知识库等数据
+  # 注意：本项目不使用MySQL，所有业务数据存储在Redis中
   redis:
     host: localhost
     port: 6379
     password: 
     database: 0
 
-  # 如果需要在本地使用不同的PostgreSQL配置
-  # 可以在这里覆盖默认配置
-  # 注意：application.yml 中的配置会作为默认值
+# 向量数据库配置（可选，仅在使用RAG功能时需要）
+# 如果不需要RAG功能，可以删除此部分
+# aiagent:
+#   rag:
+#     embedding-store:
+#       host: localhost
+#       port: 5432
+#       database: aiagent
+#       user: postgres
+#       password: postgres
 

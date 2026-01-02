@@ -209,14 +209,12 @@ public class EmbeddingProcessor {
         // 目前使用OpenAI的默认模型
         // 后续可以根据embeddingModelId扩展支持其他模型
         
-        String apiKey = System.getenv("OPENAI_API_KEY");
-        if (apiKey == null || apiKey.isEmpty()) {
-            apiKey = defaultApiKey;
+        // 从配置中获取API Key
+        if (defaultApiKey == null || defaultApiKey.isEmpty()) {
+            throw new IllegalStateException("OpenAI API key is not configured. Please configure aiagent.llm.api-key in application.yml");
         }
         
-        if (apiKey == null || apiKey.isEmpty()) {
-            throw new IllegalStateException("OpenAI API key is not configured");
-        }
+        String apiKey = defaultApiKey;
         
         return OpenAiEmbeddingModel.builder()
                 .apiKey(apiKey)

@@ -2,19 +2,16 @@ package com.aiagent.service;
 
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
-import dev.langchain4j.model.openai.OpenAiChatModel;
-import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
-import dev.langchain4j.model.output.Response;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.TokenStream;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 简化的LLM聊天处理器
@@ -28,19 +25,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class SimpleLLMChatHandler {
     
-    @Value("${aiagent.llm.api-key:}")
-    private String defaultApiKey;
-    
-    @Value("${aiagent.llm.base-url:https://api.openai.com/v1}")
-    private String defaultBaseUrl;
-    
-    @Value("${aiagent.llm.default-model:gpt-4o-mini}")
-    private String defaultModelName;
-    
-    /**
-     * 非流式模型缓存（modelName -> OpenAiChatModel）
-     */
-    private final Map<String, OpenAiChatModel> nonStreamingModelCache = new ConcurrentHashMap<>();
+    @Autowired
+    private ModelManager modelManager;
     
     /**
      * 流式聊天接口
@@ -52,14 +38,7 @@ public class SimpleLLMChatHandler {
     /**
      * 创建ChatAssistant实例
      */
-    private ChatAssistant createAssistant(String apiKey, String baseUrl, String modelName) {
-        OpenAiStreamingChatModel streamingModel = OpenAiStreamingChatModel.builder()
-            .apiKey(apiKey)
-            .baseUrl(baseUrl)
-            .modelName(modelName)
-            .temperature(0.7)
-            .build();
-        
+    private ChatAssistant createAssistant(StreamingChatModel streamingModel) {
         return AiServices.builder(ChatAssistant.class)
                 .streamingChatModel(streamingModel)
                 .build();
@@ -79,25 +58,11 @@ public class SimpleLLMChatHandler {
         log.info("开始LLM流式对话，模型: {}", modelId);
         
         try {
-            // 获取API Key
-            String apiKey = System.getenv("OPENAI_API_KEY");
-            if (apiKey == null || apiKey.isEmpty()) {
-                apiKey = defaultApiKey;
-            }
-            
-            if (apiKey == null || apiKey.isEmpty()) {
-                throw new RuntimeException("未配置OPENAI_API_KEY，请设置环境变量或配置aiagent.llm.api-key");
-            }
-            
-            // 确定模型名称
-            String modelName = defaultModelName;
-            if (modelId != null && !modelId.isEmpty() && !modelId.equals(defaultModelName)) {
-                // 可以扩展模型ID到模型名称的映射
-                modelName = modelId;
-            }
+            // 使用ModelManager获取模型实例（支持故障转移）
+            StreamingChatModel streamingModel = modelManager.getOrCreateStreamingModel(modelId);
             
             // 创建ChatAssistant并调用
-            ChatAssistant assistant = createAssistant(apiKey, defaultBaseUrl, modelName);
+            ChatAssistant assistant = createAssistant(streamingModel);
             return assistant.chat(messages);
                 
         } catch (Exception e) {
@@ -110,7 +75,7 @@ public class SimpleLLMChatHandler {
      * 使用默认模型流式聊天
      */
     public TokenStream chatByDefaultModel(List<ChatMessage> messages) {
-        return chat(defaultModelName, messages);
+        return chat(null, messages);
     }
     
     /**
@@ -124,28 +89,10 @@ public class SimpleLLMChatHandler {
         log.info("开始LLM非流式对话，模型: {}", modelId);
         
         try {
-            // 获取API Key
-            String apiKey = System.getenv("OPENAI_API_KEY");
-            if (apiKey == null || apiKey.isEmpty()) {
-                apiKey = defaultApiKey;
-            }
+            // 使用ModelManager获取模型实例（支持故障转移）
+            ChatModel chatModel = modelManager.getOrCreateChatModel(modelId);
             
-            if (apiKey == null || apiKey.isEmpty()) {
-                throw new RuntimeException("未配置OPENAI_API_KEY，请设置环境变量或配置aiagent.llm.api-key");
-            }
-            
-            // 确定模型名称
-            String modelName = defaultModelName;
-            if (modelId != null && !modelId.isEmpty() && !modelId.equals(defaultModelName)) {
-                modelName = modelId;
-            }
-            
-            // 获取或创建非流式模型实例
-            OpenAiChatModel chatModel = getOrCreateNonStreamingModel(apiKey, modelName);
-            
-            // 直接使用OpenAiChatModel的generate方法
-            // langchain4j 1.9.1: OpenAiChatModel实现了LanguageModel接口
-            // generate方法接受List<ChatMessage>，返回Response<AiMessage>
+            // 直接使用ChatModel的generate方法（LangChain4j 1.9.1的ChatModel接口方法）
             ChatResponse response = chatModel.chat(messages);
             AiMessage aiMessage = response.aiMessage();
             String responseText = aiMessage != null ? aiMessage.text() : "";
@@ -163,30 +110,6 @@ public class SimpleLLMChatHandler {
      * 使用默认模型非流式聊天
      */
     public String chatNonStreamingByDefaultModel(List<ChatMessage> messages) {
-        return chatNonStreaming(defaultModelName, messages);
-    }
-    
-    /**
-     * 获取或创建非流式模型实例
-     */
-    private OpenAiChatModel getOrCreateNonStreamingModel(String apiKey, String modelName) {
-        // 检查缓存
-        if (nonStreamingModelCache.containsKey(modelName)) {
-            return nonStreamingModelCache.get(modelName);
-        }
-        
-        // 创建新模型实例
-        OpenAiChatModel chatModel = OpenAiChatModel.builder()
-            .apiKey(apiKey)
-            .baseUrl(defaultBaseUrl)
-            .modelName(modelName)
-            .temperature(0.7)
-            .build();
-        
-        // 缓存模型实例
-        nonStreamingModelCache.put(modelName, chatModel);
-        log.debug("创建并缓存非流式模型实例: modelName={}", modelName);
-        
-        return chatModel;
+        return chatNonStreaming(null, messages);
     }
 }

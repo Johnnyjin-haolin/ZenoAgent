@@ -83,16 +83,13 @@ public class RAGEnhancer {
             return embeddingModel;
         }
         
-        // 使用OpenAI Embedding模型
-        String apiKey = System.getenv("OPENAI_API_KEY");
-        if (apiKey == null || apiKey.isEmpty()) {
-            apiKey = defaultApiKey;
-        }
-        
-        if (apiKey == null || apiKey.isEmpty()) {
-            log.warn("未配置OPENAI_API_KEY，无法使用Embedding功能");
+        // 从配置中获取API Key
+        if (defaultApiKey == null || defaultApiKey.isEmpty()) {
+            log.warn("未配置API Key，无法使用Embedding功能，请在application.yml中配置aiagent.llm.api-key");
             return null;
         }
+        
+        String apiKey = defaultApiKey;
         
         embeddingModel = OpenAiEmbeddingModel.builder()
             .apiKey(apiKey)

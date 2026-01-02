@@ -4,7 +4,9 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -17,6 +19,11 @@ import java.util.Map;
 @Component
 @ConfigurationProperties(prefix = "aiagent")
 public class AgentConfig {
+    
+    /**
+     * LLM配置
+     */
+    private LLMConfig llm = new LLMConfig();
     
     /**
      * 模型配置
@@ -44,9 +51,59 @@ public class AgentConfig {
     private ToolConfig tools = new ToolConfig();
     
     @Data
+    public static class LLMConfig {
+        /**
+         * 模型列表配置
+         */
+        private List<ModelDefinition> models = new ArrayList<>();
+        
+        /**
+         * 默认模型ID（从models列表中选择）
+         */
+        private String defaultModel = "gpt-4o-mini";
+        
+        @Data
+        public static class ModelDefinition {
+            /**
+             * 模型ID（唯一标识）
+             */
+            private String id;
+            
+            /**
+             * 模型名称（显示用）
+             */
+            private String name;
+            
+            /**
+             * 模型提供商（OPENAI, GLM等）
+             */
+            private String provider = "OPENAI";
+            
+            /**
+             * API Key
+             */
+            private String apiKey;
+            
+            /**
+             * Base URL
+             */
+            private String baseUrl = "https://api.openai.com/v1";
+        }
+    }
+    
+    @Data
     public static class ModelConfig {
+        /**
+         * 默认模型ID
+         */
         private String defaultModelId = "gpt-4o-mini";
-        private Map<String, String> taskModelMapping = new HashMap<>();
+        
+        /**
+         * 任务模型映射（值为模型ID列表，按顺序尝试）
+         * Key: 任务类型（SIMPLE_CHAT, RAG_QUERY等）
+         * Value: 模型ID列表
+         */
+        private Map<String, List<String>> taskModelMapping = new HashMap<>();
     }
     
     @Data
