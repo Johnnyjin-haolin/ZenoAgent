@@ -2,7 +2,7 @@ package com.aiagent.controller;
 
 import com.aiagent.config.AgentConfig;
 import com.aiagent.service.IAgentService;
-import com.aiagent.service.MemorySystem;
+import com.aiagent.service.memory.MemorySystem;
 import com.aiagent.service.tool.McpGroupManager;
 import com.aiagent.storage.ConversationStorage;
 import com.aiagent.vo.AgentRequest;
@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * AI Agent 控制器
@@ -45,6 +44,12 @@ public class AgentController {
     
     @Autowired
     private McpGroupManager mcpGroupManager;
+    
+    @Autowired
+    private com.aiagent.service.ConversationService conversationService;
+    
+    @Autowired
+    private com.aiagent.service.MessageService messageService;
     
     /**
      * 执行Agent任务
@@ -177,7 +182,7 @@ public class AgentController {
     }
     
     /**
-     * 获取会话列表
+     * 获取会话列表（从MySQL读取）
      */
     @GetMapping("/conversations")
     public ResponseEntity<?> getConversations(
@@ -185,25 +190,15 @@ public class AgentController {
             @RequestParam(required = false, defaultValue = "50") Integer pageSize,
             @RequestParam(required = false) String status) {
         try {
-            List<Map<String, Object>> allConversations = conversationStorage.listConversations(status);
-            
-            // 转换为ConversationInfo格式
-            List<ConversationInfo> conversations = allConversations.stream()
-                .map(this::mapToConversationInfo)
-                .collect(Collectors.toList());
-            
-            // 分页处理
-            int start = (pageNo - 1) * pageSize;
-            int end = Math.min(start + pageSize, conversations.size());
-            List<ConversationInfo> pageList = start < conversations.size() 
-                ? conversations.subList(start, end) 
-                : Collections.emptyList();
+            // 从MySQL读取分页数据
+            com.aiagent.dto.Page<ConversationInfo> page = 
+                conversationService.listConversations(pageNo, pageSize, status);
             
             Map<String, Object> result = new HashMap<>();
-            result.put("records", pageList);
-            result.put("total", conversations.size());
-            result.put("pageNo", pageNo);
-            result.put("pageSize", pageSize);
+            result.put("records", page.getRecords());
+            result.put("total", page.getTotal());
+            result.put("pageNo", page.getCurrent());
+            result.put("pageSize", page.getSize());
             
             return ResponseEntity.ok().body(Map.of("success", true, "result", result));
         } catch (Exception e) {
@@ -216,21 +211,18 @@ public class AgentController {
     }
     
     /**
-     * 获取会话消息列表
+     * 获取会话消息列表（从MySQL读取）
      */
     @GetMapping("/conversation/{id}/messages")
     public ResponseEntity<?> getConversationMessages(
             @PathVariable("id") String conversationId,
             @RequestParam(required = false, defaultValue = "50") Integer limit) {
         try {
-            List<ChatMessage> messages = memorySystem.getShortTermMemory(conversationId, limit);
+            // 从MySQL读取消息历史
+            List<com.aiagent.dto.MessageDTO> messages = 
+                messageService.getMessages(conversationId, limit);
             
-            // 转换为前端需要的格式
-            List<Map<String, Object>> messageList = messages.stream()
-                .map(this::mapChatMessage)
-                .collect(Collectors.toList());
-            
-            return ResponseEntity.ok().body(Map.of("success", true, "result", messageList));
+            return ResponseEntity.ok().body(Map.of("success", true, "result", messages));
         } catch (Exception e) {
             log.error("获取会话消息失败: conversationId={}", conversationId, e);
             return ResponseEntity.ok().body(Map.of("success", true, "result", Collections.emptyList()));
@@ -238,18 +230,17 @@ public class AgentController {
     }
     
     /**
-     * 更新会话标题
+     * 更新会话标题（同时更新Redis和MySQL）
      */
     @PutMapping("/conversation/title")
     public ResponseEntity<?> updateConversationTitle(
             @RequestParam String conversationId,
             @RequestParam String title) {
         try {
-            boolean success = conversationStorage.updateConversationTitle(conversationId, title);
-            if (success) {
+            // 同时更新Redis和MySQL
+            conversationStorage.updateConversationTitle(conversationId, title);
+            conversationService.updateTitle(conversationId, title);
                 return ResponseEntity.ok().body(Map.of("success", true, "message", "更新成功"));
-            }
-            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "更新失败"));
         } catch (Exception e) {
             log.error("更新会话标题失败", e);
             return ResponseEntity.badRequest().body(Map.of("success", false, "message", "更新失败: " + e.getMessage()));
@@ -257,19 +248,17 @@ public class AgentController {
     }
     
     /**
-     * 删除会话
+     * 删除会话（同时删除Redis和MySQL）
      */
     @DeleteMapping("/conversation/{id}")
     public ResponseEntity<?> deleteConversation(@PathVariable("id") String conversationId) {
         try {
-            // 删除对话和记忆
-            boolean deleted = conversationStorage.deleteConversation(conversationId);
+            // 同时删除Redis和MySQL（MySQL会级联删除消息）
+            conversationStorage.deleteConversation(conversationId);
+            conversationService.deleteConversation(conversationId);
             agentService.clearMemory(conversationId);
             
-            if (deleted) {
                 return ResponseEntity.ok().body(Map.of("success", true, "message", "删除成功"));
-            }
-            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "删除失败"));
         } catch (Exception e) {
             log.error("删除会话失败: conversationId={}", conversationId, e);
             return ResponseEntity.badRequest().body(Map.of("success", false, "message", "删除失败: " + e.getMessage()));
@@ -277,15 +266,20 @@ public class AgentController {
     }
     
     /**
-     * 归档会话
+     * 归档会话（同时更新Redis和MySQL）
      */
     @PostMapping("/conversations/archive")
     public ResponseEntity<?> archiveConversations(@RequestBody List<String> conversationIds) {
         try {
             int successCount = 0;
             for (String conversationId : conversationIds) {
-                if (conversationStorage.updateConversationStatus(conversationId, "archived")) {
+                try {
+                    // 同时更新Redis和MySQL
+                    conversationStorage.updateConversationStatus(conversationId, "archived");
+                    conversationService.updateStatus(conversationId, "archived");
                     successCount++;
+                } catch (Exception e) {
+                    log.warn("归档会话失败: conversationId={}", conversationId, e);
                 }
             }
             

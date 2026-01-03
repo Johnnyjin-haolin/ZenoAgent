@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiagent.mapper.ConversationMapper">
+    
+    <resultMap id="BaseResultMap" type="com.aiagent.entity.ConversationEntity">
+        <id column="id" property="id"/>
+        <result column="title" property="title"/>
+        <result column="user_id" property="userId"/>
+        <result column="model_id" property="modelId"/>
+        <result column="model_name" property="modelName"/>
+        <result column="status" property="status"/>
+        <result column="message_count" property="messageCount"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+    
+    <insert id="insert">
+        INSERT INTO agent_conversation (id, title, user_id, model_id, model_name, status, message_count)
+        VALUES (#{id}, #{title}, #{userId}, #{modelId}, #{modelName}, #{status}, #{messageCount})
+    </insert>
+    
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM agent_conversation WHERE id = #{id}
+    </select>
+    
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT * FROM agent_conversation
+        <where>
+            <if test="status != null and status != ''">
+                status = #{status}
+            </if>
+        </where>
+        ORDER BY update_time DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+    
+    <select id="countByStatus" resultType="int">
+        SELECT COUNT(*) FROM agent_conversation
+        <where>
+            <if test="status != null and status != ''">
+                status = #{status}
+            </if>
+        </where>
+    </select>
+    
+    <update id="updateTitle">
+        UPDATE agent_conversation SET title = #{title} WHERE id = #{id}
+    </update>
+    
+    <update id="updateStatus">
+        UPDATE agent_conversation SET status = #{status} WHERE id = #{id}
+    </update>
+    
+    <update id="incrementMessageCount">
+        UPDATE agent_conversation SET message_count = message_count + 1 WHERE id = #{id}
+    </update>
+    
+    <delete id="deleteById">
+        DELETE FROM agent_conversation WHERE id = #{id}
+    </delete>
+    
+</mapper>
+

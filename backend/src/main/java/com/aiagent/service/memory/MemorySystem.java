@@ -1,6 +1,7 @@
-package com.aiagent.service;
+package com.aiagent.service.memory;
 
 import com.aiagent.constant.AgentConstants;
+import com.aiagent.service.MessageService;
 import com.aiagent.util.StringUtils;
 import com.aiagent.vo.AgentContext;
 import com.aiagent.vo.MessageDTO;
@@ -29,6 +30,9 @@ public class MemorySystem {
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
     
+    @Autowired(required = false)
+    private MessageService messageService;
+    
     /**
      * 短期记忆过期时间（小时）
      */
@@ -45,12 +49,46 @@ public class MemorySystem {
     private static final int DEFAULT_CONTEXT_WINDOW = 10;
     
     /**
-     * 保存短期记忆（对话历史）
+     * 保存短期记忆（对话历史）- 简化版本，兼容旧代码
      * 
      * @param conversationId 会话ID
      * @param message 消息
      */
     public void saveShortTermMemory(String conversationId, ChatMessage message) {
+        saveShortTermMemory(conversationId, message, null, null, null, null);
+    }
+    
+    /**
+     * 保存短期记忆（Redis + MySQL双存储）
+     * 
+     * @param conversationId 会话ID
+     * @param message 消息
+     * @param modelId 模型ID（可选，用于MySQL持久化）
+     * @param tokens Token数量（可选）
+     * @param duration 耗时（毫秒，可选）
+     * @param metadata 元数据（可选，如工具调用、RAG结果等）
+     */
+    public void saveShortTermMemory(String conversationId, ChatMessage message,
+                                   String modelId, Integer tokens, Integer duration,
+                                   Map<String, Object> metadata) {
+        // 1. 保存到Redis（短期记忆）
+        saveToRedis(conversationId, message);
+        
+        // 2. 保存到MySQL（持久化，异步执行，避免影响主流程）
+        if (messageService != null) {
+            try {
+                messageService.saveMessage(conversationId, message, modelId, tokens, duration, metadata);
+            } catch (Exception e) {
+                log.warn("保存消息到MySQL失败，但Redis已保存: conversationId={}", conversationId, e);
+                // 不抛出异常，确保Redis保存成功即可，MySQL失败不影响主流程
+            }
+        }
+    }
+    
+    /**
+     * 保存消息到Redis（私有方法，提取公共逻辑）
+     */
+    private void saveToRedis(String conversationId, ChatMessage message) {
         String key = AgentConstants.CACHE_PREFIX_AGENT_MEMORY + conversationId;
         
         try {
@@ -79,10 +117,10 @@ public class MemorySystem {
             // 保存到Redis（保存DTO，可序列化）
             redisTemplate.opsForValue().set(key, messageDTOs, SHORT_TERM_EXPIRE_HOURS, TimeUnit.HOURS);
             
-            log.debug("保存短期记忆: conversationId={}, messageCount={}", conversationId, messageDTOs.size());
+            log.debug("保存短期记忆到Redis: conversationId={}, messageCount={}", conversationId, messageDTOs.size());
             
         } catch (Exception e) {
-            log.error("保存短期记忆失败", e);
+            log.error("保存短期记忆到Redis失败", e);
         }
     }
     

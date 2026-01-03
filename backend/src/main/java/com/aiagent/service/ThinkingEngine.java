@@ -40,6 +40,125 @@ public class ThinkingEngine {
     private RAGEnhancer ragEnhancer;
     
     /**
+     * 决策框架提示词
+     */
+    private static final String DECISION_FRAMEWORK_PROMPT = "## 决策框架\n\n" +
+            "请按照以下步骤进行**结构化思考**：\n\n" +
+            "### 步骤1：理解当前状态\n" +
+            "- 用户的当前需求是什么？\n" +
+            "- 这是新的需求，还是之前任务的延续？\n" +
+            "- 对话历史中有哪些关键信息？\n\n" +
+            "### 步骤2：评估已有信息\n" +
+            "- 我已经知道什么？（检查对话历史、工具执行结果）\n" +
+            "- 还需要什么信息才能回答？\n" +
+            "- 上次工具调用的结果是否已经足够回答用户的问题？\n\n" +
+            "### 步骤3：选择动作\n" +
+            "根据评估结果，选择最合适的动作类型：\n\n" +
+            "**何时选择 LLM_GENERATE？**\n" +
+            "✅ 用户询问系统能力、功能介绍等元信息（如\"你能做什么\"、\"你是谁\"）\n" +
+            "✅ 打招呼、闲聊等社交性对话（如\"你好\"、\"谢谢\"）\n" +
+            "✅ 已有足够信息可以直接回答用户问题\n" +
+            "✅ 需要解释、总结、分析已有数据\n\n" +
+            "**何时选择 TOOL_CALL？**\n" +
+            "✅ 需要查询外部系统的实时数据\n" +
+            "✅ 需要执行具体操作（创建、删除、修改等）\n" +
+            "✅ 用户明确要求执行某个任务\n" +
+            "❌ 不要：如果上次刚调用过同一工具且已有有效结果\n\n" +
+            "**何时选择 RAG_RETRIEVE？**\n" +
+            "✅ 需要查询知识库中的文档、资料\n" +
+            "✅ 用户询问特定领域知识或历史记录\n\n" +
+            "**何时选择 COMPLETE？**\n" +
+            "✅ 用户的需求已经完全满足\n" +
+            "✅ 已经给出了完整的回答\n\n" +
+            "### 步骤4：自我检查\n" +
+            "- 这个决策是否合理？\n" +
+            "- 是否会导致重复调用？\n" +
+            "- 是否真的需要外部信息？\n\n" +
+            "## 关键约束\n\n" +
+            "🚫 **禁止行为**:\n" +
+            "1. 不要重复调用刚执行过的工具（除非有新的参数或明确需要）\n" +
+            "2. 不要为了\"看起来智能\"而调用工具\n" +
+            "3. 不要在已有答案时继续查询\n\n" +
+            "✅ **推荐行为**:\n" +
+            "1. 优先使用已有信息回答\n" +
+            "2. 只在确实需要时才调用工具\n" +
+            "3. 对简单问题直接回答\n\n" +
+            "## 示例参考\n\n" +
+            "【示例1：系统能力询问】\n" +
+            "用户输入: \"你好呀，你有什么功能\"\n" +
+            "分析: 这是询问系统能力的元信息查询，不需要调用任何工具\n" +
+            "决策: LLM_GENERATE\n" +
+            "原因: 直接介绍系统功能即可\n\n" +
+            "【示例2：明确的任务需求】\n" +
+            "用户输入: \"帮我搜索华东区域的ECS实例\"\n" +
+            "分析: 这是明确的查询需求，需要调用资源搜索工具\n" +
+            "决策: TOOL_CALL\n" +
+            "原因: 需要查询外部系统的实时数据\n\n" +
+            "【示例3：已有信息场景】\n" +
+            "用户输入: \"有哪些资源？\"\n" +
+            "上次工具调用: SearchResources，已返回资源列表\n" +
+            "分析: 上次调用已经获取了资源列表，无需重复调用\n" +
+            "决策: LLM_GENERATE\n" +
+            "原因: 直接总结并展示已有的资源列表\n\n" +
+            "【示例4：需要更多细节】\n" +
+            "用户输入: \"第一个资源的详细配置是什么？\"\n" +
+            "上次结果: 只有资源列表摘要，没有详细配置\n" +
+            "分析: 需要查询资源详情\n" +
+            "决策: TOOL_CALL\n" +
+            "原因: 需要新的数据（详细配置）\n\n";
+    
+    /**
+     * 输出格式提示词
+     */
+    private static final String OUTPUT_FORMAT_PROMPT = "## 输出格式\n\n" +
+            "请严格按照以下JSON格式返回你的决定：\n\n" +
+            "**TOOL_CALL格式**:\n" +
+            "```json\n" +
+            "{\n" +
+            "  \"actionType\": \"TOOL_CALL\",\n" +
+            "  \"actionName\": \"工具名称\",\n" +
+            "  \"reasoning\": \"为什么选择这个动作\",\n" +
+            "  \"toolCallParams\": {\n" +
+            "    \"toolName\": \"工具名称\",\n" +
+            "    \"toolParams\": {\"参数名\": \"参数值\"}\n" +
+            "  }\n" +
+            "}\n" +
+            "```\n\n" +
+            "**RAG_RETRIEVE格式**:\n" +
+            "```json\n" +
+            "{\n" +
+            "  \"actionType\": \"RAG_RETRIEVE\",\n" +
+            "  \"actionName\": \"rag_retrieve\",\n" +
+            "  \"reasoning\": \"为什么需要检索知识库\",\n" +
+            "  \"ragRetrieveParams\": {\n" +
+            "    \"query\": \"检索查询文本\",\n" +
+            "    \"knowledgeIds\": [],\n" +
+            "    \"maxResults\": 10\n" +
+            "  }\n" +
+            "}\n" +
+            "```\n\n" +
+            "**LLM_GENERATE格式**:\n" +
+            "```json\n" +
+            "{\n" +
+            "  \"actionType\": \"LLM_GENERATE\",\n" +
+            "  \"actionName\": \"llm_generate\",\n" +
+            "  \"reasoning\": \"为什么可以直接生成回复\",\n" +
+            "  \"llmGenerateParams\": {\n" +
+            "    \"prompt\": \"用户说'XXX'，请友好地回复并...\"\n" +
+            "  }\n" +
+            "}\n" +
+            "```\n\n" +
+            "**COMPLETE格式**:\n" +
+            "```json\n" +
+            "{\n" +
+            "  \"actionType\": \"COMPLETE\",\n" +
+            "  \"actionName\": \"complete\",\n" +
+            "  \"reasoning\": \"任务已完成的原因\"\n" +
+            "}\n" +
+            "```\n\n" +
+            "⚠️ **重要**: 只返回JSON对象，不要包含其他文字说明或Markdown代码块标记！\n";
+    
+    /**
      * 思考：分析目标、上下文和历史结果，决定下一步动作
      */
     public AgentAction think(String goal, AgentContext context, ActionResult lastResult) {
@@ -136,87 +255,7 @@ public class ThinkingEngine {
         }
         
         // ========== 第二部分：决策框架 ==========
-        prompt.append("## 决策框架\n\n");
-        prompt.append("请按照以下步骤进行**结构化思考**：\n\n");
-        
-        prompt.append("### 步骤1：理解当前状态\n");
-        prompt.append("- 用户的当前需求是什么？\n");
-        prompt.append("- 这是新的需求，还是之前任务的延续？\n");
-        prompt.append("- 对话历史中有哪些关键信息？\n\n");
-        
-        prompt.append("### 步骤2：评估已有信息\n");
-        prompt.append("- 我已经知道什么？（检查对话历史、工具执行结果）\n");
-        prompt.append("- 还需要什么信息才能回答？\n");
-        prompt.append("- 上次工具调用的结果是否已经足够回答用户的问题？\n\n");
-        
-        prompt.append("### 步骤3：选择动作\n");
-        prompt.append("根据评估结果，选择最合适的动作类型：\n\n");
-        
-        prompt.append("**何时选择 LLM_GENERATE？**\n");
-        prompt.append("✅ 用户询问系统能力、功能介绍等元信息（如\"你能做什么\"、\"你是谁\"）\n");
-        prompt.append("✅ 打招呼、闲聊等社交性对话（如\"你好\"、\"谢谢\"）\n");
-        prompt.append("✅ 已有足够信息可以直接回答用户问题\n");
-        prompt.append("✅ 需要解释、总结、分析已有数据\n\n");
-        
-        prompt.append("**何时选择 TOOL_CALL？**\n");
-        prompt.append("✅ 需要查询外部系统的实时数据\n");
-        prompt.append("✅ 需要执行具体操作（创建、删除、修改等）\n");
-        prompt.append("✅ 用户明确要求执行某个任务\n");
-        prompt.append("❌ 不要：如果上次刚调用过同一工具且已有有效结果\n\n");
-        
-        prompt.append("**何时选择 RAG_RETRIEVE？**\n");
-        prompt.append("✅ 需要查询知识库中的文档、资料\n");
-        prompt.append("✅ 用户询问特定领域知识或历史记录\n\n");
-        
-        prompt.append("**何时选择 COMPLETE？**\n");
-        prompt.append("✅ 用户的需求已经完全满足\n");
-        prompt.append("✅ 已经给出了完整的回答\n\n");
-        
-        prompt.append("### 步骤4：自我检查\n");
-        prompt.append("- 这个决策是否合理？\n");
-        prompt.append("- 是否会导致重复调用？\n");
-        prompt.append("- 是否真的需要外部信息？\n\n");
-        
-        // ========== 第三部分：关键约束 ==========
-        prompt.append("## 关键约束\n\n");
-        prompt.append("🚫 **禁止行为**:\n");
-        prompt.append("1. 不要重复调用刚执行过的工具（除非有新的参数或明确需要）\n");
-        prompt.append("2. 不要为了\"看起来智能\"而调用工具\n");
-        prompt.append("3. 不要在已有答案时继续查询\n\n");
-        
-        prompt.append("✅ **推荐行为**:\n");
-        prompt.append("1. 优先使用已有信息回答\n");
-        prompt.append("2. 只在确实需要时才调用工具\n");
-        prompt.append("3. 对简单问题直接回答\n\n");
-        
-        // ========== 第四部分：Few-shot示例 ==========
-        prompt.append("## 示例参考\n\n");
-        
-        prompt.append("【示例1：系统能力询问】\n");
-        prompt.append("用户输入: \"你好呀，你有什么功能\"\n");
-        prompt.append("分析: 这是询问系统能力的元信息查询，不需要调用任何工具\n");
-        prompt.append("决策: LLM_GENERATE\n");
-        prompt.append("原因: 直接介绍系统功能即可\n\n");
-        
-        prompt.append("【示例2：明确的任务需求】\n");
-        prompt.append("用户输入: \"帮我搜索华东区域的ECS实例\"\n");
-        prompt.append("分析: 这是明确的查询需求，需要调用资源搜索工具\n");
-        prompt.append("决策: TOOL_CALL\n");
-        prompt.append("原因: 需要查询外部系统的实时数据\n\n");
-        
-        prompt.append("【示例3：已有信息场景】\n");
-        prompt.append("用户输入: \"有哪些资源？\"\n");
-        prompt.append("上次工具调用: SearchResources，已返回资源列表\n");
-        prompt.append("分析: 上次调用已经获取了资源列表，无需重复调用\n");
-        prompt.append("决策: LLM_GENERATE\n");
-        prompt.append("原因: 直接总结并展示已有的资源列表\n\n");
-        
-        prompt.append("【示例4：需要更多细节】\n");
-        prompt.append("用户输入: \"第一个资源的详细配置是什么？\"\n");
-        prompt.append("上次结果: 只有资源列表摘要，没有详细配置\n");
-        prompt.append("分析: 需要查询资源详情\n");
-        prompt.append("决策: TOOL_CALL\n");
-        prompt.append("原因: 需要新的数据（详细配置）\n\n");
+        prompt.append(DECISION_FRAMEWORK_PROMPT);
         
         // ========== 第五部分：可用工具 ==========
         List<McpToolInfo> availableTools = toolSelector.selectTools(goal,
@@ -241,58 +280,7 @@ public class ThinkingEngine {
         }
         
         // ========== 第六部分：输出格式 ==========
-        prompt.append("## 输出格式\n\n");
-        prompt.append("请严格按照以下JSON格式返回你的决定：\n\n");
-        
-        prompt.append("**TOOL_CALL格式**:\n");
-        prompt.append("```json\n");
-        prompt.append("{\n");
-        prompt.append("  \"actionType\": \"TOOL_CALL\",\n");
-        prompt.append("  \"actionName\": \"工具名称\",\n");
-        prompt.append("  \"reasoning\": \"为什么选择这个动作\",\n");
-        prompt.append("  \"toolCallParams\": {\n");
-        prompt.append("    \"toolName\": \"工具名称\",\n");
-        prompt.append("    \"toolParams\": {\"参数名\": \"参数值\"}\n");
-        prompt.append("  }\n");
-        prompt.append("}\n");
-        prompt.append("```\n\n");
-        
-        prompt.append("**RAG_RETRIEVE格式**:\n");
-        prompt.append("```json\n");
-        prompt.append("{\n");
-        prompt.append("  \"actionType\": \"RAG_RETRIEVE\",\n");
-        prompt.append("  \"actionName\": \"rag_retrieve\",\n");
-        prompt.append("  \"reasoning\": \"为什么需要检索知识库\",\n");
-        prompt.append("  \"ragRetrieveParams\": {\n");
-        prompt.append("    \"query\": \"检索查询文本\",\n");
-        prompt.append("    \"knowledgeIds\": [],\n");
-        prompt.append("    \"maxResults\": 10\n");
-        prompt.append("  }\n");
-        prompt.append("}\n");
-        prompt.append("```\n\n");
-        
-        prompt.append("**LLM_GENERATE格式**:\n");
-        prompt.append("```json\n");
-        prompt.append("{\n");
-        prompt.append("  \"actionType\": \"LLM_GENERATE\",\n");
-        prompt.append("  \"actionName\": \"llm_generate\",\n");
-        prompt.append("  \"reasoning\": \"为什么可以直接生成回复\",\n");
-        prompt.append("  \"llmGenerateParams\": {\n");
-        prompt.append("    \"prompt\": \"用户说'XXX'，请友好地回复并...\"\n");
-        prompt.append("  }\n");
-        prompt.append("}\n");
-        prompt.append("```\n\n");
-        
-        prompt.append("**COMPLETE格式**:\n");
-        prompt.append("```json\n");
-        prompt.append("{\n");
-        prompt.append("  \"actionType\": \"COMPLETE\",\n");
-        prompt.append("  \"actionName\": \"complete\",\n");
-        prompt.append("  \"reasoning\": \"任务已完成的原因\"\n");
-        prompt.append("}\n");
-        prompt.append("```\n\n");
-        
-        prompt.append("⚠️ **重要**: 只返回JSON对象，不要包含其他文字说明或Markdown代码块标记！\n");
+        prompt.append(OUTPUT_FORMAT_PROMPT);
         
         return prompt.toString();
     }

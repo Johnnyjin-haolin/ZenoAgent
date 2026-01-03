@@ -3,6 +3,7 @@ package com.aiagent.service;
 import com.aiagent.constant.AgentConstants;
 import com.aiagent.enums.AgentState;
 import com.aiagent.vo.AgentContext;
+import com.alibaba.fastjson2.JSON;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -63,9 +64,10 @@ public class ReActEngine {
             log.info("ReAct循环迭代 {}/{}", iteration, MAX_ITERATIONS);
             
             try {
+                log.info("开始思考");
                 // 1. 思考阶段（Think）
                 AgentAction action = think(goal, context, lastResult);
-                
+                log.info("思考结束，{}", JSON.toJSONString(action));
                 if (action == null) {
                     log.warn("思考阶段未产生动作，结束循环");
                     stateMachine.transition(AgentState.FAILED);
@@ -79,26 +81,33 @@ public class ReActEngine {
                     return ActionResult.success("complete", "complete", 
                         "任务已完成: " + action.getReasoning());
                 }
+                log.info("act开始");
                 
                 // 2. 行动阶段（Act）
                 stateMachine.transition(AgentState.EXECUTING);
                 ActionResult result = act(action, context);
                 lastResult = result;
+
+                log.info("观察开始");
                 
                 // 3. 观察阶段（Observe）
                 stateMachine.transition(AgentState.OBSERVING);
                 observe(result, context);
+
+                log.info("反思开始");
                 
                 // 4. 反思阶段（Reflect）
                 stateMachine.transition(AgentState.REFLECTING);
                 ReflectionEngine.ReflectionResult reflection = reflect(result, context, goal);
-                
+                log.info("反思结束，{}", JSON.toJSONString(reflection));
                 // 根据反思结果决定下一步
                 if (reflection.isGoalAchieved()) {
                     log.info("反思结果：目标已达成");
                     stateMachine.transition(AgentState.COMPLETED);
+                    // 目标达成时，直接返回result的数据，而不是reflection的summary
+                    // summary包含"目标已达成: "前缀，不应该发给用户
                     return ActionResult.success("complete", "complete", 
-                        reflection.getSummary());
+                        result.getData());
                 } else if (reflection.isShouldRetry()) {
                     log.info("反思结果：需要重试，原因: {}", reflection.getRetryReason());
                     stateMachine.transition(AgentState.THINKING);

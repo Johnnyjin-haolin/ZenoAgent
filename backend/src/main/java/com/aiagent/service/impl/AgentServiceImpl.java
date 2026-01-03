@@ -3,6 +3,7 @@ package com.aiagent.service.impl;
 import com.aiagent.config.AgentConfig;
 import com.aiagent.constant.AgentConstants;
 import com.aiagent.service.*;
+import com.aiagent.service.memory.MemorySystem;
 import com.aiagent.storage.ConversationStorage;
 import com.aiagent.util.LocalCache;
 import com.aiagent.util.StringUtils;
@@ -44,6 +45,9 @@ public class AgentServiceImpl implements IAgentService {
     
     @Autowired
     private AgentConfig agentConfig;
+    
+    @Autowired
+    private ConversationService conversationService;
     
     @Override
     public SseEmitter execute(AgentRequest request) {
@@ -98,32 +102,14 @@ public class AgentServiceImpl implements IAgentService {
     private void executeWithReAct(AgentRequest request, String requestId, SseEmitter emitter) {
         // 1. 加载或创建上下文
         AgentContext context = loadOrCreateContext(request);
-        
-        // 1.1 如果没有conversationId，创建新对话
-        if (StringUtils.isEmpty(request.getConversationId())) {
-            try {
                 String conversationId = context.getConversationId();
                 
-                // 使用ConversationInfo对象替代Map
-                ConversationInfo conversationInfo = ConversationInfo.builder()
-                    .id(conversationId)
-                    .title(generateTitle(request.getContent()))
-                    .status("active")
-                    .messageCount(0)
-                    .build();
-                
-                conversationStorage.saveConversation(conversationInfo);
-                request.setConversationId(conversationId);
-                
-                log.info("创建新对话: conversationId={}", conversationId);
-            } catch (Exception e) {
-                log.error("创建对话失败", e);
-            }
-        }
+        // 1.1 确保会话在MySQL中存在（如果不存在则创建）
+        ensureConversationExists(conversationId, request);
         
-        // 2. 保存用户消息到记忆
+        // 2. 保存用户消息到记忆和MySQL（统一通过MemorySystem处理）
         UserMessage userMessage = new UserMessage(request.getContent());
-        memorySystem.saveShortTermMemory(context.getConversationId(), userMessage);
+        memorySystem.saveShortTermMemory(conversationId, userMessage, null, null, null, null);
         if (context.getMessages() == null) {
             context.setMessages(new java.util.ArrayList<>());
         }
@@ -153,7 +139,7 @@ public class AgentServiceImpl implements IAgentService {
         
         // 3.1 设置流式输出回调（使用CountDownLatch确保流式完成后再关闭SSE）
         java.util.concurrent.CountDownLatch streamingCompleteLatch = new java.util.concurrent.CountDownLatch(1);
-        context.setStreamingCallback(new com.aiagent.service.StreamingCallback() {
+        context.setStreamingCallback(new StreamingCallback() {
             @Override
             public void onToken(String token) {
                 // 实时发送token到前端
@@ -227,25 +213,47 @@ public class AgentServiceImpl implements IAgentService {
         
         // 6. 处理最终结果
         if (finalResult.isSuccess()) {
-            // 保存AI回复到记忆
+            // 保存AI回复到记忆和MySQL（统一通过MemorySystem处理）
             dev.langchain4j.data.message.AiMessage aiMessage = 
                 new dev.langchain4j.data.message.AiMessage(finalResult.getData().toString());
             context.getMessages().add(aiMessage);
-            memorySystem.saveShortTermMemory(context.getConversationId(), aiMessage);
             
-            // 更新对话消息数量
+            // 提取元数据
+            Map<String, Object> metadata = null;
+            if (finalResult.getMetadata() instanceof Map) {
+                metadata = (Map<String, Object>) finalResult.getMetadata();
+            }
+            
+            // 保存到Redis和MySQL（包含模型ID和元数据）
+            memorySystem.saveShortTermMemory(
+                context.getConversationId(), 
+                aiMessage, 
+                context.getModelId(),
+                null, // tokens - 可以从finalResult中获取
+                null, // duration - 可以从finalResult中获取
+                metadata
+            );
+            
+            // 更新对话消息数量（Redis和MySQL都要更新）
             conversationStorage.incrementMessageCount(context.getConversationId());
+            try {
+                conversationService.incrementMessageCount(context.getConversationId());
+            } catch (Exception e) {
+                log.warn("更新MySQL消息数量失败: conversationId={}", context.getConversationId(), e);
+            }
             
             // 注意：如果是LLM_GENERATE且使用了流式输出，内容已经通过callback发送了
             // 这里不再重复发送完整内容，只在metadata中标记streaming为false的情况下才发送
-            Object metadata = finalResult.getMetadata();
             boolean isStreaming = false;
-            if (metadata instanceof Map) {
-                Map<?, ?> metaMap = (Map<?, ?>) metadata;
-                isStreaming = Boolean.TRUE.equals(metaMap.get("streaming"));
+            if (metadata != null && metadata.containsKey("streaming")) {
+                isStreaming = Boolean.TRUE.equals(metadata.get("streaming"));
             }
             
-            if (!isStreaming) {
+            // 如果actionType是complete，说明目标已达成，内容应该已经通过之前的动作发送过了
+            // 不需要再发送，避免重复
+            boolean shouldSendMessage = !isStreaming && !"complete".equals(finalResult.getActionType());
+            
+            if (shouldSendMessage) {
                 // 非流式结果（如工具调用结果），需要发送完整内容
                 sendEvent(emitter, AgentEventData.builder()
                     .requestId(requestId)
@@ -309,6 +317,53 @@ public class AgentServiceImpl implements IAgentService {
         }
         
         return context;
+    }
+    
+    /**
+     * 确保会话在MySQL中存在（如果不存在则创建）
+     */
+    private void ensureConversationExists(String conversationId, AgentRequest request) {
+        try {
+            // 检查会话是否在MySQL中存在
+            ConversationInfo existingConversation = conversationService.getConversation(conversationId);
+            
+            if (existingConversation == null) {
+                // 会话不存在，尝试从Redis加载
+                Map<String, Object> redisConversation = conversationStorage.getConversation(conversationId);
+                
+                ConversationInfo conversationInfo;
+                if (redisConversation != null && !redisConversation.isEmpty()) {
+                    // 从Redis加载并转换
+                    conversationInfo = ConversationInfo.builder()
+                        .id(conversationId)
+                        .title(redisConversation.get("title") != null ? redisConversation.get("title").toString() : "新对话")
+                        .status(redisConversation.get("status") != null ? redisConversation.get("status").toString() : "active")
+                        .messageCount(redisConversation.get("messageCount") != null ? 
+                            Integer.parseInt(redisConversation.get("messageCount").toString()) : 0)
+                        .modelId(redisConversation.get("modelId") != null ? redisConversation.get("modelId").toString() : null)
+                        .modelName(redisConversation.get("modelName") != null ? redisConversation.get("modelName").toString() : null)
+                        .build();
+                } else {
+                    // Redis中也不存在，创建新会话
+                    conversationInfo = ConversationInfo.builder()
+                        .id(conversationId)
+                        .title(generateTitle(request.getContent()))
+                        .status("active")
+                        .messageCount(0)
+                        .build();
+                    
+                    // 同时保存到Redis
+                    conversationStorage.saveConversation(conversationInfo);
+                }
+                
+                // 保存到MySQL
+                conversationService.createConversation(conversationInfo);
+                log.info("确保会话存在: conversationId={}, 已创建到MySQL", conversationId);
+            }
+        } catch (Exception e) {
+            log.error("确保会话存在失败: conversationId={}", conversationId, e);
+            // 即使失败也继续执行，避免影响主流程
+        }
     }
     
     /**

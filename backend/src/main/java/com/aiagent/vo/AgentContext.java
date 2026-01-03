@@ -1,6 +1,7 @@
 package com.aiagent.vo;
 
 import com.aiagent.service.StreamingCallback;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import dev.langchain4j.data.message.ChatMessage;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -113,11 +114,13 @@ public class AgentContext implements Serializable {
     /**
      * 请求ID（用于关联SSE事件，不需要序列化）
      */
+    @JsonIgnore
     private transient String requestId;
     
     /**
      * 流式输出回调（运行时使用，不需要序列化）
      */
+    @JsonIgnore
     private transient StreamingCallback streamingCallback;
     
     /**
