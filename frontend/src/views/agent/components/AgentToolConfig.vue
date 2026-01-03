@@ -40,7 +40,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { Icon } from '/@/components/Icon';
+import { Icon } from '@/components/Icon';
 
 const props = withDefaults(
   defineProps<{

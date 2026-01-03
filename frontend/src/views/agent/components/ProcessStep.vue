@@ -153,7 +153,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Icon } from '/@/components/Icon';
+import { Icon } from '@/components/Icon';
 import type { ProcessStep } from '../agent.types';
 
 const props = defineProps<{

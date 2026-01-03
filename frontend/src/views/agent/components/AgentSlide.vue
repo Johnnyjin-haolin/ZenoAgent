@@ -67,7 +67,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { Icon } from '/@/components/Icon';
+import { Icon } from '@/components/Icon';
 import { Empty, Modal, message } from 'ant-design-vue';
 import { deleteConversation } from '../agent.api';
 import type { ConversationInfo } from '../agent.types';

@@ -118,22 +118,22 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Icon } from '/@/components/Icon';
-import { useUserStore } from '/@/store/modules/user';
-import { getFileAccessHttpUrl } from '/@/utils/common/compUtils';
-import { createImgPreview } from '/@/components/Preview';
+import { Icon } from '@/components/Icon';
+import { useUserStore } from '@/store/modules/user';
+import { getFileAccessHttpUrl } from '@/utils/common/compUtils';
+import { createImgPreview } from '@/components/Preview';
 import MarkdownIt from 'markdown-it';
-import mdKatex from '@traptitech/markdown-it-katex';
+import mdKatex from 'markdown-it-katex';
 import mila from 'markdown-it-link-attributes';
 import hljs from 'highlight.js';
-import defaultAvatar from '@/assets/images/ai/avatar.jpg';
-import aiLogo from '../../aiapp/img/ailogo.png';
+import defaultAvatar from "@/assets/images/ai/avatar.jpg";
+import aiLogo from "@/assets/images/ai/ailogo.png";
 import ProcessCard from './ProcessCard.vue';
 import type { AgentMessage } from '../agent.types';
 
 // 引入样式
-import '../../aiapp/chat/style/github-markdown.less';
-import '../../aiapp/chat/style/highlight.less';
+import '@/assets/less/github-markdown.less';
+import '@/assets/less/highlight.less';
 
 const props = defineProps<{
   message: AgentMessage;
@@ -166,7 +166,10 @@ const mdi = new MarkdownIt({
 });
 
 mdi.use(mila, { attrs: { target: '_blank', rel: 'noopener' } });
-mdi.use(mdKatex, { blockClass: 'katexmath-block rounded-md p-[10px]', errorColor: ' #cc0000' });
+mdi.use(mdKatex, { 
+  throwOnError: false,
+  errorColor: '#cc0000'
+});
 
 // 代码高亮
 function highlightBlock(str: string, lang?: string) {
@@ -347,7 +350,7 @@ function handleToggleStepExpand(stepId: string) {
     }
 
     .message-body {
-      background: @primary-color;
+      background: #0052CC;
       color: #fff;
 
       .user-text {

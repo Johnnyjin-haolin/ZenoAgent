@@ -4,7 +4,7 @@
  * @date 2025-11-30
  */
 
-import { defHttp } from '/@/utils/http/axios';
+import { defHttp } from '@/utils/http';
 import type {
   AgentRequest,
   AgentEvent,

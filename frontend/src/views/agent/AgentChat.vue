@@ -162,7 +162,7 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted } from 'vue';
-import { Icon } from '/@/components/Icon';
+import { Icon } from '@/components/Icon';
 import { message } from 'ant-design-vue';
 import { useAgentChat } from './hooks/useAgentChat';
 import { getConversations, updateConversationTitle } from './agent.api';

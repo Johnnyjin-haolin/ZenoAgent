@@ -114,8 +114,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, onBeforeUnmount } from 'vue';
-import { Icon } from '/@/components/Icon';
-import { getAuthCache, setAuthCache } from '/@/utils/auth';
+import { Icon } from '@/components/Icon';
+import { getAuthCache, setAuthCache } from '@/utils/auth';
 import AgentChat from '../AgentChat.vue';
 
 // 常量定义

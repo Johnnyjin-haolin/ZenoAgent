@@ -61,7 +61,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
-import { Icon } from '/@/components/Icon';
+import { Icon } from '@/components/Icon';
 import { message } from 'ant-design-vue';
 import { getAvailableModels } from '../agent.api';
 import type { ModelInfo } from '../agent.types';
