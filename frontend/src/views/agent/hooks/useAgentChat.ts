@@ -437,6 +437,26 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           }
         },
 
+        onStreamComplete: (event) => {
+          // 流式输出完成（所有 token 已发送）
+          console.log('[useAgentChat] 流式输出完成');
+          
+          const steps = assistantMessage.process!.steps;
+          
+          // 完成生成步骤
+          finishStep(steps, 'generating', 'success');
+          
+          // 更新状态：流式输出完成，但任务还未完全结束
+          assistantMessage.status = 'done';
+          assistantMessage.loading = false;
+          currentStatus.value = '';
+          
+          // 流式输出结束后，自动折叠执行过程
+          if (assistantMessage.process!.streamingStarted) {
+            assistantMessage.process!.collapsed = true;
+          }
+        },
+
         onComplete: (event) => {
           console.log('任务完成:', event);
           assistantMessage.status = 'done';

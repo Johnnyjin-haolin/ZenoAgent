@@ -475,6 +475,7 @@ export interface AgentEventCallbacks {
   onToolCall?: (event: AgentEvent) => void;
   onToolResult?: (event: AgentEvent) => void;
   onMessage?: (event: AgentEvent) => void;
+  onStreamComplete?: (event: AgentEvent) => void;
   onComplete?: (event: AgentEvent) => void;
   onError?: (event: AgentEvent) => void;
 }

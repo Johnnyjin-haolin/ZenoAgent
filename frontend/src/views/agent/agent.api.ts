@@ -268,6 +268,11 @@ function dispatchEvent(event: AgentEvent, callbacks: AgentEventCallbacks) {
       callbacks.onMessage?.(event);
       break;
 
+    case 'agent:stream_complete':
+      console.log('[Agent] 流式输出完成');
+      callbacks.onStreamComplete?.(event);
+      break;
+
     case 'agent:complete':
       console.log('[Agent] 任务完成');
       callbacks.onComplete?.(event);

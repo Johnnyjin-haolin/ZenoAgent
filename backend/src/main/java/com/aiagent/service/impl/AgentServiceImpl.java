@@ -1,5 +1,6 @@
 package com.aiagent.service.impl;
 
+import com.aiagent.config.AgentConfig;
 import com.aiagent.constant.AgentConstants;
 import com.aiagent.service.*;
 import com.aiagent.storage.ConversationStorage;
@@ -40,6 +41,9 @@ public class AgentServiceImpl implements IAgentService {
     
     @Autowired
     private AgentStateMachine stateMachine;
+    
+    @Autowired
+    private AgentConfig agentConfig;
     
     @Override
     public SseEmitter execute(AgentRequest request) {
@@ -126,7 +130,23 @@ public class AgentServiceImpl implements IAgentService {
         context.getMessages().add(userMessage);
         
         // 3. 设置上下文变量（使用具体属性）
-        context.setModelId(StringUtils.getString(request.getModelId(), "gpt-4o-mini"));
+        // 智能选择模型：如果未指定modelId，使用配置的默认模型
+        String modelId = request.getModelId();
+        if (modelId == null || modelId.trim().isEmpty()) {
+            modelId = agentConfig.getModel().getDefaultModelId();
+            log.info("未指定模型，使用默认模型: {}", modelId);
+            
+            // 发送模型选择事件
+            sendEvent(emitter, AgentEventData.builder()
+                .requestId(requestId)
+                .event(AgentConstants.EVENT_AGENT_THINKING)
+                .message("使用默认模型: " + modelId)
+                .conversationId(context.getConversationId())
+                .build());
+        } else {
+            log.info("使用指定模型: {}", modelId);
+        }
+        context.setModelId(modelId);
         context.setEnabledMcpGroups(request.getEnabledMcpGroups());
         context.setKnowledgeIds(request.getKnowledgeIds());
         context.setRequestId(requestId);
