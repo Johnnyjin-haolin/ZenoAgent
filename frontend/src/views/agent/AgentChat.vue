@@ -69,40 +69,58 @@
           <span>{{ currentStatus }}</span>
         </div>
 
-        <!-- 输入框 -->
-        <div class="input-area">
-          <a-textarea
-            ref="inputRef"
-            v-model:value="userInput"
-            :placeholder="inputPlaceholder"
-            :auto-size="{ minRows: 1, maxRows: 6 }"
-            :disabled="loading"
-            @pressEnter="handlePressEnter"
-          />
-          
-          <div class="input-actions">
-            <a-button
-              v-if="loading"
-              type="primary"
-              danger
-              @click="handleStop"
-            >
-              <template #icon>
-                <Icon icon="ant-design:stop-outlined" />
-              </template>
-              停止
-            </a-button>
-            <a-button
-              v-else
-              type="primary"
-              :disabled="!userInput.trim()"
-              @click="handleSend"
-            >
-              <template #icon>
-                <Icon icon="ant-design:send-outlined" />
-              </template>
-              发送
-            </a-button>
+        <!-- 输入框区域（参考豆包设计） -->
+        <div class="input-container">
+          <div class="input-wrapper">
+            <!-- 输入框 -->
+            <a-textarea
+              ref="inputRef"
+              v-model:value="userInput"
+              :placeholder="inputPlaceholder"
+              :rows="4"
+              :disabled="loading"
+              :bordered="false"
+              @pressEnter="handlePressEnter"
+            />
+            
+            <!-- 左下角：模型选择器 -->
+            <div class="input-bottom-left">
+              <AgentModelSelector
+                v-model="selectedModelId"
+                :compact="true"
+                placeholder="选择模型"
+                @change="handleModelChange"
+              />
+            </div>
+            
+            <!-- 右下角：发送按钮 -->
+            <div class="input-bottom-right">
+              <a-button
+                v-if="loading"
+                type="text"
+                danger
+                size="small"
+                @click="handleStop"
+                title="停止生成"
+                class="action-button"
+              >
+                <template #icon>
+                  <Icon icon="ant-design:stop-outlined" />
+                </template>
+              </a-button>
+              <a-button
+                v-else
+                type="text"
+                :disabled="!userInput.trim()"
+                @click="handleSend"
+                title="发送消息"
+                class="action-button send-button"
+              >
+                <template #icon>
+                  <Icon icon="ant-design:send-outlined" />
+                </template>
+              </a-button>
+            </div>
           </div>
         </div>
       </div>
@@ -327,6 +345,10 @@ const scrollToBottom = async () => {
 // 配置变更处理
 const handleModelChange = (modelId: string, model: ModelInfo | null) => {
   console.log('模型变更:', modelId, model);
+  // 状态已经通过 v-model 双向绑定了，这里只需要处理额外的逻辑
+  if (model) {
+    message.success(`已切换到模型: ${model.displayName}`);
+  }
 };
 
 const handleKnowledgeChange = (knowledgeIds: string[], knowledgeList: KnowledgeInfo[]) => {
@@ -517,19 +539,133 @@ onMounted(() => {
     color: #595959;
   }
 
-  .input-area {
+  // 输入框容器（参考豆包设计）
+  .input-container {
     padding: 12px 20px;
-    display: flex;
-    gap: 12px;
-    align-items: flex-end;
+  }
 
-    :deep(.ant-textarea) {
-      flex: 1;
-      resize: none;
+  .input-wrapper {
+    position: relative;
+    background: #f5f5f5;
+    border-radius: 12px;
+    border: 1px solid #e8e8e8;
+    transition: all 0.2s;
+    padding: 12px;
+    min-height: 120px;
+
+    &:focus-within {
+      border-color: #1890ff;
+      background: #fff;
+      box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1);
     }
 
-    .input-actions {
-      flex-shrink: 0;
+    // 输入框样式
+    :deep(.ant-input) {
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      padding: 0;
+      padding-bottom: 40px; // 为底部按钮留出空间
+      resize: none;
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 80px;
+
+      &:focus,
+      &:hover {
+        border-color: transparent;
+        box-shadow: none;
+      }
+
+      &::placeholder {
+        color: #bfbfbf;
+      }
+    }
+
+    // 左下角：模型选择器
+    .input-bottom-left {
+      position: absolute;
+      bottom: 8px;
+      left: 12px;
+      z-index: 10;
+
+      :deep(.agent-model-selector) {
+        .ant-select {
+          .ant-select-selector {
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            padding: 0 20px 0 0;
+            min-height: auto;
+            height: auto;
+          }
+
+          .ant-select-selection-item {
+            padding: 0;
+            line-height: 1.5;
+            font-size: 13px;
+            color: #595959;
+          }
+
+          .ant-select-arrow {
+            right: 0;
+            font-size: 12px;
+            color: #8c8c8c;
+          }
+
+          &:hover .ant-select-selector,
+          &.ant-select-focused .ant-select-selector {
+            border-color: transparent;
+            background: transparent;
+          }
+        }
+      }
+    }
+
+    // 右下角：发送按钮
+    .input-bottom-right {
+      position: absolute;
+      bottom: 8px;
+      right: 12px;
+      z-index: 10;
+
+      .action-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border: none;
+        border-radius: 6px;
+        transition: all 0.2s;
+
+        &:hover:not(:disabled) {
+          background: #e6f7ff;
+          color: #1890ff;
+        }
+
+        &.send-button {
+          &:not(:disabled) {
+            background: #1890ff;
+            color: #fff;
+
+            &:hover {
+              background: #40a9ff;
+            }
+          }
+
+          &:disabled {
+            color: #bfbfbf;
+            background: transparent;
+            cursor: not-allowed;
+          }
+        }
+
+        .anticon {
+          font-size: 16px;
+        }
+      }
     }
   }
 }

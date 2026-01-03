@@ -7,6 +7,7 @@ import com.aiagent.service.tool.McpGroupManager;
 import com.aiagent.storage.ConversationStorage;
 import com.aiagent.vo.AgentRequest;
 import com.aiagent.vo.ConversationInfo;
+import com.aiagent.vo.ModelInfoVO;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
@@ -88,36 +89,90 @@ public class AgentController {
     
     /**
      * 获取可用模型列表
+     * 从配置文件中读取所有配置的模型
      */
     @GetMapping("/models/available")
     public ResponseEntity<?> getAvailableModels() {
         try {
-            // 从配置读取默认模型列表
-            List<Map<String, Object>> models = new ArrayList<>();
+            List<AgentConfig.LLMConfig.ModelDefinition> modelDefinitions = 
+                agentConfig.getLlm().getModels();
+            
+            if (modelDefinitions == null || modelDefinitions.isEmpty()) {
+                log.warn("未配置任何模型，返回空列表");
+                return ResponseEntity.ok().body(Map.of("success", true, "result", Collections.emptyList()));
+            }
             
             String defaultModelId = agentConfig.getModel().getDefaultModelId();
-            models.add(Map.of(
-                "id", defaultModelId,
-                "displayName", "GPT-4o Mini",
-                "description", "快速且经济的模型",
-                "icon", "🤖",
-                "sort", 1,
-                "isDefault", true
-            ));
             
-            models.add(Map.of(
-                "id", "gpt-4o",
-                "displayName", "GPT-4o",
-                "description", "最强大的模型",
-                "icon", "🚀",
-                "sort", 2,
-                "isDefault", false
-            ));
+            // 转换为前端需要的格式
+            List<ModelInfoVO> models = new ArrayList<>();
+            int sort = 1;
+            
+            for (AgentConfig.LLMConfig.ModelDefinition modelDef : modelDefinitions) {
+                // 判断是否为默认模型
+                boolean isDefault = defaultModelId != null && defaultModelId.equals(modelDef.getId());
+
+                
+                // 如果没有设置name，使用id作为显示名称
+                String displayName = modelDef.getName() != null && !modelDef.getName().isEmpty()
+                    ? modelDef.getName()
+                    : modelDef.getId();
+                
+                // 生成默认描述
+                String description = generateDescription(modelDef);
+                
+                ModelInfoVO modelInfo = ModelInfoVO.builder()
+                    .id(modelDef.getId())
+                    .name(modelDef.getName())
+                    .displayName(displayName)
+                    .description(description)
+                    .provider(modelDef.getProvider())
+                    .sort(sort++)
+                    .isDefault(isDefault)
+                    .build();
+                models.add(modelInfo);
+            }
+            
+            // 按sort排序，默认模型排在前面
+            models.sort((a, b) -> {
+                if (Boolean.TRUE.equals(a.getIsDefault())) return -1;
+                if (Boolean.TRUE.equals(b.getIsDefault())) return 1;
+                int sortCompare = Integer.compare(
+                    a.getSort() != null ? a.getSort() : Integer.MAX_VALUE,
+                    b.getSort() != null ? b.getSort() : Integer.MAX_VALUE
+                );
+                return sortCompare != 0 ? sortCompare : a.getId().compareTo(b.getId());
+            });
             
             return ResponseEntity.ok().body(Map.of("success", true, "result", models));
         } catch (Exception e) {
             log.error("获取模型列表失败", e);
-            return ResponseEntity.ok().body(Map.of("success", true, "result", Collections.emptyList()));
+            return ResponseEntity.ok().body(Map.of("success", false, "result", Collections.emptyList(), "message", "获取模型列表失败: " + e.getMessage()));
+        }
+    }
+
+    
+    /**
+     * 生成模型描述
+     */
+    private String generateDescription(AgentConfig.LLMConfig.ModelDefinition modelDef) {
+        String provider = modelDef.getProvider();
+        if (provider == null) {
+            return "AI模型";
+        }
+        switch (provider.toUpperCase()) {
+            case "OPENAI":
+                return "OpenAI官方模型";
+            case "ZHIPU":
+                return "智谱AI模型";
+            case "DEEPSEEK":
+                return "DeepSeek模型";
+            case "QWEN":
+                return "通义千问模型";
+            case "GLM":
+                return "GLM模型";
+            default:
+                return provider + "模型";
         }
     }
     
