@@ -124,6 +124,12 @@ public class AgentContext implements Serializable {
     private transient StreamingCallback streamingCallback;
     
     /**
+     * 事件发布器（用于向前端发送进度事件，不需要序列化）
+     */
+    @JsonIgnore
+    private transient java.util.function.Consumer<AgentEventData> eventPublisher;
+    
+    /**
      * 从 ChatMessage 列表设置消息（自动转换为DTO）
      */
     public void setMessages(List<ChatMessage> messages) {

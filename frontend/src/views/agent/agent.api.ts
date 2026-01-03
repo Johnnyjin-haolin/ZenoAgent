@@ -243,6 +243,36 @@ function dispatchEvent(event: AgentEvent, callbacks: AgentEventCallbacks) {
       callbacks.onThinking?.(event);
       break;
 
+    case 'agent:planning':
+      console.log('[Agent] 正在规划:', event.message);
+      callbacks.onThinking?.({ ...event, message: event.message || '正在规划下一步...', statusText: '规划中' });
+      break;
+
+    case 'agent:tool_executing':
+      console.log('[Agent] 正在执行工具:', event.message);
+      callbacks.onThinking?.({ ...event, message: event.message || '正在执行工具...', statusText: '执行中' });
+      break;
+
+    case 'agent:rag_querying':
+      console.log('[Agent] 正在查询知识库:', event.message);
+      callbacks.onThinking?.({ ...event, message: event.message || '查询相关知识...', statusText: '检索中' });
+      break;
+
+    case 'agent:generating':
+      console.log('[Agent] 正在生成回复:', event.message);
+      callbacks.onThinking?.({ ...event, message: event.message || '正在生成回复...', statusText: '生成中' });
+      break;
+
+    case 'agent:observing':
+      console.log('[Agent] 正在观察结果:', event.message);
+      callbacks.onThinking?.({ ...event, message: event.message || '正在观察执行结果...', statusText: '观察中' });
+      break;
+
+    case 'agent:reflecting':
+      console.log('[Agent] 正在反思:', event.message);
+      callbacks.onThinking?.({ ...event, message: event.message || '结果反思中...', statusText: '反思中' });
+      break;
+
     case 'agent:model_selected':
       console.log('[Agent] 模型已选择:', event.data);
       callbacks.onModelSelected?.(event);

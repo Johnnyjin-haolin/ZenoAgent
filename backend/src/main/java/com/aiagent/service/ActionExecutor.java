@@ -1,5 +1,6 @@
 package com.aiagent.service;
 
+import com.aiagent.constant.AgentConstants;
 import com.aiagent.service.action.LLMGenerateParams;
 import com.aiagent.service.action.RAGRetrieveParams;
 import com.aiagent.service.action.ToolCallParams;
@@ -7,6 +8,7 @@ import com.aiagent.service.memory.MemorySystem;
 import com.aiagent.service.tool.McpToolExecutor;
 import com.aiagent.util.StringUtils;
 import com.aiagent.vo.AgentContext;
+import com.aiagent.vo.AgentEventData;
 import com.aiagent.vo.AgentKnowledgeResult;
 import com.aiagent.vo.McpToolInfo;
 import com.alibaba.fastjson2.JSON;
@@ -101,11 +103,17 @@ public class ActionExecutor {
             
             log.info("执行工具调用: name={}, params={}", toolName, toolCallParams);
             
+            // 发送工具执行进度事件
+            sendProgressEvent(context, AgentConstants.EVENT_AGENT_TOOL_EXECUTING,
+                "正在执行工具: " + toolInfo.getName() + "...");
+            
             // 使用McpToolExecutor执行工具
             Object toolResult = mcpToolExecutor.execute(toolInfo, toolCallParams.getToolParams());
 
             // 将结果转换为字符串（用于记录和返回）
             String resultStr = parseToolResult(toolResult);
+            sendProgressEvent(context, AgentConstants.EVENT_AGENT_TOOL_EXECUTING,
+                    "调用工具: " + toolInfo.getName() + " 成功");
             
             // 记录工具调用历史
             memorySystem.recordToolCall(context, toolName, params, toolResult);
@@ -127,6 +135,8 @@ public class ActionExecutor {
             long duration = System.currentTimeMillis() - startTime;
             ActionResult result = ActionResult.failure("tool_call", action.getName(),
                 e.getMessage(), "TOOL_CALL_ERROR");
+            sendProgressEvent(context, AgentConstants.EVENT_AGENT_TOOL_EXECUTING,
+                    "调用工具失败");
             result.setDuration(duration);
             return result;
         }
@@ -179,6 +189,14 @@ public class ActionExecutor {
             if (StringUtils.isEmpty(query)) {
                 query = action.getReasoning();
             }
+            
+            // 发送RAG检索进度事件
+            String ragMessage = "查询相关知识";
+            if (knowledgeIds != null && !knowledgeIds.isEmpty()) {
+                ragMessage += " (知识库数量: " + knowledgeIds.size() + ")";
+            }
+            ragMessage += "...";
+            sendProgressEvent(context, AgentConstants.EVENT_AGENT_RAG_QUERYING, ragMessage);
             
             // 执行RAG检索
             AgentKnowledgeResult knowledgeResult = ragEnhancer.retrieve(query, knowledgeIds);
@@ -257,6 +275,9 @@ public class ActionExecutor {
             // 3. 添加当前的生成提示
             messages.add(new UserMessage(prompt));
             
+            // 发送生成进度事件
+            sendProgressEvent(context, AgentConstants.EVENT_AGENT_GENERATING, "正在生成回复...");
+            
             // 调用LLM
             String modelId = context != null ? context.getModelId() : null;
             if (StringUtils.isEmpty(modelId)) {
@@ -296,6 +317,20 @@ public class ActionExecutor {
                 e.getMessage(), "LLM_GENERATE_ERROR");
             result.setDuration(duration);
             return result;
+        }
+    }
+    
+    /**
+     * 发送进度事件到前端
+     */
+    private void sendProgressEvent(AgentContext context, String event, String message) {
+        if (context != null && context.getEventPublisher() != null) {
+            context.getEventPublisher().accept(
+                AgentEventData.builder()
+                    .event(event)
+                    .message(message)
+                    .build()
+            );
         }
     }
     

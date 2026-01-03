@@ -58,10 +58,16 @@ public class AgentConstants {
      */
     public static final String EVENT_AGENT_START = "agent:start";
     public static final String EVENT_AGENT_THINKING = "agent:thinking";
+    public static final String EVENT_AGENT_PLANNING = "agent:planning";
     public static final String EVENT_AGENT_MODEL_SELECTED = "agent:model_selected";
     public static final String EVENT_AGENT_TOOL_CALL = "agent:tool_call";
     public static final String EVENT_AGENT_TOOL_RESULT = "agent:tool_result";
+    public static final String EVENT_AGENT_TOOL_EXECUTING = "agent:tool_executing";
     public static final String EVENT_AGENT_RAG_RETRIEVE = "agent:rag_retrieve";
+    public static final String EVENT_AGENT_RAG_QUERYING = "agent:rag_querying";
+    public static final String EVENT_AGENT_GENERATING = "agent:generating";
+    public static final String EVENT_AGENT_OBSERVING = "agent:observing";
+    public static final String EVENT_AGENT_REFLECTING = "agent:reflecting";
     public static final String EVENT_AGENT_MESSAGE = "agent:message";
     public static final String EVENT_AGENT_STREAM_COMPLETE = "agent:stream_complete";
     public static final String EVENT_AGENT_COMPLETE = "agent:complete";

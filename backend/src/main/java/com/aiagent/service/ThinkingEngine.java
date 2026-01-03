@@ -1,10 +1,12 @@
 package com.aiagent.service;
 
+import com.aiagent.constant.AgentConstants;
 import com.aiagent.service.action.LLMGenerateParams;
 import com.aiagent.service.action.RAGRetrieveParams;
 import com.aiagent.service.action.ToolCallParams;
 import com.aiagent.util.StringUtils;
 import com.aiagent.vo.AgentContext;
+import com.aiagent.vo.AgentEventData;
 import com.aiagent.vo.McpToolInfo;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
@@ -163,6 +165,9 @@ public class ThinkingEngine {
      */
     public AgentAction think(String goal, AgentContext context, ActionResult lastResult) {
         log.info("开始思考，目标: {}", goal);
+        
+        // 发送思考进度事件
+        sendProgressEvent(context, AgentConstants.EVENT_AGENT_THINKING, "正在分析任务和用户意图...");
         
         // 构建思考提示词
         String thinkingPrompt = buildThinkingPrompt(goal, context, lastResult);
@@ -736,6 +741,20 @@ public class ThinkingEngine {
         }
         
         return false;
+    }
+    
+    /**
+     * 发送进度事件到前端
+     */
+    private void sendProgressEvent(AgentContext context, String event, String message) {
+        if (context != null && context.getEventPublisher() != null) {
+            context.getEventPublisher().accept(
+                AgentEventData.builder()
+                    .event(event)
+                    .message(message)
+                    .build()
+            );
+        }
     }
 }
 

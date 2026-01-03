@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 反思引擎
@@ -41,18 +42,20 @@ public class ReflectionEngine {
             .goalAchieved(false)
             .shouldContinue(false)
             .shouldRetry(false)
+            .needsSummary(false)
             .build();
         
         // 分析结果
         if (result.isSuccess()) {
-            // 成功：检查是否达成目标
-            boolean goalAchieved = checkGoalAchieved(result, goal, context);
-            reflection.setGoalAchieved(goalAchieved);
+            // 成功：使用LLM判断目标是否达成，并同时判断是否需要总结
+            GoalCheckResult checkResult = checkGoalAchievedWithLLM(result, goal, context);
+            reflection.setGoalAchieved(checkResult.isGoalAchieved());
             
-            if (goalAchieved) {
-                // summary仅用于日志记录，不包含实际数据（避免发送给用户）
+            if (checkResult.isGoalAchieved()) {
+                // 判断是否需要生成友好总结
+                reflection.setNeedsSummary(checkResult.isNeedsSummary());
                 reflection.setSummary("目标已达成");
-                log.info("反思结果：目标已达成，数据: {}", result.getData());
+                log.info("反思结果：目标已达成，需要总结: {}", checkResult.isNeedsSummary());
             } else {
                 reflection.setShouldContinue(true);
                 reflection.setSummary("动作执行成功，但目标尚未完全达成，继续执行下一步");
@@ -79,58 +82,60 @@ public class ReflectionEngine {
     }
     
     /**
-     * 检查目标是否已达成
+     * 使用LLM判断目标是否已达成，并同时判断是否需要总结
+     * 如果目标达成且需要总结，LLM会直接生成总结文案
      */
-    private boolean checkGoalAchieved(ActionResult result, String goal, AgentContext context) {
+    private GoalCheckResult checkGoalAchievedWithLLM(ActionResult result, String goal, AgentContext context) {
+        log.debug("使用LLM判断目标是否达成并生成总结，目标: {}", goal);
+        
         // 简单实现：如果动作类型是COMPLETE，则认为目标已达成
         if ("complete".equals(result.getActionType())) {
-            return true;
+            return GoalCheckResult.builder()
+                .goalAchieved(true)
+                .needsSummary(false)
+                .build();
         }
         
-        // 使用LLM判断目标是否达成
         try {
-            return checkGoalAchievedWithLLM(result, goal, context);
+            // 构建判断提示词（包含总结要求）
+            String prompt = buildGoalCheckPrompt(result, goal, context);
+            
+            // 准备消息列表
+            List<ChatMessage> messages = new ArrayList<>();
+            messages.add(new SystemMessage("你是一个智能评估助手，需要判断用户的目标是否已经达成。" +
+                "如果目标达成且需要给用户总结，请同时生成一个友好、完整的总结文案。请严格按照JSON格式返回结果。"));
+            messages.add(new UserMessage(prompt));
+            
+            // 获取模型ID（从上下文或使用默认值）
+            String modelId = context != null ? context.getModelId() : null;
+            if (StringUtils.isEmpty(modelId)) {
+                modelId = "gpt-4o-mini";
+            }
+            
+            // 调用非流式LLM获取完整响应
+            String response = llmChatHandler.chatNonStreaming(modelId, messages);
+            
+            log.debug("LLM反思响应: {}", response);
+            
+            // 解析响应
+            return parseGoalCheckResponse(response);
+            
         } catch (Exception e) {
             log.error("LLM判断目标是否达成失败，使用默认逻辑", e);
             // 降级：如果结果数据不为空，且动作类型是LLM_GENERATE，可能已达成
+            boolean goalAchieved = false;
             if ("llm_generate".equals(result.getActionType()) && result.getData() != null) {
                 String dataStr = result.getData().toString();
                 // 如果回复长度较长（超过50字符），可能已经回答了问题
                 if (dataStr.length() > 50) {
-                    return true;
+                    goalAchieved = true;
                 }
             }
-            return false;
+            return GoalCheckResult.builder()
+                .goalAchieved(goalAchieved)
+                .needsSummary(false)
+                .build();
         }
-    }
-    
-    /**
-     * 使用LLM判断目标是否已达成
-     */
-    private boolean checkGoalAchievedWithLLM(ActionResult result, String goal, AgentContext context) {
-        log.debug("使用LLM判断目标是否达成，目标: {}", goal);
-        
-        // 构建判断提示词
-        String prompt = buildGoalCheckPrompt(result, goal, context);
-        
-        // 准备消息列表
-        List<ChatMessage> messages = new ArrayList<>();
-        messages.add(new SystemMessage("你是一个智能评估助手，需要判断用户的目标是否已经达成。请严格按照JSON格式返回结果，只返回true或false。"));
-        messages.add(new UserMessage(prompt));
-        
-        // 获取模型ID（从上下文或使用默认值）
-        String modelId = context != null ? context.getModelId() : null;
-        if (StringUtils.isEmpty(modelId)) {
-            modelId = "gpt-4o-mini";
-        }
-        
-        // 调用非流式LLM获取完整响应
-        String response = llmChatHandler.chatNonStreaming(modelId, messages);
-        
-        log.debug("LLM目标达成判断响应: {}", response);
-        
-        // 解析响应
-        return parseGoalCheckResponse(response);
     }
     
     /**
@@ -179,17 +184,57 @@ public class ReflectionEngine {
             prompt.append("\n");
         }
         
+        // 添加工具调用历史
+        if (context != null && context.getToolCallHistory() != null && !context.getToolCallHistory().isEmpty()) {
+            prompt.append("**工具调用历史**（最近3次）:\n");
+            int historySize = context.getToolCallHistory().size();
+            int start = Math.max(0, historySize - 3);
+            for (int i = start; i < historySize; i++) {
+                Map<String, Object> call = context.getToolCallHistory().get(i);
+                prompt.append("- ").append(call.get("toolName"));
+                if (call.containsKey("params")) {
+                    prompt.append(" (参数: ").append(call.get("params")).append(")");
+                }
+                prompt.append("\n");
+            }
+            prompt.append("\n");
+        }
+        
+        // 添加RAG检索历史
+        if (context != null && context.getRagRetrieveHistory() != null && !context.getRagRetrieveHistory().isEmpty()) {
+            prompt.append("**RAG检索历史**（最近3次）:\n");
+            int historySize = context.getRagRetrieveHistory().size();
+            int start = Math.max(0, historySize - 3);
+            for (int i = start; i < historySize; i++) {
+                Map<String, Object> retrieve = context.getRagRetrieveHistory().get(i);
+                prompt.append("- 查询: ").append(retrieve.get("query"));
+                if (retrieve.containsKey("resultCount")) {
+                    prompt.append("，找到 ").append(retrieve.get("resultCount")).append(" 条相关信息");
+                }
+                prompt.append("\n");
+            }
+            prompt.append("\n");
+        }
+        
         prompt.append("**判断标准**:\n");
-        prompt.append("1. 如果执行结果已经完整回答了用户的问题，返回 true\n");
-        prompt.append("2. 如果执行结果已经完成了用户要求的任务，返回 true\n");
-        prompt.append("3. 如果还需要继续执行其他动作才能达成目标，返回 false\n");
-        prompt.append("4. 如果执行结果只是中间步骤，还需要更多信息或操作，返回 false\n\n");
+        prompt.append("1. 如果执行结果已经完整回答了用户的问题，返回 goalAchieved = true\n");
+        prompt.append("2. 如果执行结果已经完成了用户要求的任务，返回 goalAchieved = true\n");
+        prompt.append("3. 如果还需要继续执行其他动作才能达成目标，返回 goalAchieved = false\n");
+        prompt.append("4. 如果执行结果只是中间步骤，还需要更多信息或操作，返回 goalAchieved = false\n\n");
+        
+        prompt.append("**是否需要总结判断标准**:\n");
+        prompt.append("如果 goalAchieved = true，请判断是否需要生成友好总结：\n");
+        prompt.append("1. 如果最后动作是 LLM_GENERATE，说明已经生成了友好回复，返回 needsSummary = false\n");
+        prompt.append("2. 如果有工具调用历史，说明返回的是原始数据（JSON等），返回 needsSummary = true\n");
+        prompt.append("3. 如果有RAG检索历史，可能需要整合多个检索结果，返回 needsSummary = true\n");
+        prompt.append("4. 如果是简单对话（打招呼、闲聊等），返回 needsSummary = false\n\n");
         
         prompt.append("**输出格式**:\n");
         prompt.append("请只返回一个JSON对象，格式如下：\n");
         prompt.append("```json\n");
         prompt.append("{\n");
-        prompt.append("  \"goalAchieved\": true 或 false\n");
+        prompt.append("  \"goalAchieved\": true 或 false,\n");
+        prompt.append("  \"needsSummary\": true 或 false（仅在 goalAchieved = true 时判断）\n");
         prompt.append("}\n");
         prompt.append("```\n\n");
         prompt.append("⚠️ **重要**: 只返回JSON对象，不要包含其他文字说明或Markdown代码块标记！\n");
@@ -198,34 +243,44 @@ public class ReflectionEngine {
     }
     
     /**
-     * 解析目标检查响应
+     * 解析目标检查响应（包含总结信息）
      */
-    private boolean parseGoalCheckResponse(String response) {
+    private GoalCheckResult parseGoalCheckResponse(String response) {
         try {
             // 清理响应文本，移除可能的Markdown代码块包装和其他文本
             String cleanedResponse = cleanJsonResponse(response);
-            log.debug("清理后的目标检查响应: {}", cleanedResponse);
+            log.debug("清理后的反思响应: {}", cleanedResponse);
             
             JSONObject json = JSON.parseObject(cleanedResponse);
             Boolean goalAchieved = json.getBoolean("goalAchieved");
             
-            if (goalAchieved != null) {
-                return goalAchieved;
-            } else {
-                log.warn("目标检查响应中缺少goalAchieved字段，原始响应: {}", response);
-                return false;
+            GoalCheckResult result = GoalCheckResult.builder()
+                .goalAchieved(goalAchieved != null ? goalAchieved : false)
+                .needsSummary(false)
+                .build();
+            
+            if (goalAchieved != null && goalAchieved) {
+                // 如果目标达成，检查是否需要总结
+                Boolean needsSummary = json.getBoolean("needsSummary");
+                if (needsSummary != null) {
+                    result.setNeedsSummary(needsSummary);
+                }
             }
             
+            return result;
+            
         } catch (Exception e) {
-            log.error("解析目标检查响应失败，原始响应: {}", response, e);
+            log.error("解析反思响应失败，原始响应: {}", response, e);
             // 尝试从文本中提取布尔值
             String lowerResponse = response.toLowerCase().trim();
-            if (lowerResponse.contains("true") || lowerResponse.contains("是") || lowerResponse.contains("达成")) {
-                return true;
-            } else if (lowerResponse.contains("false") || lowerResponse.contains("否") || lowerResponse.contains("未达成")) {
-                return false;
-            }
-            return false;
+            boolean goalAchieved = lowerResponse.contains("true") || 
+                                  lowerResponse.contains("是") || 
+                                  lowerResponse.contains("达成");
+            
+            return GoalCheckResult.builder()
+                .goalAchieved(goalAchieved)
+                .needsSummary(false)
+                .build();
         }
     }
     
@@ -320,6 +375,13 @@ public class ReflectionEngine {
         private boolean shouldRetry;
         
         /**
+         * 是否需要生成友好总结
+         * true: 需要总结（工具调用、复杂任务等）
+         * false: 不需要总结（简单对话、LLM直接回复等）
+         */
+        private boolean needsSummary;
+        
+        /**
          * 重试原因
          */
         private String retryReason;
@@ -349,6 +411,25 @@ public class ReflectionEngine {
         private String type;
         private boolean retryable;
         private String retryReason;
+    }
+    
+    /**
+     * 目标检查结果
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    private static class GoalCheckResult {
+        /**
+         * 目标是否已达成
+         */
+        private boolean goalAchieved;
+        
+        /**
+         * 是否需要生成友好总结
+         */
+        private boolean needsSummary;
     }
 }
 

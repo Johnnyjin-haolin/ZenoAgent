@@ -70,7 +70,7 @@ public class AgentServiceImpl implements IAgentService {
         sendEvent(emitter, AgentEventData.builder()
             .requestId(requestId)
             .event(AgentConstants.EVENT_AGENT_START)
-            .message("Agent 开始执行任务（ReAct模式）")
+            .message("zeno agent 启动中")
             .conversationId(request.getConversationId())
             .build());
         
@@ -137,6 +137,18 @@ public class AgentServiceImpl implements IAgentService {
         context.setKnowledgeIds(request.getKnowledgeIds());
         context.setRequestId(requestId);
         
+        // 设置事件发布器，用于各个Engine向前端发送进度事件
+        context.setEventPublisher(eventData -> {
+            // 自动填充requestId和conversationId
+            if (eventData.getRequestId() == null) {
+                eventData.setRequestId(requestId);
+            }
+            if (eventData.getConversationId() == null) {
+                eventData.setConversationId(context.getConversationId());
+            }
+            sendEvent(emitter, eventData);
+        });
+        
         // 3.1 设置流式输出回调（使用CountDownLatch确保流式完成后再关闭SSE）
         java.util.concurrent.CountDownLatch streamingCompleteLatch = new java.util.concurrent.CountDownLatch(1);
         context.setStreamingCallback(new StreamingCallback() {
@@ -181,13 +193,6 @@ public class AgentServiceImpl implements IAgentService {
             @Override
             public void onStart() {
                 log.debug("LLM开始生成");
-                // 可以发送一个开始生成的事件
-                sendEvent(emitter, AgentEventData.builder()
-                    .requestId(requestId)
-                    .event(AgentConstants.EVENT_AGENT_THINKING)
-                    .message("开始生成回复...")
-                    .conversationId(context.getConversationId())
-                    .build());
             }
         });
         

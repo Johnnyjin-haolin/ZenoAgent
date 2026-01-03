@@ -32,11 +32,18 @@ export interface AgentRequest {
 export type AgentEventType =
   | 'agent:start'           // 任务开始
   | 'agent:thinking'        // AI 思考中
+  | 'agent:planning'        // 正在规划
+  | 'agent:tool_executing'  // 正在执行工具
+  | 'agent:rag_querying'    // 正在查询知识库
+  | 'agent:generating'      // 正在生成回复
+  | 'agent:observing'       // 正在观察结果
+  | 'agent:reflecting'      // 正在反思
   | 'agent:model_selected'  // 模型已选择
   | 'agent:rag_retrieve'    // RAG 检索中
   | 'agent:tool_call'       // 工具调用中
   | 'agent:tool_result'     // 工具执行结果
   | 'agent:message'         // 流式内容
+  | 'agent:stream_complete' // 流式输出完成
   | 'agent:complete'        // 任务完成
   | 'agent:error';          // 错误发生
 
@@ -50,6 +57,8 @@ export interface AgentEvent {
   event?: AgentEventType;
   /** 消息内容 */
   message?: string;
+  /** 状态文本（用于显示当前状态） */
+  statusText?: string;
   /** 流式内容（用于 agent:message） */
   content?: string;
   /** 附加数据 */
