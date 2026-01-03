@@ -4,9 +4,9 @@
  * @date 2025-11-30
  */
 
-import { ref, Ref, computed, reactive } from 'vue';
+import { ref, Ref, computed, reactive, nextTick } from 'vue';
 import { message } from 'ant-design-vue';
-import { executeAgent } from '../agent.api';
+import { executeAgent, getConversationMessages } from '../agent.api';
 import type {
   AgentMessage,
   AgentRequest,
@@ -573,6 +573,126 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
   };
 
   /**
+   * 加载历史消息
+   */
+  const loadMessages = async (conversationId: string) => {
+    if (!conversationId) {
+      messages.value = [];
+      return;
+    }
+
+    loading.value = true;
+    try {
+      // 调用API获取消息
+      const rawMessages = await getConversationMessages(conversationId);
+      
+      // 转换为前端格式
+      messages.value = rawMessages.map(convertToAgentMessage);
+      
+      console.log(`已加载 ${messages.value.length} 条历史消息`);
+    } catch (error) {
+      console.error('加载历史消息失败:', error);
+      message.error('加载历史消息失败');
+      messages.value = [];
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  /**
+   * 转换后端消息格式为前端格式
+   */
+  const convertToAgentMessage = (raw: any): AgentMessage => {
+    return {
+      id: raw.id || raw.messageId || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      role: mapRole(raw.role),
+      content: raw.content || '',
+      datetime: raw.createTime || new Date().toISOString(),
+      status: 'done', // 历史消息都是已完成状态
+      model: raw.modelId,
+      tokens: raw.tokens,
+      duration: raw.duration,
+      // 从 metadata 中提取工具调用和RAG结果
+      toolCalls: extractToolCalls(raw.metadata),
+      ragResults: extractRagResults(raw.metadata),
+    };
+  };
+
+  /**
+   * 映射角色
+   */
+  const mapRole = (role: string): 'user' | 'assistant' | 'system' => {
+    const roleLower = (role || '').toLowerCase();
+    if (roleLower === 'user' || roleLower === 'USER') {
+      return 'user';
+    } else if (roleLower === 'assistant' || roleLower === 'ai' || roleLower === 'ASSISTANT' || roleLower === 'AI') {
+      return 'assistant';
+    } else if (roleLower === 'system' || roleLower === 'SYSTEM') {
+      return 'system';
+    }
+    // 默认返回 assistant
+    return 'assistant';
+  };
+
+  /**
+   * 从 metadata 中提取工具调用
+   */
+  const extractToolCalls = (metadata: any): ToolCall[] | undefined => {
+    if (!metadata || typeof metadata !== 'object') {
+      return undefined;
+    }
+
+    // 如果 metadata 中有 toolCalls 字段
+    if (Array.isArray(metadata.toolCalls)) {
+      return metadata.toolCalls;
+    }
+
+    // 如果 metadata 中有 toolName 和 toolParams，构造一个 ToolCall
+    if (metadata.toolName) {
+      return [{
+        id: metadata.toolExecutionId || `tool-${Date.now()}`,
+        name: metadata.toolName,
+        params: metadata.toolParams || metadata.params || {},
+        result: metadata.toolResult || metadata.result,
+        status: metadata.toolStatus || 'success',
+        duration: metadata.toolDuration || metadata.duration,
+      }];
+    }
+
+    return undefined;
+  };
+
+  /**
+   * 从 metadata 中提取 RAG 结果
+   */
+  const extractRagResults = (metadata: any): RagResult[] | undefined => {
+    if (!metadata || typeof metadata !== 'object') {
+      return undefined;
+    }
+
+    // 如果 metadata 中有 ragResults 字段
+    if (Array.isArray(metadata.ragResults)) {
+      return metadata.ragResults;
+    }
+
+    // 如果 metadata 中有 knowledgeResult，构造 RAG 结果
+    if (metadata.knowledgeResult || metadata.ragRetrieve) {
+      const result = metadata.knowledgeResult || metadata.ragRetrieve;
+      if (Array.isArray(result.documents) && result.documents.length > 0) {
+        return result.documents.map((doc: any, index: number) => ({
+          id: doc.id || `rag-${index}`,
+          content: doc.content || doc.text || '',
+          score: doc.score || doc.relevanceScore,
+          source: doc.source || doc.fileName || '',
+          metadata: doc.metadata || {},
+        }));
+      }
+    }
+
+    return undefined;
+  };
+
+  /**
    * 删除消息
    */
   const deleteMessage = (messageId: string) => {
@@ -631,6 +751,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     clearMessages,
     deleteMessage,
     regenerate,
+    loadMessages,
   };
 }
 

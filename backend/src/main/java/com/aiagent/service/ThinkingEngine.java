@@ -114,6 +114,13 @@ public class ThinkingEngine {
      */
     private static final String OUTPUT_FORMAT_PROMPT = "## 输出格式\n\n" +
             "请严格按照以下JSON格式返回你的决定：\n\n" +
+            "**重要说明**：\n" +
+            "1. 如果多个动作可以并行执行（没有依赖关系），请返回多个动作\n" +
+            "2. 可以并行的动作类型：多个独立的TOOL_CALL、多个独立的RAG_RETRIEVE、TOOL_CALL+RAG_RETRIEVE混合\n" +
+            "3. 不能并行的动作：包含LLM_GENERATE（需要等待其他结果）、包含COMPLETE（任务完成）\n" +
+            "4. 如果返回多个动作，这些动作会并行执行，所有执行结果会在下一次循环的thinking阶段提供给AI判断\n" +
+            "5. 最多返回5个动作\n\n" +
+            "**单个动作格式**：\n" +
             "**TOOL_CALL格式**:\n" +
             "```json\n" +
             "{\n" +
@@ -158,51 +165,92 @@ public class ThinkingEngine {
             "  \"reasoning\": \"任务已完成的原因\"\n" +
             "}\n" +
             "```\n\n" +
-            "⚠️ **重要**: 只返回JSON对象，不要包含其他文字说明或Markdown代码块标记！\n";
+            "**返回格式**（支持单个或多个动作）：\n" +
+            "```json\n" +
+            "{\n" +
+            "  \"actions\": [\n" +
+            "    {\n" +
+            "      \"actionType\": \"TOOL_CALL\",\n" +
+            "      \"actionName\": \"工具名称\",\n" +
+            "      \"reasoning\": \"为什么选择这个动作\",\n" +
+            "      \"toolCallParams\": {...}\n" +
+            "    },\n" +
+            "    {\n" +
+            "      \"actionType\": \"RAG_RETRIEVE\",\n" +
+            "      \"actionName\": \"rag_retrieve\",\n" +
+            "      \"reasoning\": \"为什么需要检索\",\n" +
+            "      \"ragRetrieveParams\": {...}\n" +
+            "    }\n" +
+            "  ]\n" +
+            "}\n" +
+            "```\n\n" +
+            "⚠️ **重要**: \n" +
+            "- 如果只有一个动作，可以直接返回单个动作对象，或使用actions数组\n" +
+            "- 如果有多个动作，必须使用actions数组格式\n" +
+            "- 只返回JSON对象，不要包含其他文字说明或Markdown代码块标记！\n";
     
     /**
-     * 思考：分析目标、上下文和历史结果，决定下一步动作
+     * 思考：分析目标、上下文和历史结果，决定下一步动作（支持返回多个动作）
      */
-    public AgentAction think(String goal, AgentContext context, ActionResult lastResult) {
-        log.info("开始思考，目标: {}", goal);
+    public List<AgentAction> think(String goal, AgentContext context, List<ActionResult> lastResults) {
+        log.info("开始思考，目标: {}, 上次结果数量: {}", goal, lastResults != null ? lastResults.size() : 0);
         
         // 发送思考进度事件
         sendProgressEvent(context, AgentConstants.EVENT_AGENT_THINKING, "正在分析任务和用户意图...");
         
         // 构建思考提示词
-        String thinkingPrompt = buildThinkingPrompt(goal, context, lastResult);
+        String thinkingPrompt = buildThinkingPrompt(goal, context, lastResults);
         
         // 调用LLM进行思考
         String thinkingResult = callLLMForThinking(thinkingPrompt, context);
         
-        // 解析思考结果，生成动作
-        AgentAction action = parseThinkingResult(thinkingResult, goal, context);
+        // 解析思考结果，生成动作列表
+        List<AgentAction> actions = parseThinkingResult(thinkingResult, goal, context);
         
-        // 循环检测：如果检测到异常循环，强制使用LLM_GENERATE
-        if (action != null && detectLoopAnomaly(context, action, lastResult)) {
-            log.warn("检测到循环调用异常，强制切换为LLM_GENERATE");
-            String prompt = "用户问: " + goal + "\n\n";
-            if (lastResult != null && lastResult.isSuccess()) {
-                prompt += "我已经获取到以下信息: " + lastResult.getData() + "\n\n";
-            }
-            prompt += "请根据已有信息，直接回答用户的问题。如果信息不足，也要友好地告知用户。";
-            
-            action = AgentAction.llmGenerate(
-                com.aiagent.service.action.LLMGenerateParams.builder()
-                    .prompt(prompt)
-                    .build(),
-                "检测到重复调用，使用已有信息直接回答"
-            );
+        // 如果解析失败或为空，返回空列表
+        if (actions == null || actions.isEmpty()) {
+            log.warn("思考阶段未产生动作");
+            return new ArrayList<>();
         }
         
-        log.info("思考完成，决定执行动作: {}", action != null ? action.getName() : "null");
-        return action;
+        // 限制最多5个动作
+        if (actions.size() > 5) {
+            log.warn("动作数量超过限制（{}），只保留前5个", actions.size());
+            actions = actions.subList(0, 5);
+        }
+        
+        // 循环检测：如果检测到异常循环，强制使用LLM_GENERATE
+        if (actions.size() == 1 && lastResults != null && !lastResults.isEmpty()) {
+            AgentAction action = actions.get(0);
+            ActionResult lastResult = lastResults.get(lastResults.size() - 1);
+            if (detectLoopAnomaly(context, action, lastResult)) {
+                log.warn("检测到循环调用异常，强制切换为LLM_GENERATE");
+                String prompt = "用户问: " + goal + "\n\n";
+                if (lastResult != null && lastResult.isSuccess()) {
+                    prompt += "我已经获取到以下信息: " + lastResult.getData() + "\n\n";
+                }
+                prompt += "请根据已有信息，直接回答用户的问题。如果信息不足，也要友好地告知用户。";
+                
+                actions = java.util.Collections.singletonList(
+                    AgentAction.llmGenerate(
+                        com.aiagent.service.action.LLMGenerateParams.builder()
+                            .prompt(prompt)
+                            .build(),
+                        "检测到重复调用，使用已有信息直接回答"
+                    )
+                );
+            }
+        }
+        
+        log.info("思考完成，决定执行 {} 个动作: {}", actions.size(), 
+            actions.stream().map(AgentAction::getName).collect(java.util.stream.Collectors.joining(", ")));
+        return actions;
     }
     
     /**
      * 构建思考提示词（使用决策框架）
      */
-    private String buildThinkingPrompt(String goal, AgentContext context, ActionResult lastResult) {
+    private String buildThinkingPrompt(String goal, AgentContext context, List<ActionResult> lastResults) {
         StringBuilder prompt = new StringBuilder();
         
         prompt.append("你是一个智能Agent的思考模块，遵循ReAct（Reasoning + Acting）框架。\n\n");
@@ -244,19 +292,25 @@ public class ThinkingEngine {
             prompt.append("\n");
         }
         
-        // 上次执行结果
-        if (lastResult != null) {
-            prompt.append("**上次执行结果**:\n");
-            if (lastResult.isSuccess()) {
-                String resultData = lastResult.getData() != null ? lastResult.getData().toString() : "";
-                // 限制结果长度，避免提示词过长
-                if (resultData.length() > 1000) {
-                    resultData = resultData.substring(0, 1000) + "... (结果过长，已截断)";
+        // 上次执行结果（显示所有结果）
+        if (lastResults != null && !lastResults.isEmpty()) {
+            prompt.append("**上次执行结果**（共 ").append(lastResults.size()).append(" 个动作）:\n");
+            for (int i = 0; i < lastResults.size(); i++) {
+                ActionResult result = lastResults.get(i);
+                prompt.append("动作 ").append(i + 1).append(" (").append(result.getActionName()).append("): ");
+                if (result.isSuccess()) {
+                    String resultData = result.getData() != null ? result.getData().toString() : "";
+                    // 限制结果长度，避免提示词过长
+                    if (resultData.length() > 500) {
+                        resultData = resultData.substring(0, 500) + "... (结果过长，已截断)";
+                    }
+                    prompt.append("✅ 成功: ").append(resultData);
+                } else {
+                    prompt.append("❌ 失败: ").append(result.getError());
                 }
-                prompt.append("✅ 成功: ").append(resultData).append("\n\n");
-            } else {
-                prompt.append("❌ 失败: ").append(lastResult.getError()).append("\n\n");
+                prompt.append("\n");
             }
+            prompt.append("\n");
         }
         
         // ========== 第二部分：决策框架 ==========
@@ -455,57 +509,48 @@ public class ThinkingEngine {
     }
     
     /**
-     * 解析思考结果，生成动作
+     * 解析思考结果，生成动作列表（支持单个或多个动作）
      */
-    private AgentAction parseThinkingResult(String thinkingResult, String goal, AgentContext context) {
+    private List<AgentAction> parseThinkingResult(String thinkingResult, String goal, AgentContext context) {
         try {
             // 清理返回文本，移除可能的Markdown代码块包装和其他文本
             String cleanedResult = cleanJsonResponse(thinkingResult);
             log.debug("清理后的思考结果: {}", cleanedResult);
             
             JSONObject json = JSON.parseObject(cleanedResult);
-            String actionType = json.getString("actionType");
-            String actionName = json.getString("actionName");
-            String reasoning = json.getString("reasoning");
             
-            if (StringUtils.isEmpty(actionType)) {
-                log.warn("思考结果中缺少actionType，原始结果: {}", thinkingResult);
-                return null;
+            // 检查是否有actions数组（多个动作）
+            if (json.containsKey("actions")) {
+                List<Object> actionsList = json.getList("actions", Object.class);
+                if (actionsList != null && !actionsList.isEmpty()) {
+                    List<AgentAction> actions = new ArrayList<>();
+                    for (Object actionObj : actionsList) {
+                        if (actionObj instanceof Map) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> actionMap = (Map<String, Object>) actionObj;
+                            JSONObject actionJson = new JSONObject(actionMap);
+                            AgentAction action = parseSingleAction(actionJson, context);
+                            if (action != null) {
+                                actions.add(action);
+                            }
+                        } else if (actionObj instanceof JSONObject) {
+                            AgentAction action = parseSingleAction((JSONObject) actionObj, context);
+                            if (action != null) {
+                                actions.add(action);
+                            }
+                        }
+                    }
+                    return actions;
+                }
             }
             
-            AgentAction.ActionType type;
-            try {
-                type = AgentAction.ActionType.valueOf(actionType);
-            } catch (IllegalArgumentException e) {
-                log.warn("无效的动作类型: {}", actionType);
-                return null;
+            // 兼容旧格式：单个动作（直接是action对象）
+            AgentAction singleAction = parseSingleAction(json, context);
+            if (singleAction != null) {
+                return java.util.Collections.singletonList(singleAction);
             }
             
-            // 根据动作类型解析对应的参数
-            AgentAction action = null;
-            switch (type) {
-                case TOOL_CALL:
-                    action = parseToolCallAction(json, actionName, reasoning, context);
-                    break;
-                case RAG_RETRIEVE:
-                    action = parseRAGRetrieveAction(json, actionName, reasoning, context);
-                    break;
-                case LLM_GENERATE:
-                    action = parseLLMGenerateAction(json, actionName, reasoning, context);
-                    break;
-                case COMPLETE:
-                    action = AgentAction.complete(reasoning != null ? reasoning : "任务已完成");
-                    break;
-                default:
-                    log.warn("不支持的动作类型: {}", type);
-                    return null;
-            }
-            
-            if (action != null && StringUtils.isEmpty(action.getName())) {
-                action.setName(actionName != null ? actionName : type.name().toLowerCase());
-            }
-            
-            return action;
+            return new ArrayList<>();
                 
         } catch (Exception e) {
             log.error("解析思考结果失败，原始结果: {}", thinkingResult, e);
@@ -519,8 +564,56 @@ public class ThinkingEngine {
             } catch (Exception e2) {
                 log.error("提取JSON也失败", e2);
             }
+            return new ArrayList<>();
+        }
+    }
+    
+    /**
+     * 解析单个动作
+     */
+    private AgentAction parseSingleAction(JSONObject json, AgentContext context) {
+        String actionType = json.getString("actionType");
+        String actionName = json.getString("actionName");
+        String reasoning = json.getString("reasoning");
+        
+        if (StringUtils.isEmpty(actionType)) {
+            log.warn("动作中缺少actionType");
             return null;
         }
+        
+        AgentAction.ActionType type;
+        try {
+            type = AgentAction.ActionType.valueOf(actionType);
+        } catch (IllegalArgumentException e) {
+            log.warn("无效的动作类型: {}", actionType);
+            return null;
+        }
+        
+        // 根据动作类型解析对应的参数
+        AgentAction action = null;
+        switch (type) {
+            case TOOL_CALL:
+                action = parseToolCallAction(json, actionName, reasoning, context);
+                break;
+            case RAG_RETRIEVE:
+                action = parseRAGRetrieveAction(json, actionName, reasoning, context);
+                break;
+            case LLM_GENERATE:
+                action = parseLLMGenerateAction(json, actionName, reasoning, context);
+                break;
+            case COMPLETE:
+                action = AgentAction.complete(reasoning != null ? reasoning : "任务已完成");
+                break;
+            default:
+                log.warn("不支持的动作类型: {}", type);
+                return null;
+        }
+        
+        if (action != null && StringUtils.isEmpty(action.getName())) {
+            action.setName(actionName != null ? actionName : type.name().toLowerCase());
+        }
+        
+        return action;
     }
     
     /**

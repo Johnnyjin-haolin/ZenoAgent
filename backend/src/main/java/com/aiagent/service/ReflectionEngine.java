@@ -35,8 +35,8 @@ public class ReflectionEngine {
     /**
      * 反思：评估结果，决定下一步
      */
-    public ReflectionResult reflect(ActionResult result, AgentContext context, String goal) {
-        log.info("开始反思，目标: {}", goal);
+    public ReflectionResult reflect(List<ActionResult> results, AgentContext context, String goal) {
+        log.info("开始反思，目标: {}, 结果数量: {}", goal, results.size());
         
         ReflectionResult reflection = ReflectionResult.builder()
             .goalAchieved(false)
@@ -45,10 +45,19 @@ public class ReflectionEngine {
             .needsSummary(false)
             .build();
         
-        // 分析结果
-        if (result.isSuccess()) {
-            // 成功：使用LLM判断目标是否达成，并同时判断是否需要总结
-            GoalCheckResult checkResult = checkGoalAchievedWithLLM(result, goal, context);
+        if (results == null || results.isEmpty()) {
+            log.warn("没有结果需要反思");
+            reflection.setShouldContinue(false);
+            reflection.setSummary("没有执行结果");
+            return reflection;
+        }
+        
+        // 检查是否有成功的结果
+        boolean hasSuccess = results.stream().anyMatch(ActionResult::isSuccess);
+        
+        if (hasSuccess) {
+            // 有成功的结果：使用LLM判断目标是否达成，并同时判断是否需要总结
+            GoalCheckResult checkResult = checkGoalAchievedWithLLM(results, goal, context);
             reflection.setGoalAchieved(checkResult.isGoalAchieved());
             
             if (checkResult.isGoalAchieved()) {
@@ -62,8 +71,10 @@ public class ReflectionEngine {
                 log.info("反思结果：继续执行");
             }
         } else {
-            // 失败：分析失败原因，决定是否重试
-            FailureAnalysis analysis = analyzeFailure(result, context);
+            // 全部失败：分析失败原因，决定是否重试
+            // 使用最后一个失败结果进行分析
+            ActionResult lastFailure = results.get(results.size() - 1);
+            FailureAnalysis analysis = analyzeFailure(lastFailure, context);
             reflection.setFailureReason(analysis.getReason());
             reflection.setFailureType(analysis.getType());
             
@@ -73,7 +84,7 @@ public class ReflectionEngine {
                 log.info("反思结果：需要重试，原因: {}", analysis.getRetryReason());
             } else {
                 reflection.setShouldContinue(false);
-                reflection.setSummary("动作执行失败且不可重试: " + result.getError());
+                reflection.setSummary("动作执行失败且不可重试: " + lastFailure.getError());
                 log.warn("反思结果：失败且不可重试");
             }
         }
@@ -85,11 +96,13 @@ public class ReflectionEngine {
      * 使用LLM判断目标是否已达成，并同时判断是否需要总结
      * 如果目标达成且需要总结，LLM会直接生成总结文案
      */
-    private GoalCheckResult checkGoalAchievedWithLLM(ActionResult result, String goal, AgentContext context) {
-        log.debug("使用LLM判断目标是否达成并生成总结，目标: {}", goal);
+    private GoalCheckResult checkGoalAchievedWithLLM(List<ActionResult> results, String goal, AgentContext context) {
+        log.debug("使用LLM判断目标是否达成并生成总结，目标: {}, 结果数量: {}", goal, results.size());
         
         // 简单实现：如果动作类型是COMPLETE，则认为目标已达成
-        if ("complete".equals(result.getActionType())) {
+        boolean hasComplete = results.stream()
+            .anyMatch(r -> "complete".equals(r.getActionType()));
+        if (hasComplete) {
             return GoalCheckResult.builder()
                 .goalAchieved(true)
                 .needsSummary(false)
@@ -98,7 +111,7 @@ public class ReflectionEngine {
         
         try {
             // 构建判断提示词（包含总结要求）
-            String prompt = buildGoalCheckPrompt(result, goal, context);
+            String prompt = buildGoalCheckPrompt(results, goal, context);
             
             // 准备消息列表
             List<ChatMessage> messages = new ArrayList<>();
@@ -124,8 +137,12 @@ public class ReflectionEngine {
             log.error("LLM判断目标是否达成失败，使用默认逻辑", e);
             // 降级：如果结果数据不为空，且动作类型是LLM_GENERATE，可能已达成
             boolean goalAchieved = false;
-            if ("llm_generate".equals(result.getActionType()) && result.getData() != null) {
-                String dataStr = result.getData().toString();
+            ActionResult llmResult = results.stream()
+                .filter(r -> "llm_generate".equals(r.getActionType()) && r.getData() != null)
+                .findFirst()
+                .orElse(null);
+            if (llmResult != null) {
+                String dataStr = llmResult.getData().toString();
                 // 如果回复长度较长（超过50字符），可能已经回答了问题
                 if (dataStr.length() > 50) {
                     goalAchieved = true;
@@ -141,27 +158,43 @@ public class ReflectionEngine {
     /**
      * 构建目标检查提示词
      */
-    private String buildGoalCheckPrompt(ActionResult result, String goal, AgentContext context) {
+    private String buildGoalCheckPrompt(List<ActionResult> results, String goal, AgentContext context) {
         StringBuilder prompt = new StringBuilder();
         
         prompt.append("请判断用户的目标是否已经达成。\n\n");
         prompt.append("**用户目标**: ").append(goal).append("\n\n");
         
-        prompt.append("**执行的动作**: ").append(result.getActionType()).append("\n");
-        if (result.getActionName() != null) {
-            prompt.append("**动作名称**: ").append(result.getActionName()).append("\n");
+        // 显示所有执行的动作
+        prompt.append("**执行的动作**（共 ").append(results.size()).append(" 个）:\n");
+        for (int i = 0; i < results.size(); i++) {
+            ActionResult result = results.get(i);
+            prompt.append("动作 ").append(i + 1).append(": ");
+            prompt.append(result.getActionName()).append(" (");
+            prompt.append(result.getActionType()).append(")\n");
         }
         prompt.append("\n");
         
         // 执行结果
-        if (result.getData() != null) {
-            String resultData = result.getData().toString();
-            // 限制结果长度，避免提示词过长
-            if (resultData.length() > 2000) {
-                resultData = resultData.substring(0, 2000) + "... (结果过长，已截断)";
+        prompt.append("**执行结果**（共 ").append(results.size()).append(" 个动作）:\n");
+        for (int i = 0; i < results.size(); i++) {
+            ActionResult result = results.get(i);
+            prompt.append("动作 ").append(i + 1).append(": ");
+            prompt.append(result.getActionName()).append(" (");
+            prompt.append(result.getActionType()).append(")\n");
+            prompt.append("  状态: ").append(result.isSuccess() ? "✅ 成功" : "❌ 失败").append("\n");
+            if (result.isSuccess() && result.getData() != null) {
+                String dataStr = result.getData().toString();
+                if (dataStr.length() > 500) {
+                    dataStr = dataStr.substring(0, 500) + "...";
+                }
+                prompt.append("  结果: ").append(dataStr).append("\n");
             }
-            prompt.append("**执行结果**:\n").append(resultData).append("\n\n");
+            if (!result.isSuccess() && result.getError() != null) {
+                prompt.append("  错误: ").append(result.getError()).append("\n");
+            }
+            prompt.append("\n");
         }
+        prompt.append("\n");
         
         // 对话历史（最近3轮）
         if (context != null && context.getMessages() != null && !context.getMessages().isEmpty()) {

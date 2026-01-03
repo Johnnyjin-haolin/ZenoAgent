@@ -214,6 +214,7 @@ const {
   sendMessage,
   stopGeneration,
   clearMessages,
+  loadMessages,
 } = useAgentChat({
   conversationId: currentConversationId,  // Ref 会自动响应
   defaultModelId: selectedModelId.value,  // 初始值
@@ -240,9 +241,11 @@ const loadConversations = async () => {
     const result = await getConversations();
     conversations.value = result;
     
-    // 如果有会话，选择第一个
+    // 如果有会话，选择第一个并加载其历史消息
     if (result.length > 0 && !currentConversationId.value) {
       currentConversationId.value = result[0].id;
+      await loadMessages(result[0].id);
+      await scrollToBottom();
     }
   } catch (error) {
     console.error('加载会话列表失败:', error);
@@ -250,10 +253,15 @@ const loadConversations = async () => {
 };
 
 // 选择会话
-const handleSelectConversation = (conversation: ConversationInfo) => {
+const handleSelectConversation = async (conversation: ConversationInfo) => {
   currentConversationId.value = conversation.id;
   clearMessages();
-  // TODO: 加载会话消息
+  
+  // 加载历史消息
+  await loadMessages(conversation.id);
+  
+  // 滚动到底部
+  await scrollToBottom();
 };
 
 // 新建会话
@@ -308,8 +316,13 @@ const handleSend = async () => {
     return;
   }
 
+  // 先清空输入框
   userInput.value = '';
   
+  // 等待 DOM 更新，确保输入框已清空
+  await nextTick();
+  
+  // 发送消息
   await sendMessage(content, {
     modelId: selectedModelId.value,
     knowledgeIds: selectedKnowledgeIds.value,
@@ -319,6 +332,12 @@ const handleSend = async () => {
   
   // 滚动到底部
   await scrollToBottom();
+  
+  // 确保输入框获得焦点（如果存在）
+  if (inputRef.value) {
+    await nextTick();
+    inputRef.value.focus();
+  }
 };
 
 // 停止生成

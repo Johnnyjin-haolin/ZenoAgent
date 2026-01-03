@@ -20,6 +20,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 /**
  * 动作执行器
@@ -45,6 +49,21 @@ public class ActionExecutor {
     
     @Autowired
     private IntelligentToolSelector toolSelector;
+    
+    /**
+     * 并行执行线程池（限制最多5个并发）
+     */
+    private static final ExecutorService PARALLEL_EXECUTOR = 
+        Executors.newFixedThreadPool(5, r -> {
+            Thread t = new Thread(r, "action-parallel-executor");
+            t.setDaemon(true);
+            return t;
+        });
+    
+    /**
+     * 最大并行执行数量
+     */
+    private static final int MAX_PARALLEL_ACTIONS = 5;
     
     /**
      * 执行动作
@@ -317,6 +336,82 @@ public class ActionExecutor {
                 e.getMessage(), "LLM_GENERATE_ERROR");
             result.setDuration(duration);
             return result;
+        }
+    }
+    
+    /**
+     * 并行执行多个动作
+     * 所有动作会同时执行，即使某个失败也会继续执行其他动作
+     * 返回所有执行结果的列表，供后续观察和反思阶段使用
+     */
+    public List<ActionResult> executeParallel(List<AgentAction> actions, AgentContext context) {
+        log.info("并行执行 {} 个动作", actions.size());
+        
+        // 限制最多5个
+        if (actions.size() > MAX_PARALLEL_ACTIONS) {
+            log.warn("动作数量超过限制（{}），只执行前{}个", actions.size(), MAX_PARALLEL_ACTIONS);
+            actions = actions.subList(0, MAX_PARALLEL_ACTIONS);
+        }
+        
+        long startTime = System.currentTimeMillis();
+        
+        // 发送并行执行开始事件
+        sendProgressEvent(context, AgentConstants.EVENT_AGENT_TOOL_EXECUTING, 
+            "正在并行执行 " + actions.size() + " 个操作...");
+        
+        try {
+            // 使用 CompletableFuture 并行执行
+            List<CompletableFuture<ActionResult>> futures = actions.stream()
+                .map(action -> CompletableFuture.supplyAsync(() -> {
+                    try {
+                        log.debug("并行执行动作: {}", action.getName());
+                        return execute(action, context);
+                    } catch (Exception e) {
+                        log.error("并行执行动作失败: {}", action.getName(), e);
+                        return ActionResult.failure(
+                            action.getType().name(), 
+                            action.getName(),
+                            e.getMessage(), 
+                            "EXCEPTION"
+                        );
+                    }
+                }, PARALLEL_EXECUTOR))
+                .collect(Collectors.toList());
+            
+            // 等待所有任务完成（即使失败也继续等待）
+            List<ActionResult> results = futures.stream()
+                .map(future -> {
+                    try {
+                        return future.join();
+                    } catch (Exception e) {
+                        log.error("等待动作执行完成时出错", e);
+                        return ActionResult.failure("parallel_execution", "parallel_execution",
+                            "执行异常: " + e.getMessage(), "EXCEPTION");
+                    }
+                })
+                .collect(Collectors.toList());
+            
+            long duration = System.currentTimeMillis() - startTime;
+            
+            // 统计成功和失败数量
+            long successCount = results.stream().filter(ActionResult::isSuccess).count();
+            long failureCount = results.size() - successCount;
+            
+            log.info("并行执行完成: 总数={}, 成功={}, 失败={}, 耗时={}ms", 
+                results.size(), successCount, failureCount, duration);
+            
+            return results;
+            
+        } catch (Exception e) {
+            log.error("并行执行失败", e);
+            // 返回一个失败的结果
+            List<ActionResult> errorResults = new ArrayList<>();
+            long duration = System.currentTimeMillis() - startTime;
+            ActionResult errorResult = ActionResult.failure("parallel_execution", "parallel_execution",
+                e.getMessage(), "EXCEPTION");
+            errorResult.setDuration(duration);
+            errorResults.add(errorResult);
+            return errorResults;
         }
     }
     
