@@ -112,9 +112,9 @@ aiagent:
     embedding-store:
       host: localhost
       port: 5432
-      database: aiagent
-      user: postgres
-      password: postgres
+      database: zeno_agent
+      user:
+      password:
       table: embeddings
       use-index: true
       index-list-size: 100
