@@ -24,6 +24,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -112,8 +113,8 @@ public class DocumentService {
                 .title(FilenameUtils.getBaseName(fileName))
                 .type(Document.Type.FILE)
                 .status(Document.Status.DRAFT)
-                .createTime(LocalDateTime.now())
-                .updateTime(LocalDateTime.now())
+                .createTime(new Date())
+                .updateTime(new Date())
                 .build();
         
         // 设置元数据
@@ -180,8 +181,8 @@ public class DocumentService {
                     .title(FilenameUtils.getBaseName(extractedFileName))
                     .type(Document.Type.FILE)
                     .status(Document.Status.DRAFT)
-                    .createTime(LocalDateTime.now())
-                    .updateTime(LocalDateTime.now())
+                    .createTime(new Date())
+                    .updateTime(new Date())
                     .build();
             
             // 设置元数据
@@ -237,8 +238,8 @@ public class DocumentService {
                 .type(Document.Type.TEXT)
                 .content(content)
                 .status(Document.Status.DRAFT)
-                .createTime(LocalDateTime.now())
-                .updateTime(LocalDateTime.now())
+                .createTime(new Date())
+                .updateTime(new Date())
                 .build();
         
         // 保存文档
@@ -264,7 +265,7 @@ public class DocumentService {
         
         // 更新状态
         document.setStatus(Document.Status.BUILDING);
-        document.setUpdateTime(LocalDateTime.now());
+        document.setUpdateTime(new Date());
         documentRepository.save(document);
         
         // 异步向量化
@@ -321,7 +322,7 @@ public class DocumentService {
             try {
                 // 更新状态为构建中
                 document.setStatus(Document.Status.BUILDING);
-                document.setUpdateTime(LocalDateTime.now());
+                document.setUpdateTime(new Date());
                 documentRepository.save(document);
                 
                 // 解析文档内容
@@ -337,7 +338,7 @@ public class DocumentService {
                 
                 // 更新状态为完成
                 document.setStatus(Document.Status.COMPLETE);
-                document.setUpdateTime(LocalDateTime.now());
+                document.setUpdateTime(new Date());
                 documentRepository.save(document);
                 
                 log.info("Document vectorized successfully: {}", document.getId());
@@ -348,7 +349,7 @@ public class DocumentService {
                 // 更新状态为失败
                 document.setStatus(Document.Status.FAILED);
                 document.setFailedReason(e.getMessage());
-                document.setUpdateTime(LocalDateTime.now());
+                document.setUpdateTime(new Date());
                 documentRepository.save(document);
             }
         }, VECTORIZATION_EXECUTOR);

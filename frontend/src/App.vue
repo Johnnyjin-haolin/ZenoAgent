@@ -1,11 +1,11 @@
 <template>
   <div id="app">
-    <AgentChat />
+    <router-view />
   </div>
 </template>
 
 <script setup lang="ts">
-import AgentChat from './views/agent/AgentChat.vue';
+// 使用路由视图，不再直接导入组件
 </script>
 
 <style>

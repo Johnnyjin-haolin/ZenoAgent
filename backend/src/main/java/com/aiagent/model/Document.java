@@ -4,8 +4,10 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.apache.james.mime4j.dom.datetime.DateTime;
 
 import java.time.LocalDateTime;
+import java.util.Date;
 
 /**
  * 文档实体
@@ -62,12 +64,12 @@ public class Document {
     /**
      * 创建时间
      */
-    private LocalDateTime createTime;
+    private Date createTime;
     
     /**
      * 更新时间
      */
-    private LocalDateTime updateTime;
+    private Date updateTime;
     
     /**
      * 文档类型常量

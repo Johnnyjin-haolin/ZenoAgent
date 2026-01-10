@@ -45,8 +45,8 @@
         >
           编辑
         </a-button>
-      </div>
-    </div>
+          </div>
+        </div>
 
     <div v-if="showHint" class="tool-hint">
       <Icon icon="ant-design:info-circle-outlined" />
@@ -637,7 +637,7 @@ onMounted(() => {
     min-height: 32px;
     padding: 4px 11px;
     border: 1px solid #d9d9d9;
-    border-radius: 6px;
+      border-radius: 6px;
     cursor: pointer;
     transition: all 0.3s;
     background: #fff;
@@ -773,20 +773,20 @@ onMounted(() => {
           }
 
           .server-info {
-            display: flex;
-            align-items: flex-start;
-            gap: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
 
             .server-icon {
-              font-size: 20px;
+    font-size: 20px;
               color: #1890ff;
               margin-top: 2px;
-              flex-shrink: 0;
-            }
+    flex-shrink: 0;
+  }
 
             .server-details {
-              flex: 1;
-              min-width: 0;
+    flex: 1;
+    min-width: 0;
 
               .server-name {
                 font-weight: 500;
@@ -848,7 +848,7 @@ onMounted(() => {
           .tool-content {
             flex: 1;
 
-            .tool-name {
+    .tool-name {
               font-weight: 500;
               color: #262626;
               margin-bottom: 4px;
@@ -1018,9 +1018,9 @@ onMounted(() => {
         .tool-desc-wrapper {
           margin-top: 4px;
 
-          .tool-desc {
-            font-size: 12px;
-            color: #8c8c8c;
+    .tool-desc {
+      font-size: 12px;
+      color: #8c8c8c;
             line-height: 1.5;
             word-break: break-word;
             // 默认显示2行，超出省略

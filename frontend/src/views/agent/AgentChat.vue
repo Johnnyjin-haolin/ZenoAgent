@@ -27,6 +27,12 @@
         </div>
         
         <div class="header-actions">
+          <a-button size="small" @click="handleNavigateToKnowledgeBases" style="margin-right: 8px;">
+            <template #icon>
+              <Icon icon="ant-design:book-outlined" />
+            </template>
+            知识库管理
+          </a-button>
           <a-button size="small" @click="showConfigDrawer = true">
             <template #icon>
               <Icon icon="ant-design:setting-outlined" />
@@ -180,6 +186,7 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { Icon } from '@/components/Icon';
 import { message } from 'ant-design-vue';
 import { useAgentChat } from './hooks/useAgentChat';
@@ -191,6 +198,8 @@ import AgentKnowledgeSelector from './components/AgentKnowledgeSelector.vue';
 import AgentToolConfig from './components/AgentToolConfig.vue';
 import type { ConversationInfo, ModelInfo, KnowledgeInfo } from './agent.types';
 
+const router = useRouter();
+
 // 会话管理
 const conversations = ref<ConversationInfo[]>([]);
 const currentConversationId = ref('');
@@ -199,6 +208,11 @@ const slideCollapsed = ref(false);
 
 // 配置抽屉
 const showConfigDrawer = ref(false);
+
+// 导航到知识库管理页面
+const handleNavigateToKnowledgeBases = () => {
+  router.push('/knowledge-bases');
+};
 
 // Agent 配置
 const selectedModelId = ref('');

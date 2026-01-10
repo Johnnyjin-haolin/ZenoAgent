@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiagent.mapper.KnowledgeBaseMapper">
+    
+    <resultMap id="BaseResultMap" type="com.aiagent.entity.KnowledgeBaseEntity">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="description" property="description"/>
+        <result column="embedding_model_id" property="embeddingModelId"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+    
+    <insert id="insert">
+        INSERT INTO knowledge_base (id, name, description, embedding_model_id, create_time, update_time)
+        VALUES (#{id}, #{name}, #{description}, #{embeddingModelId}, #{createTime}, #{updateTime})
+    </insert>
+    
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM knowledge_base WHERE id = #{id}
+    </select>
+    
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT * FROM knowledge_base ORDER BY update_time DESC
+    </select>
+    
+    <update id="update">
+        UPDATE knowledge_base
+        SET name = #{name},
+            description = #{description},
+            embedding_model_id = #{embeddingModelId},
+            update_time = #{updateTime}
+        WHERE id = #{id}
+    </update>
+    
+    <delete id="deleteById">
+        DELETE FROM knowledge_base WHERE id = #{id}
+    </delete>
+    
+    <select id="existsById" resultType="boolean">
+        SELECT COUNT(*) > 0 FROM knowledge_base WHERE id = #{id}
+    </select>
+    
+</mapper>
+
