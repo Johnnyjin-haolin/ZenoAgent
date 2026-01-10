@@ -70,6 +70,11 @@ public class AgentContext implements Serializable {
     private List<String> enabledMcpGroups;
     
     /**
+     * 启用的工具名称列表（为空则允许所有工具）
+     */
+    private List<String> enabledTools;
+    
+    /**
      * 知识库ID列表
      */
     private List<String> knowledgeIds;

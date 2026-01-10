@@ -1,6 +1,7 @@
 package com.aiagent.service;
 
 import com.aiagent.constant.AgentConstants;
+import com.aiagent.service.action.DirectResponseParams;
 import com.aiagent.service.action.LLMGenerateParams;
 import com.aiagent.service.action.RAGRetrieveParams;
 import com.aiagent.service.action.ToolCallParams;
@@ -81,8 +82,10 @@ public class ActionExecutor {
                     return executeRAGRetrieve(action, context, startTime);
                 case LLM_GENERATE:
                     return executeLLMGenerate(action, context, startTime);
+                case DIRECT_RESPONSE:
+                    return executeDirectResponse(action, context, startTime);
                 case COMPLETE:
-                    return ActionResult.success("complete", "complete", 
+                    return ActionResult.success("complete", "complete",
                         "任务完成: " + action.getReasoning());
                 default:
                     return ActionResult.failure(action.getType().name(), action.getName(),
@@ -118,6 +121,19 @@ public class ActionExecutor {
             McpToolInfo toolInfo = toolSelector.getToolByName(toolName);
             if (toolInfo == null) {
                 throw new IllegalArgumentException("工具未找到: " + toolName);
+            }
+            
+            // 检查工具是否在启用列表中（如果指定了enabledTools）
+            if (context != null && context.getEnabledTools() != null && !context.getEnabledTools().isEmpty()) {
+                if (!context.getEnabledTools().contains(toolName)) {
+                    String errorMsg = String.format("工具未启用: %s。当前启用的工具列表: %s", 
+                        toolName, context.getEnabledTools());
+                    log.warn(errorMsg);
+                    throw new IllegalArgumentException(errorMsg);
+                }
+                log.debug("工具 {} 已通过启用检查", toolName);
+            } else {
+                log.debug("未指定启用工具列表，允许所有工具");
             }
             
             log.info("执行工具调用: name={}, params={}", toolName, toolCallParams);
@@ -305,7 +321,8 @@ public class ActionExecutor {
             
             String llmResponse;
             boolean isStreaming = false;
-            
+            log.info("调用LLM生成，模型ID: {}, 提示词: {}", modelId, prompt);
+
             if (context != null && context.getStreamingCallback() != null) {
                 // 有回调，使用流式输出
                 isStreaming = true;
@@ -315,7 +332,7 @@ public class ActionExecutor {
                 log.debug("没有流式回调，使用非流式模式获取LLM结果");
                 llmResponse = llmChatHandler.chatNonStreaming(modelId, messages);
             }
-            
+
             long duration = System.currentTimeMillis() - startTime;
             ActionResult result = ActionResult.success("llm_generate", "llm_generate", llmResponse);
             result.setDuration(duration);
@@ -412,6 +429,73 @@ public class ActionExecutor {
             errorResult.setDuration(duration);
             errorResults.add(errorResult);
             return errorResults;
+        }
+    }
+    
+    /**
+     * 执行直接返回响应
+     * 用于简单场景，直接返回预设的回复内容，无需调用LLM
+     */
+    private ActionResult executeDirectResponse(AgentAction action, AgentContext context, long startTime) {
+        try {
+            DirectResponseParams params = action.getDirectResponseParams();
+            if (params == null || StringUtils.isEmpty(params.getContent())) {
+                throw new IllegalArgumentException("DirectResponseParams.content 不能为空");
+            }
+            
+            String content = params.getContent();
+            
+            // 发送进度事件
+            sendProgressEvent(context, AgentConstants.EVENT_AGENT_GENERATING, "正在生成回复...");
+            
+            // 如果需要流式输出（模拟打字效果）
+            if (params.isStreaming() && context != null && context.getStreamingCallback() != null) {
+                StreamingCallback callback = context.getStreamingCallback();
+                callback.onStart();
+                
+                // 模拟流式输出：按词或字符发送
+                // 使用较小的延迟，模拟自然的打字速度（约每20ms发送一次）
+                String[] words = content.split("(?<=[\\s\\n])"); // 按空格和换行分割，保留分隔符
+                for (String word : words) {
+                    if (word.isEmpty()) continue;
+                    callback.onToken(word);
+                    try {
+                        // 控制速度：每个词之间延迟15-25ms（随机变化，更自然）
+                        int delay = 15 + (int)(Math.random() * 10);
+                        Thread.sleep(delay);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        log.warn("流式输出被中断");
+                        break;
+                    }
+                }
+                
+                callback.onComplete(content);
+                
+                // 标记为流式输出
+                long duration = System.currentTimeMillis() - startTime;
+                ActionResult result = ActionResult.success("direct_response", "direct_response", content);
+                result.setDuration(duration);
+                result.setMetadata(Map.of("streaming", true));
+                log.info("直接返回响应成功（流式）: duration={}ms", duration);
+                return result;
+            } else {
+                // 非流式输出：直接返回
+                long duration = System.currentTimeMillis() - startTime;
+                ActionResult result = ActionResult.success("direct_response", "direct_response", content);
+                result.setDuration(duration);
+                result.setMetadata(Map.of("streaming", false));
+                log.info("直接返回响应成功（非流式）: duration={}ms", duration);
+                return result;
+            }
+            
+        } catch (Exception e) {
+            log.error("直接返回响应失败", e);
+            long duration = System.currentTimeMillis() - startTime;
+            ActionResult result = ActionResult.failure("direct_response", "direct_response",
+                e.getMessage(), "DIRECT_RESPONSE_ERROR");
+            result.setDuration(duration);
+            return result;
         }
     }
     

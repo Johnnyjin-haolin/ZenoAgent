@@ -90,6 +90,26 @@ public class ReActEngine {
                     return ActionResult.success("complete", "complete", 
                         "任务已完成: " + completeAction.getReasoning());
                 }
+                
+                // 检查是否有 DIRECT_RESPONSE action（简单场景直接返回）
+                AgentAction directResponseAction = actions.stream()
+                    .filter(a -> a.getType() == AgentAction.ActionType.DIRECT_RESPONSE)
+                    .findFirst()
+                    .orElse(null);
+                if (directResponseAction != null) {
+                    log.info("识别为简单场景，执行直接返回响应");
+                    stateMachine.transition(AgentState.EXECUTING);
+                    ActionResult result = actionExecutor.execute(directResponseAction, context);
+                    if (result.isSuccess()) {
+                        log.info("直接返回响应成功，任务完成");
+                        stateMachine.transition(AgentState.COMPLETED);
+                        return result; // 直接返回，不再继续循环
+                    } else {
+                        log.warn("直接返回响应失败，降级到正常流程: {}", result.getError());
+                        // 失败时继续正常流程
+                    }
+                }
+                
                 log.info("act开始");
                 
                 // 2. 行动阶段（Act）- 统一使用并行处理

@@ -19,6 +19,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * AI Agent 服务实现（ReAct架构版本）
@@ -135,6 +136,8 @@ public class AgentServiceImpl implements IAgentService {
         context.setModelId(modelId);
         context.setEnabledMcpGroups(request.getEnabledMcpGroups());
         context.setKnowledgeIds(request.getKnowledgeIds());
+        // 设置启用的工具名称列表（为空则允许所有工具）
+        context.setEnabledTools(request.getEnabledTools());
         context.setRequestId(requestId);
         
         // 设置事件发布器，用于各个Engine向前端发送进度事件
@@ -150,7 +153,7 @@ public class AgentServiceImpl implements IAgentService {
         });
         
         // 3.1 设置流式输出回调（使用CountDownLatch确保流式完成后再关闭SSE）
-        java.util.concurrent.CountDownLatch streamingCompleteLatch = new java.util.concurrent.CountDownLatch(1);
+        CountDownLatch streamingCompleteLatch = new CountDownLatch(1);
         context.setStreamingCallback(new StreamingCallback() {
             @Override
             public void onToken(String token) {
@@ -254,9 +257,12 @@ public class AgentServiceImpl implements IAgentService {
                 isStreaming = Boolean.TRUE.equals(metadata.get("streaming"));
             }
             
-            // 如果actionType是complete，说明目标已达成，内容应该已经通过之前的动作发送过了
+            // 如果actionType是complete或direct_response，说明目标已达成，内容应该已经通过之前的动作发送过了
             // 不需要再发送，避免重复
-            boolean shouldSendMessage = !isStreaming && !"complete".equals(finalResult.getActionType());
+            String actionType = finalResult.getActionType();
+            boolean shouldSendMessage = !isStreaming && 
+                                       !"complete".equals(actionType) && 
+                                       !"direct_response".equals(actionType);
             
             if (shouldSendMessage) {
                 // 非流式结果（如工具调用结果），需要发送完整内容
@@ -319,6 +325,21 @@ public class AgentServiceImpl implements IAgentService {
                 .ragRetrieveHistory(new java.util.ArrayList<>())
                 .iterations(0)
                 .build();
+        }
+        
+        // 从请求中更新配置（每次请求都可能更新工具选择等配置）
+        if (StringUtils.isNotEmpty(request.getModelId())) {
+            context.setModelId(request.getModelId());
+        }
+        if (request.getKnowledgeIds() != null) {
+            context.setKnowledgeIds(request.getKnowledgeIds());
+        }
+        if (request.getEnabledMcpGroups() != null) {
+            context.setEnabledMcpGroups(request.getEnabledMcpGroups());
+        }
+        // 设置启用的工具名称列表（为空则允许所有工具）
+        if (request.getEnabledTools() != null) {
+            context.setEnabledTools(request.getEnabledTools());
         }
         
         return context;

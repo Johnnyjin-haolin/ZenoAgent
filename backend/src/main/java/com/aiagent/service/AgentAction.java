@@ -1,5 +1,6 @@
 package com.aiagent.service;
 
+import com.aiagent.service.action.DirectResponseParams;
 import com.aiagent.service.action.LLMGenerateParams;
 import com.aiagent.service.action.RAGRetrieveParams;
 import com.aiagent.service.action.ToolCallParams;
@@ -53,6 +54,11 @@ public class AgentAction {
     private LLMGenerateParams llmGenerateParams;
     
     /**
+     * 直接返回响应参数（当type为DIRECT_RESPONSE时使用）
+     */
+    private DirectResponseParams directResponseParams;
+    
+    /**
      * 推理过程（为什么选择这个动作）
      */
     private String reasoning;
@@ -94,7 +100,13 @@ public class AgentAction {
         /**
          * 等待
          */
-        WAIT
+        WAIT,
+        
+        /**
+         * 直接返回响应
+         * 用于简单场景，直接返回预设的回复内容，无需调用LLM
+         */
+        DIRECT_RESPONSE
     }
     
     /**
@@ -184,6 +196,24 @@ public class AgentAction {
             .name("complete")
             .reasoning(reasoning)
             .description("任务完成")
+            .build();
+    }
+    
+    /**
+     * 创建直接返回响应动作
+     */
+    public static AgentAction directResponse(DirectResponseParams params, String reasoning) {
+        String contentPreview = params != null && params.getContent() != null
+            ? (params.getContent().length() > 50 
+                ? params.getContent().substring(0, 50) + "..." 
+                : params.getContent())
+            : "";
+        return AgentAction.builder()
+            .type(ActionType.DIRECT_RESPONSE)
+            .name("direct_response")
+            .directResponseParams(params)
+            .reasoning(reasoning)
+            .description("直接返回回复: " + contentPreview)
             .build();
     }
 }

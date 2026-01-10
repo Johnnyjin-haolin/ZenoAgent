@@ -1,6 +1,7 @@
 package com.aiagent.service;
 
 import com.aiagent.constant.AgentConstants;
+import com.aiagent.service.action.DirectResponseParams;
 import com.aiagent.service.action.LLMGenerateParams;
 import com.aiagent.service.action.RAGRetrieveParams;
 import com.aiagent.service.action.ToolCallParams;
@@ -56,11 +57,18 @@ public class ThinkingEngine {
             "- 上次工具调用的结果是否已经足够回答用户的问题？\n\n" +
             "### 步骤3：选择动作\n" +
             "根据评估结果，选择最合适的动作类型：\n\n" +
+            "**何时选择 DIRECT_RESPONSE？**\n" +
+            "✅ 用户询问系统能力、MCP工具列表等元信息（如\"你能做什么\"、\"有哪些MCP工具\"）\n" +
+            "✅ 简单的元信息查询，回复内容可以从系统配置直接获取，无需LLM生成\n" +
+            "✅ 内容已准备好，可以直接返回给用户，无需调用LLM处理\n" +
+            "⚠️ 注意：DIRECT_RESPONSE 与 LLM_GENERATE 的区别\n" +
+            "   - DIRECT_RESPONSE: 回复内容已经完全准备好（如系统配置的工具列表），直接返回即可\n" +
+            "   - LLM_GENERATE: 需要LLM根据上下文和已有信息生成新的回复内容\n\n" +
             "**何时选择 LLM_GENERATE？**\n" +
-            "✅ 用户询问系统能力、功能介绍等元信息（如\"你能做什么\"、\"你是谁\"）\n" +
             "✅ 打招呼、闲聊等社交性对话（如\"你好\"、\"谢谢\"）\n" +
-            "✅ 已有足够信息可以直接回答用户问题\n" +
-            "✅ 需要解释、总结、分析已有数据\n\n" +
+            "✅ 已有足够信息但需要LLM加工整理后回答用户问题\n" +
+            "✅ 需要解释、总结、分析已有数据\n" +
+            "✅ 需要根据上下文生成个性化的回复\n\n" +
             "**何时选择 TOOL_CALL？**\n" +
             "✅ 需要查询外部系统的实时数据\n" +
             "✅ 需要执行具体操作（创建、删除、修改等）\n" +
@@ -86,11 +94,20 @@ public class ThinkingEngine {
             "2. 只在确实需要时才调用工具\n" +
             "3. 对简单问题直接回答\n\n" +
             "## 示例参考\n\n" +
-            "【示例1：系统能力询问】\n" +
+            "【示例1：系统能力询问（简单场景）】\n" +
+            "用户输入: \"你能调用哪些MCP工具？\"\n" +
+            "分析: 这是询问MCP工具列表的元信息查询，可以从系统配置直接获取工具列表\n" +
+            "决策: DIRECT_RESPONSE\n" +
+            "原因: 工具列表已配置好，无需LLM生成，直接返回即可\n" +
+            "directResponseParams: {\n" +
+            "  \"content\": \"我可以调用以下MCP能力：\\n\\n**[服务器名]**:\\n1. 工具名 - 描述\\n...\",\n" +
+            "  \"streaming\": true\n" +
+            "}\n\n" +
+            "【示例1-2：系统能力询问（需要LLM加工）】\n" +
             "用户输入: \"你好呀，你有什么功能\"\n" +
-            "分析: 这是询问系统能力的元信息查询，不需要调用任何工具\n" +
+            "分析: 这是询问系统能力的元信息查询，但需要LLM友好地介绍功能\n" +
             "决策: LLM_GENERATE\n" +
-            "原因: 直接介绍系统功能即可\n\n" +
+            "原因: 需要LLM根据系统能力生成个性化的介绍，而不是直接返回配置内容\n\n" +
             "【示例2：明确的任务需求】\n" +
             "用户输入: \"帮我搜索华东区域的ECS实例\"\n" +
             "分析: 这是明确的查询需求，需要调用资源搜索工具\n" +
@@ -157,6 +174,24 @@ public class ThinkingEngine {
             "  }\n" +
             "}\n" +
             "```\n\n" +
+            "**DIRECT_RESPONSE格式**:\n" +
+            "```json\n" +
+            "{\n" +
+            "  \"actionType\": \"DIRECT_RESPONSE\",\n" +
+            "  \"actionName\": \"direct_response\",\n" +
+            "  \"reasoning\": \"为什么直接返回回复\",\n" +
+            "  \"directResponseParams\": {\n" +
+            "    \"content\": \"要返回给用户的完整回复内容（必需）\",\n" +
+            "    \"systemPrompt\": \"可选：系统提示（用于后续LLM格式化）\",\n" +
+            "    \"streaming\": true\n" +
+            "  }\n" +
+            "}\n" +
+            "```\n" +
+            "⚠️ **DIRECT_RESPONSE 使用说明**：\n" +
+            "- content 字段是必需的，应该包含要返回给用户的完整回复内容\n" +
+            "- 适用于：系统能力介绍、工具列表展示等可以直接回复用户的场景\n" +
+            "- streaming 默认为 true，表示使用流式输出（模拟打字效果）\n" +
+            "- 如果内容很长，可以分段返回，提高用户体验\n\n" +
             "**COMPLETE格式**:\n" +
             "```json\n" +
             "{\n" +
@@ -200,10 +235,10 @@ public class ThinkingEngine {
         
         // 构建思考提示词
         String thinkingPrompt = buildThinkingPrompt(goal, context, lastResults);
-        
+        log.info("思考提示词: {}", thinkingPrompt);
         // 调用LLM进行思考
         String thinkingResult = callLLMForThinking(thinkingPrompt, context);
-        
+        log.info("思考结果: {}", thinkingResult);
         // 解析思考结果，生成动作列表
         List<AgentAction> actions = parseThinkingResult(thinkingResult, goal, context);
         
@@ -318,7 +353,8 @@ public class ThinkingEngine {
         
         // ========== 第五部分：可用工具 ==========
         List<McpToolInfo> availableTools = toolSelector.selectTools(goal,
-            context != null ? context.getEnabledMcpGroups() : null);
+            context != null ? context.getEnabledMcpGroups() : null,
+            context != null ? context.getEnabledTools() : null);
         if (!availableTools.isEmpty()) {
             prompt.append("## 可用工具\n\n");
             for (McpToolInfo tool : availableTools) {
@@ -380,9 +416,16 @@ public class ThinkingEngine {
     private String generateDefaultThinking(String goal, AgentContext context) {
         log.info("LLM思考失败，使用降级逻辑");
         
+        // 1. 优先判断：检查是否为简单场景，可以直接返回（使用checkQuickResponse）
+        AgentAction quickResponse = checkQuickResponse(goal, context);
+        if (quickResponse != null) {
+            log.info("降级逻辑识别为简单场景，返回DIRECT_RESPONSE");
+            return createDirectResponseAction(quickResponse);
+        }
+        
         String lowerGoal = goal.toLowerCase();
         
-        // 1. 优先判断：元信息查询（询问系统功能、能力等）
+        // 2. 判断：元信息查询（询问系统功能、能力等）
         if (isMetaQuery(lowerGoal)) {
             log.info("识别为元信息查询，返回LLM_GENERATE");
             return createLLMGenerateAction(
@@ -402,7 +445,8 @@ public class ThinkingEngine {
         
         // 3. 判断：是否有明确的操作意图
         List<com.aiagent.vo.McpToolInfo> availableTools = toolSelector.selectTools(goal, 
-            context != null ? context.getEnabledMcpGroups() : null);
+            context != null ? context.getEnabledMcpGroups() : null,
+            context != null ? context.getEnabledTools() : null);
         
         if (!availableTools.isEmpty() && hasActionIntent(lowerGoal)) {
             log.info("识别为操作意图，返回TOOL_CALL");
@@ -418,6 +462,124 @@ public class ThinkingEngine {
         return createLLMGenerateAction(
             "可以直接回答的问题",
             "用户问: " + goal + "\n请根据你的知识直接回答用户的问题。"
+        );
+    }
+    
+    /**
+     * 检查是否为简单场景，可以直接返回响应
+     * 
+     * @param goal 用户目标
+     * @param context Agent上下文
+     * @return 如果是简单场景，返回对应的AgentAction；否则返回null
+     */
+    private AgentAction checkQuickResponse(String goal, AgentContext context) {
+        if (StringUtils.isEmpty(goal)) {
+            return null;
+        }
+        
+        String lowerGoal = goal.toLowerCase().trim();
+        
+        // 1. 系统能力询问（MCP工具列表）
+        AgentAction action = checkSystemCapabilityQuery(lowerGoal, goal, context);
+        if (action != null) {
+            return action;
+        }
+        
+        // 2. 可以继续添加其他简单场景的判断...
+        // 例如：问候、帮助信息等
+        
+        return null;
+    }
+    
+    /**
+     * 检查是否为系统能力询问（MCP工具列表）
+     */
+    private AgentAction checkSystemCapabilityQuery(String lowerGoal, String originalGoal, AgentContext context) {
+        // 匹配模式：询问系统能力、MCP工具、可用工具等
+        // 关键词列表（不区分顺序，只要包含即可）
+        String[] capabilityKeywords = {
+            "你能", "你会", "你有什么", "功能", "能力", "工具", "mcp",
+            "capability", "tool", "能调用", "可用"
+        };
+        
+        // 简单匹配：包含关键词
+        boolean isCapabilityQuery = false;
+        int matchCount = 0;
+        for (String keyword : capabilityKeywords) {
+            if (lowerGoal.contains(keyword)) {
+                matchCount++;
+            }
+        }
+        
+        // 如果包含2个或以上关键词，很可能是能力询问
+        if (matchCount >= 2) {
+            isCapabilityQuery = true;
+        }
+        
+        // 更精确的匹配：检查是否包含疑问词和能力词组合
+        if (!isCapabilityQuery) {
+            boolean hasQuestionWord = lowerGoal.contains("什么") || lowerGoal.contains("哪些") || 
+                                    lowerGoal.contains("how") || lowerGoal.contains("what") ||
+                                    lowerGoal.contains("？") || lowerGoal.contains("?");
+            boolean hasCapabilityWord = lowerGoal.contains("功能") || lowerGoal.contains("能力") || 
+                                      lowerGoal.contains("工具") || lowerGoal.contains("mcp") ||
+                                      lowerGoal.contains("capability") || lowerGoal.contains("tool") ||
+                                      lowerGoal.contains("能调用") || lowerGoal.contains("可用");
+            isCapabilityQuery = hasQuestionWord && hasCapabilityWord;
+        }
+        
+        if (!isCapabilityQuery) {
+            return null;
+        }
+        
+        log.info("识别为系统能力询问: {}", originalGoal);
+        
+        // 获取可用工具列表
+        List<McpToolInfo> tools = toolSelector.selectTools(originalGoal, 
+            context != null ? context.getEnabledMcpGroups() : null,
+            context != null ? context.getEnabledTools() : null);
+        
+        // 按服务器分组
+        java.util.Map<String, List<McpToolInfo>> toolsByServer = new java.util.HashMap<>();
+        for (McpToolInfo tool : tools) {
+            String serverId = tool.getServerId() != null ? tool.getServerId() : "unknown";
+            toolsByServer.computeIfAbsent(serverId, k -> new java.util.ArrayList<>()).add(tool);
+        }
+        
+        // 构建工具介绍内容
+        StringBuilder content = new StringBuilder();
+        content.append("我可以调用以下MCP能力：\n\n");
+        
+        if (tools.isEmpty()) {
+            content.append("当前未配置MCP工具。");
+        } else {
+            int index = 1;
+            for (java.util.Map.Entry<String, List<McpToolInfo>> entry : toolsByServer.entrySet()) {
+                String serverId = entry.getKey();
+                List<McpToolInfo> serverTools = entry.getValue();
+                
+                // 服务器名称（如果有分组信息，可以使用分组名称）
+                content.append("**").append(serverId).append("**:\n");
+                for (McpToolInfo tool : serverTools) {
+                    content.append(index++).append(". **").append(tool.getName()).append("**");
+                    if (StringUtils.isNotEmpty(tool.getDescription())) {
+                        content.append(" - ").append(tool.getDescription());
+                    }
+                    content.append("\n");
+                }
+                content.append("\n");
+            }
+        }
+        
+        String reasoning = "用户询问系统能力，属于元信息查询。已从系统配置中获取所有可用的MCP工具列表，无需调用外部工具，可以直接向用户介绍这些能力。";
+        
+        return AgentAction.directResponse(
+            DirectResponseParams.builder()
+                .content(content.toString())
+                .systemPrompt("请友好、清晰地介绍这些MCP能力。")
+                .streaming(true)
+                .build(),
+            reasoning
         );
     }
     
@@ -473,6 +635,32 @@ public class ThinkingEngine {
             }
         }
         return false;
+    }
+    
+    /**
+     * 创建DIRECT_RESPONSE动作的JSON字符串
+     */
+    private String createDirectResponseAction(AgentAction action) {
+        if (action == null || action.getDirectResponseParams() == null) {
+            log.warn("无效的DIRECT_RESPONSE动作");
+            return null;
+        }
+        
+        DirectResponseParams params = action.getDirectResponseParams();
+        Map<String, Object> result = new HashMap<>();
+        result.put("actionType", "DIRECT_RESPONSE");
+        result.put("actionName", "direct_response");
+        result.put("reasoning", action.getReasoning());
+        
+        Map<String, Object> directResponseParams = new HashMap<>();
+        directResponseParams.put("content", params.getContent());
+        if (StringUtils.isNotEmpty(params.getSystemPrompt())) {
+            directResponseParams.put("systemPrompt", params.getSystemPrompt());
+        }
+        directResponseParams.put("streaming", params.isStreaming());
+        result.put("directResponseParams", directResponseParams);
+        
+        return JSON.toJSONString(result);
     }
     
     /**
@@ -600,6 +788,9 @@ public class ThinkingEngine {
                 break;
             case LLM_GENERATE:
                 action = parseLLMGenerateAction(json, actionName, reasoning, context);
+                break;
+            case DIRECT_RESPONSE:
+                action = parseDirectResponseAction(json, actionName, reasoning, context);
                 break;
             case COMPLETE:
                 action = AgentAction.complete(reasoning != null ? reasoning : "任务已完成");
@@ -761,6 +952,38 @@ public class ThinkingEngine {
             .build();
         
         return AgentAction.ragRetrieve(ragParams, reasoning);
+    }
+    
+    /**
+     * 解析直接返回响应动作
+     */
+    private AgentAction parseDirectResponseAction(JSONObject json, String actionName, String reasoning, AgentContext context) {
+        JSONObject directResponseParamsJson = json.getJSONObject("directResponseParams");
+        if (directResponseParamsJson == null) {
+            log.warn("DIRECT_RESPONSE动作缺少directResponseParams");
+            return null;
+        }
+        
+        String content = directResponseParamsJson.getString("content");
+        if (StringUtils.isEmpty(content)) {
+            log.warn("DIRECT_RESPONSE动作缺少content");
+            return null;
+        }
+        
+        String systemPrompt = directResponseParamsJson.getString("systemPrompt");
+        boolean streaming = directResponseParamsJson.getBooleanValue("streaming");
+        // 如果未指定streaming，默认为true
+        if (!directResponseParamsJson.containsKey("streaming")) {
+            streaming = true;
+        }
+        
+        DirectResponseParams directResponseParams = DirectResponseParams.builder()
+            .content(content)
+            .systemPrompt(systemPrompt)
+            .streaming(streaming)
+            .build();
+        
+        return AgentAction.directResponse(directResponseParams, reasoning);
     }
     
     /**
