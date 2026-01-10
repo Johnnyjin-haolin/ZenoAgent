@@ -37,7 +37,9 @@
         <a-select
           v-model:value="formData.embeddingModelId"
           :disabled="isEdit"
+          :loading="loadingModels"
           placeholder="请选择向量模型"
+          :not-found-content="loadingModels ? undefined : '暂无可用向量模型'"
         >
           <a-select-option
             v-for="model in embeddingModels"
@@ -45,7 +47,7 @@
             :value="model.id"
           >
             <div class="model-option">
-              <span class="model-name">{{ model.name }}</span>
+              <span class="model-name">{{ model.displayName || model.name || model.id }}</span>
               <span v-if="model.description" class="model-desc">
                 - {{ model.description }}
               </span>
@@ -61,13 +63,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, computed, nextTick } from 'vue';
+import { ref, reactive, watch, computed, nextTick, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
 import type { FormInstance, Rule } from 'ant-design-vue/es/form';
 import {
   createKnowledgeBase,
   updateKnowledgeBase,
 } from '@/api/knowledge-base.api';
+import { getEmbeddingModels } from '@/views/agent/agent.api';
+import type { ModelInfo } from '@/views/agent/agent.types';
 import type {
   KnowledgeBase,
   CreateKnowledgeBaseRequest,
@@ -93,20 +97,15 @@ const emit = defineEmits<{
 const formRef = ref<FormInstance>();
 const loading = ref(false);
 
-// 向量模型列表（当前只支持一个，后续可以扩展）
-const embeddingModels = ref([
-  {
-    id: 'text-embedding-3-small',
-    name: 'text-embedding-3-small',
-    description: 'OpenAI 小型向量模型',
-  },
-]);
+// 向量模型列表（从后端动态获取）
+const embeddingModels = ref<ModelInfo[]>([]);
+const loadingModels = ref(false);
 
 // 表单数据
 const formData = reactive<CreateKnowledgeBaseRequest & { embeddingModelId?: string }>({
   name: '',
   description: '',
-  embeddingModelId: 'text-embedding-3-small',
+  embeddingModelId: '',
 });
 
 // 是否编辑模式
@@ -129,11 +128,49 @@ const rules: Record<string, Rule[]> = {
   ],
 };
 
+// 加载 Embedding 模型列表
+const loadEmbeddingModels = async () => {
+  if (embeddingModels.value.length > 0) {
+    // 已经加载过，不再重复加载
+    return;
+  }
+
+  loadingModels.value = true;
+  try {
+    const models = await getEmbeddingModels();
+    embeddingModels.value = models;
+
+    // 如果有默认模型，设置为默认值（仅在创建模式下）
+    if (models.length > 0 && !isEdit.value && !formData.embeddingModelId) {
+      const defaultModel = models.find((m) => m.isDefault) || models[0];
+      formData.embeddingModelId = defaultModel.id;
+    }
+  } catch (error) {
+    console.error('获取向量模型列表失败:', error);
+    message.error('获取向量模型列表失败，请刷新重试');
+    // 降级处理：使用空列表
+    embeddingModels.value = [];
+  } finally {
+    loadingModels.value = false;
+  }
+};
+
 // 重置表单到默认值
-const resetForm = () => {
+const resetForm = async () => {
   formData.name = '';
   formData.description = '';
-  formData.embeddingModelId = 'text-embedding-3-small';
+  
+  // 确保模型列表已加载
+  await loadEmbeddingModels();
+  
+  // 如果有模型列表，使用第一个或默认模型
+  if (embeddingModels.value.length > 0) {
+    const defaultModel = embeddingModels.value.find((m) => m.isDefault) || embeddingModels.value[0];
+    formData.embeddingModelId = defaultModel.id;
+  } else {
+    formData.embeddingModelId = '';
+  }
+  
   // 清除验证状态
   nextTick(() => {
     formRef.value?.resetFields();
@@ -151,37 +188,44 @@ const fillForm = (kb: KnowledgeBase) => {
   // 直接设置表单数据
   formData.name = kb.name || '';
   formData.description = kb.description || '';
-  formData.embeddingModelId = kb.embeddingModelId || 'text-embedding-3-small';
+  formData.embeddingModelId = kb.embeddingModelId || '';
   // 清除验证状态，但不重置字段值
   nextTick(() => {
     formRef.value?.clearValidate();
   });
 };
 
+// 组件挂载时加载模型列表
+onMounted(() => {
+  loadEmbeddingModels();
+});
+
 // 监听弹窗打开和 knowledgeBase 变化，根据模式填充或重置表单
 watch(
   [() => props.open, () => props.knowledgeBase],
-  ([open, kb], [oldOpen, oldKb]) => {
+  async ([open, kb], [oldOpen, oldKb]) => {
     console.log('Watch triggered - open:', open, 'oldOpen:', oldOpen, 'kb:', kb, 'oldKb:', oldKb);
     if (open) {
+      // 确保模型列表已加载
+      await loadEmbeddingModels();
+      
       // 弹窗打开时，使用 nextTick 确保 DOM 和 props 都已更新
-      nextTick(() => {
-        const currentKb = props.knowledgeBase;
-        console.log('Modal opened, current knowledgeBase:', currentKb);
-        if (currentKb && currentKb.id) {
-          // 编辑模式：填充表单数据
-          console.log('Filling form with knowledgeBase:', currentKb);
-          fillForm(currentKb);
-        } else {
-          // 创建模式：重置表单
-          console.log('Resetting form for create mode');
-          resetForm();
-        }
-      });
+      await nextTick();
+      const currentKb = props.knowledgeBase;
+      console.log('Modal opened, current knowledgeBase:', currentKb);
+      if (currentKb && currentKb.id) {
+        // 编辑模式：填充表单数据
+        console.log('Filling form with knowledgeBase:', currentKb);
+        fillForm(currentKb);
+      } else {
+        // 创建模式：重置表单
+        console.log('Resetting form for create mode');
+        await resetForm();
+      }
     } else if (oldOpen && !open) {
       // 弹窗从打开变为关闭时，重置表单（确保下次打开时数据正确）
       console.log('Modal closed, resetting form');
-      resetForm();
+      await resetForm();
     }
   },
   { immediate: false }

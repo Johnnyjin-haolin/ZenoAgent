@@ -51,5 +51,10 @@ public class ModelInfoVO {
      * 是否为默认模型
      */
     private Boolean isDefault;
+    
+    /**
+     * 模型类型（CHAT: 对话模型, EMBEDDING: 向量模型）
+     */
+    private String type;
 }
 

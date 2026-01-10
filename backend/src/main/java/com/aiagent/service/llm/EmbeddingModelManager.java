@@ -1,6 +1,7 @@
 package com.aiagent.service.llm;
 
 import com.aiagent.config.AgentConfig;
+import com.aiagent.enums.ModelType;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
 import lombok.extern.slf4j.Slf4j;
@@ -94,9 +95,9 @@ public class EmbeddingModelManager {
         return models.stream()
             .filter(m -> modelId.equals(m.getId()))
             .filter(m -> {
-                // 检查是否为 Embedding 模型
-                String type = m.getType();
-                return type != null && "EMBEDDING".equalsIgnoreCase(type);
+                // 检查是否为 Embedding 模型（使用枚举）
+                ModelType modelType = ModelType.fromCode(m.getType());
+                return modelType == ModelType.EMBEDDING;
             })
             .findFirst()
             .orElse(null);

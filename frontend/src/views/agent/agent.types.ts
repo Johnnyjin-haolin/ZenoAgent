@@ -79,12 +79,18 @@ export interface AgentEvent {
 export interface ModelInfo {
   /** 模型ID */
   id: string;
+  /** 模型名称 */
+  name?: string;
   /** 展示名称 */
   displayName: string;
   /** 模型描述 */
   description: string;
+  /** 模型提供商 */
+  provider?: string;
+  /** 模型类型（CHAT: 对话模型, EMBEDDING: 向量模型） */
+  type?: string;
   /** 图标（emoji 或图标类名） */
-  icon: string;
+  icon?: string;
   /** 排序 */
   sort: number;
   /** 是否为默认选项 */

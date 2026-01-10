@@ -1,6 +1,7 @@
 package com.aiagent.controller;
 
 import com.aiagent.config.AgentConfig;
+import com.aiagent.enums.ModelType;
 import com.aiagent.service.IAgentService;
 import com.aiagent.service.memory.MemorySystem;
 import com.aiagent.service.tool.McpGroupManager;
@@ -95,9 +96,12 @@ public class AgentController {
     /**
      * 获取可用模型列表
      * 从配置文件中读取所有配置的模型
+     * 
+     * @param type 模型类型筛选（可选）：CHAT（对话模型）或 EMBEDDING（向量模型），不传则返回所有模型
      */
     @GetMapping("/models/available")
-    public ResponseEntity<?> getAvailableModels() {
+    public ResponseEntity<?> getAvailableModels(
+            @RequestParam(required = false) String type) {
         try {
             List<AgentConfig.LLMConfig.ModelDefinition> modelDefinitions = 
                 agentConfig.getLlm().getModels();
@@ -109,14 +113,27 @@ public class AgentController {
             
             String defaultModelId = agentConfig.getModel().getDefaultModelId();
             
+            // 解析类型筛选参数（使用枚举）
+            ModelType filterType = null;
+            if (type != null && !type.trim().isEmpty()) {
+                filterType = ModelType.fromCode(type);
+            }
+            
             // 转换为前端需要的格式
             List<ModelInfoVO> models = new ArrayList<>();
             int sort = 1;
             
             for (AgentConfig.LLMConfig.ModelDefinition modelDef : modelDefinitions) {
+                // 获取模型类型（如果未设置，默认CHAT）
+                ModelType modelType = ModelType.fromCode(modelDef.getType());
+                
+                // 如果指定了类型筛选，只返回匹配的模型
+                if (filterType != null && modelType != filterType) {
+                    continue;
+                }
+                 
                 // 判断是否为默认模型
                 boolean isDefault = defaultModelId != null && defaultModelId.equals(modelDef.getId());
-
                 
                 // 如果没有设置name，使用id作为显示名称
                 String displayName = modelDef.getName() != null && !modelDef.getName().isEmpty()
@@ -132,6 +149,7 @@ public class AgentController {
                     .displayName(displayName)
                     .description(description)
                     .provider(modelDef.getProvider())
+                    .type(modelType.getCode())
                     .sort(sort++)
                     .isDefault(isDefault)
                     .build();
@@ -149,6 +167,7 @@ public class AgentController {
                 return sortCompare != 0 ? sortCompare : a.getId().compareTo(b.getId());
             });
             
+            log.debug("获取模型列表成功，类型筛选: {}, 返回数量: {}", type, models.size());
             return ResponseEntity.ok().body(Map.of("success", true, "result", models));
         } catch (Exception e) {
             log.error("获取模型列表失败", e);

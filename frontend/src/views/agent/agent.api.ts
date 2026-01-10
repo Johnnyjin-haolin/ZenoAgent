@@ -13,6 +13,7 @@ import type {
   KnowledgeInfo,
   ConversationInfo,
 } from './agent.types';
+import { ModelType } from '@/types/model.types';
 
 /**
  * API 端点
@@ -42,11 +43,13 @@ export enum AgentApi {
 
 /**
  * 获取可用模型列表
+ * @param type 模型类型筛选（可选），使用 ModelType 枚举，不传则返回所有模型
  */
-export async function getAvailableModels(): Promise<ModelInfo[]> {
+export async function getAvailableModels(type?: ModelType): Promise<ModelInfo[]> {
   try {
+    const params = type ? { type: type as string } : undefined;
     const response = await defHttp.get(
-      { url: AgentApi.availableModels },
+      { url: AgentApi.availableModels, params },
       { isTransformResponse: false }
     );
     return response.result || [];
@@ -54,6 +57,13 @@ export async function getAvailableModels(): Promise<ModelInfo[]> {
     console.error('获取模型列表失败:', error);
     return [];
   }
+}
+
+/**
+ * 获取 Embedding 模型列表（向量模型）
+ */
+export async function getEmbeddingModels(): Promise<ModelInfo[]> {
+  return getAvailableModels(ModelType.EMBEDDING);
 }
 
 /**

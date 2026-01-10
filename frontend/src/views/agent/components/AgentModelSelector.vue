@@ -13,14 +13,17 @@
       :allow-clear="allowClear"
       size="small"
       class="model-select"
-      :dropdown-style="{ minWidth: '140px' }"
+      :dropdown-match-select-width="false"
+      dropdown-class-name="model-select-dropdown"
       @change="handleSelectChange"
     >
       <!-- 智能选择选项 -->
       <a-select-option value="">
         <a-tooltip placement="right" :title="'根据任务类型自动选择最优模型'">
           <div class="select-option-content">
-            <span class="option-text">智能选择</span>
+            <div class="option-main">
+              <span class="option-name">智能选择</span>
+            </div>
           </div>
         </a-tooltip>
       </a-select-option>
@@ -31,9 +34,16 @@
         :key="model.id"
         :value="model.id"
       >
-        <a-tooltip placement="right" :title="model.description || model.displayName">
+        <a-tooltip 
+          placement="right" 
+          :title="model.description"
+        >
           <div class="select-option-content">
-            <span class="option-text">{{ model.displayName }}</span>
+            <div class="option-main">
+              <span class="option-name" :title="model.displayName ">
+                {{ model.displayName}}
+              </span>
+            </div>
           </div>
         </a-tooltip>
       </a-select-option>
@@ -46,6 +56,7 @@ import { ref, onMounted, watch } from 'vue';
 import { Icon } from '@/components/Icon';
 import { message } from 'ant-design-vue';
 import { getAvailableModels } from '../agent.api';
+import { ModelType } from '@/types/model.types';
 import type { ModelInfo } from '../agent.types';
 
 const props = withDefaults(
@@ -79,11 +90,11 @@ watch(
   }
 );
 
-// 加载模型列表
+// 加载模型列表（只加载 CHAT 类型的模型）
 const loadModels = async () => {
   loading.value = true;
   try {
-    const result = await getAvailableModels();
+    const result = await getAvailableModels(ModelType.CHAT);
     
     // 按 sort 排序
     models.value = result.sort((a, b) => a.sort - b.sort);
@@ -100,6 +111,43 @@ const loadModels = async () => {
   } finally {
     loading.value = false;
   }
+};
+
+// 获取提供商标签
+const getProviderLabel = (provider?: string): string => {
+  if (!provider) return '';
+  
+  const providerMap: Record<string, string> = {
+    'OPENAI': 'OpenAI',
+    'ZHIPU': '智谱AI',
+    'DEEPSEEK': 'DeepSeek',
+    'QWEN': '通义千问',
+    'GLM': 'GLM',
+  };
+  
+  return providerMap[provider.toUpperCase()] || provider;
+};
+
+// 获取模型的 Tooltip 内容
+const getModelTooltip = (model: ModelInfo): string => {
+  const parts: string[] = [];
+  
+  // 添加模型名称
+  if (model.displayName || model.name) {
+    parts.push(`模型: ${model.displayName || model.name}`);
+  }
+  
+  // 添加描述
+  if (model.description) {
+    parts.push(`描述: ${model.description}`);
+  }
+  
+  // 添加提供商
+  if (model.provider) {
+    parts.push(`提供商: ${getProviderLabel(model.provider)}`);
+  }
+  
+  return parts.join('\n');
 };
 
 // 处理选择框变化
@@ -154,13 +202,17 @@ defineExpose({
       align-items: center;
     }
 
-    // 选中后显示的文本
+    // 选中后显示的文本（截断处理）
     :deep(.ant-select-selection-item) {
       font-size: 14px;
       font-weight: 500;
       line-height: 1.5;
       display: flex;
       align-items: center;
+      max-width: 110px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     // 下拉箭头图标
@@ -173,29 +225,52 @@ defineExpose({
   // 选项内容样式
   .select-option-content {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 6px;
+    flex-direction: column;
+    gap: 4px;
     width: 100%;
-    min-width: 100px;
+    min-width: 200px;
+    padding: 2px 0;
 
-    .option-text {
-      flex: 1;
-      font-size: 15px;
-      color: #262626;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    .option-main {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
     }
 
-    .option-tag {
-      margin: 0;
-      font-size: 10px;
-      padding: 1px 5px;
-      line-height: 14px;
-      height: 16px;
+    .option-name {
+      flex: 1;
+      font-size: 14px;
+      color: #262626;
+      font-weight: 500;
+      // 允许换行，但优先单行显示
+      word-break: break-word;
+      line-height: 1.5;
+      min-width: 0; // 允许 flex 收缩
+    }
+
+    .option-provider {
       flex-shrink: 0;
+      font-size: 11px;
+      color: #8c8c8c;
+      background: #f0f0f0;
+      padding: 2px 6px;
       border-radius: 3px;
+      font-weight: normal;
+    }
+
+    .option-desc {
+      font-size: 12px;
+      color: #8c8c8c;
+      line-height: 1.4;
+      margin-top: 2px;
+      // 描述最多显示2行
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
   }
 
@@ -212,20 +287,27 @@ defineExpose({
 
       :deep(.ant-select-selection-item) {
         font-size: 15px;
+        max-width: 80px; // 紧凑模式下更小的最大宽度
       }
     }
 
     .select-option-content {
-      min-width: 85px;
+      min-width: 200px; // 下拉选项仍然保持最小宽度以确保内容完整显示
     }
   }
 }
 
 // 全局样式：下拉选项样式优化
-:deep(.ant-select-dropdown) {
+:deep(.ant-select-dropdown.model-select-dropdown) {
+  // 下拉菜单宽度自适应（最小200px，最大350px）
+  min-width: 200px !important;
+  max-width: 350px !important;
+  width: auto !important;
+
   .ant-select-item {
-    padding: 6px 10px;
-    font-size: 15px;
+    padding: 8px 12px;
+    font-size: 14px;
+    line-height: 1.5;
 
     &:hover {
       background: #f5f5f5;
@@ -233,12 +315,16 @@ defineExpose({
 
     &.ant-select-item-option-selected {
       background: #e6f7ff;
-      font-weight: 600;
+      font-weight: 500;
 
-      .option-text {
+      .option-name {
         color: #1890ff;
-        font-size: 20px;
         font-weight: 600;
+      }
+
+      .option-provider {
+        background: #bae7ff;
+        color: #0958d9;
       }
     }
   }
