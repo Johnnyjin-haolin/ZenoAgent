@@ -8,9 +8,23 @@ aiagent:
       - id: gpt-4o-mini
         name: GPT-4o Mini
         provider: OPENAI
+        type: CHAT  # 模型类型：CHAT（对话模型）或 EMBEDDING（向量模型）
+        apiKey: sk-test-api-key
+        baseUrl: https://api.openai.com/v1
+      # Embedding 模型配置
+      - id: text-embedding-3-small
+        name: OpenAI Embedding 3 Small
+        provider: OPENAI
+        type: EMBEDDING  # 向量模型
+        modelName: text-embedding-3-small  # 实际的模型名称（用于Embedding API调用）
         apiKey: sk-test-api-key
         baseUrl: https://api.openai.com/v1
     default-model: gpt-4o-mini
+  
+  # RAG配置
+  rag:
+    # 默认 Embedding 模型ID（从 llm.models 中选择，必须是 type: EMBEDDING 的模型）
+    default-embedding-model-id: text-embedding-3-small
 
 spring:
   redis:

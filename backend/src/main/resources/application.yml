@@ -70,11 +70,21 @@ aiagent:
       - id: gpt-4o-mini
         name: GPT-4o Mini
         provider: OPENAI
+        type: CHAT  # 模型类型：CHAT（对话模型）或 EMBEDDING（向量模型）
         apiKey:
         baseUrl: https://api.openai.com/v1
       - id: gpt-4o
         name: GPT-4o
         provider: OPENAI
+        type: CHAT
+        apiKey:
+        baseUrl: https://api.openai.com/v1
+      # Embedding 模型配置
+      - id: text-embedding-3-small
+        name: OpenAI Embedding 3 Small
+        provider: OPENAI
+        type: EMBEDDING  # 向量模型
+        modelName: text-embedding-3-small  # 实际的模型名称（用于Embedding API调用）
         apiKey:
         baseUrl: https://api.openai.com/v1
     # 默认模型ID（从上面的models列表中选择）
@@ -104,6 +114,8 @@ aiagent:
   rag:
     default-top-k: 5
     default-min-score: 0.5
+    # 默认 Embedding 模型ID（从 llm.models 中选择，必须是 type: EMBEDDING 的模型）
+    default-embedding-model-id: text-embedding-3-small
     # 向量存储配置（PostgreSQL + pgvector）
     # 注意：RAG功能需要PostgreSQL数据库并安装pgvector扩展
     # 安装pgvector扩展命令：

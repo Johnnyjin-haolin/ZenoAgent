@@ -11,14 +11,13 @@
         <result column="content" property="content"/>
         <result column="metadata" property="metadata"/>
         <result column="status" property="status"/>
-        <result column="failed_reason" property="failedReason"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
     </resultMap>
     
     <insert id="insert">
-        INSERT INTO document (id, knowledge_base_id, title, type, content, metadata, status, failed_reason, create_time, update_time)
-        VALUES (#{id}, #{knowledgeBaseId}, #{title}, #{type}, #{content}, #{metadata}, #{status}, #{failedReason}, #{createTime}, #{updateTime})
+        INSERT INTO document (id, knowledge_base_id, title, type, content, metadata, status, create_time, update_time)
+        VALUES (#{id}, #{knowledgeBaseId}, #{title}, #{type}, #{content}, #{metadata}, #{status}, #{createTime}, #{updateTime})
     </insert>
     
     <select id="selectById" resultMap="BaseResultMap">
@@ -30,10 +29,10 @@
     </select>
     
     <insert id="insertBatch">
-        INSERT INTO document (id, knowledge_base_id, title, type, content, metadata, status, failed_reason, create_time, update_time)
+        INSERT INTO document (id, knowledge_base_id, title, type, content, metadata, status, create_time, update_time)
         VALUES
         <foreach collection="documents" item="item" separator=",">
-            (#{item.id}, #{item.knowledgeBaseId}, #{item.title}, #{item.type}, #{item.content}, #{item.metadata}, #{item.status}, #{item.failedReason}, #{item.createTime}, #{item.updateTime})
+            (#{item.id}, #{item.knowledgeBaseId}, #{item.title}, #{item.type}, #{item.content}, #{item.metadata}, #{item.status}, #{item.createTime}, #{item.updateTime})
         </foreach>
     </insert>
     
@@ -44,7 +43,6 @@
             content = #{content},
             metadata = #{metadata},
             status = #{status},
-            failed_reason = #{failedReason},
             update_time = #{updateTime}
         WHERE id = #{id}
     </update>

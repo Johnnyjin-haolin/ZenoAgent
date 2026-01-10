@@ -6,6 +6,7 @@ import com.aiagent.service.action.LLMGenerateParams;
 import com.aiagent.service.action.RAGRetrieveParams;
 import com.aiagent.service.action.ToolCallParams;
 import com.aiagent.service.memory.MemorySystem;
+import com.aiagent.service.rag.RAGEnhancer;
 import com.aiagent.service.tool.McpToolExecutor;
 import com.aiagent.util.StringUtils;
 import com.aiagent.vo.AgentContext;

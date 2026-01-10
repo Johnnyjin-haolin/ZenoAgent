@@ -13,11 +13,22 @@ aiagent:
       - id: gpt-4o-mini
         name: GPT-4o Mini
         provider: OPENAI
+        type: CHAT  # 模型类型：CHAT（对话模型）或 EMBEDDING（向量模型）
         apiKey: sk-your-openai-api-key-here
         baseUrl: https://api.openai.com/v1
       - id: gpt-4o
         name: GPT-4o
         provider: OPENAI
+        type: CHAT
+        apiKey: sk-your-openai-api-key-here
+        baseUrl: https://api.openai.com/v1
+      
+      # Embedding 模型配置
+      - id: text-embedding-3-small
+        name: OpenAI Embedding 3 Small
+        provider: OPENAI
+        type: EMBEDDING  # 向量模型
+        modelName: text-embedding-3-small  # 实际的模型名称（用于Embedding API调用）
         apiKey: sk-your-openai-api-key-here
         baseUrl: https://api.openai.com/v1
       
@@ -39,6 +50,7 @@ aiagent:
       # - id: qwen-turbo
       #   name: Qwen Turbo
       #   provider: QWEN
+      #   type: CHAT
       #   api-key: your-qwen-api-key
       #   base-url: https://dashscope.aliyuncs.com/compatible-mode/v1  # 可选
     # 默认模型ID（从上面的models列表中选择）
@@ -59,6 +71,11 @@ aiagent:
       COMPLEX_WORKFLOW:
         - gpt-4o
         - gpt-4o-mini  # 如果gpt-4o失败，尝试gpt-4o-mini
+  
+  # RAG配置
+  rag:
+    # 默认 Embedding 模型ID（从 llm.models 中选择，必须是 type: EMBEDDING 的模型）
+    default-embedding-model-id: text-embedding-3-small
 
 spring:
   # Redis配置（必需）

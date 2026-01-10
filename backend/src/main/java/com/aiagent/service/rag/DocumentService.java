@@ -8,6 +8,7 @@ import com.aiagent.util.UUIDGenerator;
 import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
 import org.apache.commons.compress.archivers.zip.ZipFile;
 import org.apache.commons.io.FilenameUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,7 +23,6 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Enumeration;
@@ -30,7 +30,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 /**
@@ -102,9 +101,12 @@ public class DocumentService {
             throw new IllegalArgumentException("File size exceeds limit: " + maxFileSize);
         }
         
-        // 保存文件
+        // 直接从流解析文件内容（不保存原文件）
         String fileId = UUIDGenerator.generate();
-        String relativePath = saveFile(knowledgeBaseId, fileId, file);
+        String content;
+        try (InputStream inputStream = file.getInputStream()) {
+            content = documentParser.parse(inputStream, fileName);
+        }
         
         // 创建文档记录
         Document document = Document.builder()
@@ -112,14 +114,14 @@ public class DocumentService {
                 .knowledgeBaseId(knowledgeBaseId)
                 .title(FilenameUtils.getBaseName(fileName))
                 .type(Document.Type.FILE)
+                .content(content)  // 直接存储解析后的内容
                 .status(Document.Status.DRAFT)
                 .createTime(new Date())
                 .updateTime(new Date())
                 .build();
         
-        // 设置元数据
+        // 设置元数据（不包含文件路径）
         JSONObject metadata = new JSONObject();
-        metadata.put("filePath", relativePath);
         metadata.put("originalFileName", fileName);
         metadata.put("fileSize", file.getSize());
         document.setMetadata(metadata.toJSONString());
@@ -151,47 +153,47 @@ public class DocumentService {
             throw new IllegalArgumentException("File must be a ZIP archive");
         }
         
-        // 保存ZIP文件
-        String zipId = UUIDGenerator.generate();
-        String zipRelativePath = saveFile(knowledgeBaseId, zipId, zipFile);
-        String zipFullPath = new File(uploadPath, zipRelativePath).getAbsolutePath();
-        
-        // 解压目录
-        String extractDir = uploadPath + File.separator + knowledgeBaseId + File.separator + zipId + File.separator + "extracted";
-        Path extractPath = Paths.get(extractDir);
-        Files.createDirectories(extractPath);
-        
-        // 解压文件
+        // 从内存中解压ZIP文件（不保存到磁盘）
         List<Document> documents = new ArrayList<>();
-        unzipFile(zipFullPath, extractDir, extractedFile -> {
-            String extractedFileName = extractedFile.getName();
-            if (!isSupportedFile(extractedFileName)) {
-                log.warn("Skipping unsupported file: {}", extractedFileName);
+        unzipFromStream(zipFile.getInputStream(), entryWithStream -> {
+            String entryName = entryWithStream.getName();
+            String extractedFileName = new File(entryName).getName();
+            
+            // 跳过目录和非支持的文件
+            if (entryWithStream.isDirectory() || !isSupportedFile(extractedFileName)) {
+                log.warn("Skipping unsupported file or directory: {}", entryName);
                 return;
             }
             
-            // 创建文档记录
-            String docId = UUIDGenerator.generate();
-            String relativePath = extractDir.replace(uploadPath + File.separator, "") + 
-                                 File.separator + extractedFileName;
-            
-            Document document = Document.builder()
-                    .id(docId)
-                    .knowledgeBaseId(knowledgeBaseId)
-                    .title(FilenameUtils.getBaseName(extractedFileName))
-                    .type(Document.Type.FILE)
-                    .status(Document.Status.DRAFT)
-                    .createTime(new Date())
-                    .updateTime(new Date())
-                    .build();
-            
-            // 设置元数据
-            JSONObject metadata = new JSONObject();
-            metadata.put("filePath", relativePath.replace(File.separator, "/"));
-            metadata.put("originalFileName", extractedFileName);
-            document.setMetadata(metadata.toJSONString());
-            
-            documents.add(document);
+            try {
+                // 直接从ZIP流解析文件内容（不保存到磁盘）
+                // 注意：ZipArchiveInputStream 的当前条目流已经是 entryWithStream.getInputStream()
+                String content = documentParser.parse(entryWithStream.getInputStream(), extractedFileName);
+                
+                // 创建文档记录
+                String docId = UUIDGenerator.generate();
+                Document document = Document.builder()
+                        .id(docId)
+                        .knowledgeBaseId(knowledgeBaseId)
+                        .title(FilenameUtils.getBaseName(extractedFileName))
+                        .type(Document.Type.FILE)
+                        .content(content)  // 直接存储解析后的内容
+                        .status(Document.Status.DRAFT)
+                        .createTime(new Date())
+                        .updateTime(new Date())
+                        .build();
+                
+                // 设置元数据（不包含文件路径）
+                JSONObject metadata = new JSONObject();
+                metadata.put("originalFileName", extractedFileName);
+                metadata.put("entryPath", entryName);  // ZIP中的路径
+                document.setMetadata(metadata.toJSONString());
+                
+                documents.add(document);
+            } catch (Exception e) {
+                log.error("Failed to parse file from ZIP: {}", entryName, e);
+                // 继续处理其他文件
+            }
         });
         
         if (documents.isEmpty()) {
@@ -284,21 +286,8 @@ public class DocumentService {
         // 删除向量数据
         embeddingProcessor.deleteDocumentVectors(docId, null);
         
-        // 删除文件（如果是文件类型）
-        if (Document.Type.FILE.equals(document.getType()) && document.getMetadata() != null) {
-            try {
-                JSONObject metadata = JSONObject.parseObject(document.getMetadata());
-                String filePath = metadata.getString("filePath");
-                if (filePath != null) {
-                    File file = new File(uploadPath, filePath);
-                    if (file.exists()) {
-                        file.delete();
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Failed to delete file for document: {}", docId, e);
-            }
-        }
+        // 不再需要删除文件，因为文件不再保存到磁盘
+        // 文件内容已存储在数据库的 content 字段中，删除文档记录时自动删除
         
         // 删除文档记录
         documentRepository.deleteById(docId);
@@ -348,7 +337,6 @@ public class DocumentService {
                 
                 // 更新状态为失败
                 document.setStatus(Document.Status.FAILED);
-                document.setFailedReason(e.getMessage());
                 document.setUpdateTime(new Date());
                 documentRepository.save(document);
             }
@@ -364,83 +352,86 @@ public class DocumentService {
             return document.getContent() != null ? document.getContent() : "";
         }
         
-        // 如果是文件类型，解析文件
-        if (Document.Type.FILE.equals(document.getType()) && document.getMetadata() != null) {
-            JSONObject metadata = JSONObject.parseObject(document.getMetadata());
-            String filePath = metadata.getString("filePath");
-            if (filePath != null) {
-                File file = new File(uploadPath, filePath);
-                if (file.exists()) {
-                    return documentParser.parse(file);
-                }
+        // 如果是文件类型，直接返回已解析的内容（内容已存储在数据库中）
+        if (Document.Type.FILE.equals(document.getType())) {
+            if (document.getContent() != null && !document.getContent().isEmpty()) {
+                return document.getContent();
             }
+            // 如果内容为空，说明解析失败或数据异常
+            throw new IOException("Document content is empty: " + document.getId());
         }
         
         throw new IOException("Cannot extract content from document: " + document.getId());
     }
-    
+
     /**
-     * 保存文件到本地
+     * 从输入流中解压ZIP文件（不保存到磁盘）
+     * 
+     * @param inputStream ZIP文件的输入流
+     * @param entryProcessor 处理每个ZIP条目的回调函数
      */
-    private String saveFile(String knowledgeBaseId, String fileId, MultipartFile file) throws IOException {
-        String dir = uploadPath + File.separator + knowledgeBaseId + File.separator + fileId;
-        Files.createDirectories(Paths.get(dir));
-        
-        String fileName = file.getOriginalFilename();
-        String savedPath = dir + File.separator + fileName;
-        File savedFile = new File(savedPath);
-        
-        file.transferTo(savedFile);
-        
-        // 返回相对路径
-        return (knowledgeBaseId + File.separator + fileId + File.separator + fileName)
-                .replace(File.separator, "/");
-    }
-    
-    /**
-     * 解压ZIP文件
-     */
-    private void unzipFile(String zipFilePath, String destDir, Consumer<File> afterExtract) throws IOException {
-        Path zipPath = Paths.get(zipFilePath);
-        Path targetDir = Paths.get(destDir);
-        
-        long totalUnzippedSize = 0;
+    private void unzipFromStream(InputStream inputStream, Consumer<ZipArchiveEntryWithStream> entryProcessor) throws IOException {
         int entryCount = 0;
+        long totalSize = 0;
         
-        try (ZipFile zipFile = new ZipFile(zipPath.toFile())) {
-            Enumeration<ZipArchiveEntry> entries = zipFile.getEntries();
-            
-            while (entries.hasMoreElements()) {
-                ZipArchiveEntry entry = entries.nextElement();
+        try (ZipArchiveInputStream zipInputStream = new ZipArchiveInputStream(inputStream)) {
+            ZipArchiveEntry entry;
+            while ((entry = zipInputStream.getNextZipEntry()) != null) {
                 entryCount++;
                 
+                // 检查条目数量限制
                 if (entryCount > MAX_ENTRY_COUNT) {
                     throw new IOException("Too many entries in ZIP file (possible ZIP bomb)");
                 }
                 
-                Path newPath = safeResolve(targetDir, entry.getName());
-                
+                // 跳过目录
                 if (entry.isDirectory()) {
-                    Files.createDirectories(newPath);
-                } else {
-                    Files.createDirectories(newPath.getParent());
-                    
-                    try (InputStream is = zipFile.getInputStream(entry);
-                         OutputStream os = Files.newOutputStream(newPath)) {
-                        
-                        long bytesCopied = copyLimited(is, os, MAX_FILE_SIZE);
-                        totalUnzippedSize += bytesCopied;
-                        
-                        if (totalUnzippedSize > MAX_TOTAL_SIZE) {
-                            throw new IOException("Total extracted size exceeds limit (possible ZIP bomb)");
-                        }
-                    }
-                    
-                    if (afterExtract != null) {
-                        afterExtract.accept(newPath.toFile());
-                    }
+                    continue;
                 }
+                
+                // 检查单个文件大小限制
+                long entrySize = entry.getSize();
+                if (entrySize > MAX_FILE_SIZE) {
+                    log.warn("Skipping large file in ZIP: {} (size: {})", entry.getName(), entrySize);
+                    continue;
+                }
+                
+                // 检查总大小限制
+                totalSize += entrySize;
+                if (totalSize > MAX_TOTAL_SIZE) {
+                    throw new IOException("Total extracted size exceeds limit (possible ZIP bomb)");
+                }
+                
+                // 创建包装对象，包含条目和流
+                ZipArchiveEntryWithStream entryWithStream = new ZipArchiveEntryWithStream(entry, zipInputStream);
+                entryProcessor.accept(entryWithStream);
             }
+        }
+    }
+    
+    /**
+     * ZIP条目包装类，包含条目信息和输入流
+     */
+    private static class ZipArchiveEntryWithStream {
+        private final ZipArchiveEntry entry;
+        private final ZipArchiveInputStream zipInputStream;
+        
+        public ZipArchiveEntryWithStream(ZipArchiveEntry entry, ZipArchiveInputStream zipInputStream) {
+            this.entry = entry;
+            this.zipInputStream = zipInputStream;
+        }
+        
+        public String getName() {
+            return entry.getName();
+        }
+        
+        public boolean isDirectory() {
+            return entry.isDirectory();
+        }
+        
+        public InputStream getInputStream() {
+            // 返回 ZipArchiveInputStream，它已经定位到当前条目的数据流
+            return zipInputStream;
         }
     }
     

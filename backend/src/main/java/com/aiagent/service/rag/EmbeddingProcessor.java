@@ -3,14 +3,13 @@ package com.aiagent.service.rag;
 import com.aiagent.config.AgentConfig;
 import com.aiagent.config.EmbeddingStoreConfiguration;
 import com.aiagent.model.Document;
+import com.aiagent.service.llm.EmbeddingModelManager;
 import dev.langchain4j.data.document.DocumentSplitter;
 import dev.langchain4j.data.document.Metadata;
 import dev.langchain4j.data.document.splitter.DocumentSplitters;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
-import dev.langchain4j.model.TokenCountEstimator;
 import dev.langchain4j.model.embedding.EmbeddingModel;
-import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
 import dev.langchain4j.model.openai.OpenAiTokenCountEstimator;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.EmbeddingStoreIngestor;
@@ -20,7 +19,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
 import java.util.Map;
 
 import static dev.langchain4j.store.embedding.filter.MetadataFilterBuilder.metadataKey;
@@ -66,11 +64,8 @@ public class EmbeddingProcessor {
     @Autowired
     private EmbeddingStoreConfiguration embeddingStoreConfiguration;
     
-    @Value("${aiagent.llm.api-key:}")
-    private String defaultApiKey;
-    
-    @Value("${aiagent.llm.base-url:https://api.openai.com/v1}")
-    private String defaultBaseUrl;
+    @Autowired
+    private EmbeddingModelManager embeddingModelManager;
     
     @Value("${aiagent.rag.document.segment-size:1000}")
     private int segmentSize;
@@ -202,25 +197,15 @@ public class EmbeddingProcessor {
     /**
      * 获取或创建Embedding模型
      * 
-     * @param embeddingModelId 模型ID（可选）
+     * @param embeddingModelId 模型ID（可选，如果为空则使用默认模型）
      * @return EmbeddingModel实例
      */
     private EmbeddingModel getOrCreateEmbeddingModel(String embeddingModelId) {
-        // 目前使用OpenAI的默认模型
-        // 后续可以根据embeddingModelId扩展支持其他模型
-        
-        // 从配置中获取API Key
-        if (defaultApiKey == null || defaultApiKey.isEmpty()) {
-            throw new IllegalStateException("OpenAI API key is not configured. Please configure aiagent.llm.api-key in application.yml");
+        // 使用 EmbeddingModelManager 统一管理 Embedding 模型
+        if (embeddingModelId == null || embeddingModelId.isEmpty()) {
+            return embeddingModelManager.getDefaultEmbeddingModel();
         }
-        
-        String apiKey = defaultApiKey;
-        
-        return OpenAiEmbeddingModel.builder()
-                .apiKey(apiKey)
-                .baseUrl(defaultBaseUrl)
-                .modelName("text-embedding-3-small")
-                .build();
+        return embeddingModelManager.getOrCreateEmbeddingModel(embeddingModelId);
     }
     
     /**

@@ -1,4 +1,4 @@
-package com.aiagent.service;
+package com.aiagent.service.llm;
 
 import com.aiagent.config.AgentConfig;
 import dev.langchain4j.model.chat.ChatModel;

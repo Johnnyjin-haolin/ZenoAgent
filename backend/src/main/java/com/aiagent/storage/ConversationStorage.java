@@ -55,31 +55,7 @@ public class ConversationStorage {
             log.error("保存对话失败: conversationId={}", conversationInfo.getId(), e);
         }
     }
-    
-    /**
-     * 保存对话信息（兼容旧方法，使用Map）
-     * @deprecated 建议使用 saveConversation(ConversationInfo)
-     */
-    @Deprecated
-    public void saveConversation(String conversationId, Map<String, Object> conversationData) {
-        try {
-            String key = CONVERSATION_PREFIX + conversationId;
-            
-            // 设置创建时间
-            if (!conversationData.containsKey("createTime")) {
-                conversationData.put("createTime", new Date());
-            }
-            conversationData.put("updateTime", new Date());
-            
-            redisTemplate.opsForHash().putAll(key, conversationData);
-            redisTemplate.expire(key, CONVERSATION_TTL_DAYS, TimeUnit.DAYS);
-            
-            log.debug("保存对话: conversationId={}", conversationId);
-        } catch (Exception e) {
-            log.error("保存对话失败: conversationId={}", conversationId, e);
-        }
-    }
-    
+
     /**
      * 将ConversationInfo转换为Map
      */

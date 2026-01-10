@@ -69,20 +69,6 @@ public class IntelligentToolSelector {
         log.info("最终找到 {} 个可用工具", availableTools.size());
         return availableTools;
     }
-    
-    /**
-     * 根据任务需求选择工具（兼容旧版本，使用所有启用分组内的工具）
-     * 
-     * @param taskRequirement 任务需求描述
-     * @param enabledGroups 启用的工具分组
-     * @return 选中的工具列表
-     * @deprecated 建议使用 selectTools(String, List<String>, List<String>)
-     */
-    @Deprecated
-    public List<McpToolInfo> selectTools(String taskRequirement, List<String> enabledGroups) {
-        return selectTools(taskRequirement, enabledGroups, null);
-    }
-    
     /**
      * 根据工具名称获取工具信息
      */

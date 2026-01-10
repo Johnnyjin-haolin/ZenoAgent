@@ -5,6 +5,7 @@ import com.aiagent.service.action.DirectResponseParams;
 import com.aiagent.service.action.LLMGenerateParams;
 import com.aiagent.service.action.RAGRetrieveParams;
 import com.aiagent.service.action.ToolCallParams;
+import com.aiagent.service.rag.RAGEnhancer;
 import com.aiagent.util.StringUtils;
 import com.aiagent.vo.AgentContext;
 import com.aiagent.vo.AgentEventData;

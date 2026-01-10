@@ -1,16 +1,15 @@
-package com.aiagent.service;
+package com.aiagent.service.rag;
 
 import com.aiagent.config.EmbeddingStoreConfiguration;
 import com.aiagent.model.KnowledgeBase;
 import com.aiagent.repository.KnowledgeBaseRepository;
-import com.aiagent.service.rag.EmbeddingProcessor;
+import com.aiagent.service.llm.EmbeddingModelManager;
 import com.aiagent.util.StringUtils;
 import com.aiagent.vo.AgentKnowledgeDocument;
 import com.aiagent.vo.AgentKnowledgeResult;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
-import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
 import dev.langchain4j.store.embedding.EmbeddingMatch;
 import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
 import dev.langchain4j.store.embedding.EmbeddingSearchResult;
@@ -50,12 +49,6 @@ public class RAGEnhancer {
      */
     private static final double DEFAULT_MIN_SCORE = 0.5;
     
-    @Value("${aiagent.llm.api-key:}")
-    private String defaultApiKey;
-    
-    @Value("${aiagent.llm.base-url:https://api.openai.com/v1}")
-    private String defaultBaseUrl;
-    
     @Value("${aiagent.rag.default-top-k:5}")
     private int defaultTopK;
     
@@ -68,10 +61,12 @@ public class RAGEnhancer {
     @Autowired
     private KnowledgeBaseRepository knowledgeBaseRepository;
     
+    @Autowired
+    private EmbeddingModelManager embeddingModelManager;
     
     /**
      * Embedding模型（用于生成文本向量）
-     * 如果未注入，将使用OpenAI的Embedding模型
+     * 如果未注入，将使用 EmbeddingModelManager 获取
      */
     private EmbeddingModel embeddingModel;
     
@@ -79,30 +74,22 @@ public class RAGEnhancer {
      * 初始化Embedding模型
      */
     private EmbeddingModel getOrCreateEmbeddingModel() {
+        // 如果已注入自定义模型，使用自定义模型
         if (embeddingModel != null) {
             return embeddingModel;
         }
         
-        // 从配置中获取API Key
-        if (defaultApiKey == null || defaultApiKey.isEmpty()) {
-            log.warn("未配置API Key，无法使用Embedding功能，请在application.yml中配置aiagent.llm.api-key");
+        // 否则使用 EmbeddingModelManager 获取默认模型
+        try {
+            return embeddingModelManager.getDefaultEmbeddingModel();
+        } catch (Exception e) {
+            log.warn("无法获取 Embedding 模型: {}", e.getMessage());
             return null;
         }
-        
-        String apiKey = defaultApiKey;
-        
-        embeddingModel = OpenAiEmbeddingModel.builder()
-            .apiKey(apiKey)
-            .baseUrl(defaultBaseUrl)
-            .modelName("text-embedding-3-small")
-            .build();
-        
-        log.info("初始化Embedding模型: text-embedding-3-small");
-        return embeddingModel;
     }
     
     /**
-     * 注入自定义的Embedding模型
+     * 注入自定义的Embedding模型（可选，优先级高于配置）
      */
     @Autowired(required = false)
     public void setEmbeddingModel(EmbeddingModel embeddingModel) {

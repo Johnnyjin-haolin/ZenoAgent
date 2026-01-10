@@ -103,13 +103,7 @@ public class AgentContext implements Serializable {
      * 最后一次动作错误类型
      */
     private String lastActionErrorType;
-    
-    /**
-     * 上下文变量（已废弃，请使用具体属性）
-     * @deprecated 请使用具体的属性字段，如modelId、enabledMcpGroups等
-     */
-    @Deprecated
-    private Map<String, Object> variables;
+
     
     /**
      * 用户名

@@ -57,11 +57,6 @@ public class Document {
     private String status;
     
     /**
-     * 失败原因（当status为FAILED时）
-     */
-    private String failedReason;
-    
-    /**
      * 创建时间
      */
     private Date createTime;

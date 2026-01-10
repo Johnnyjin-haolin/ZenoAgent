@@ -121,19 +121,7 @@ public class AgentAction {
             .description("调用工具: " + toolName)
             .build();
     }
-    
-    /**
-     * 创建工具调用动作（兼容旧版本，使用Map）
-     * @deprecated 建议使用 toolCall(String, ToolCallParams, String)
-     */
-    @Deprecated
-    public static AgentAction toolCall(String toolName, Map<String, Object> params, String reasoning) {
-        ToolCallParams toolCallParams = ToolCallParams.builder()
-            .toolName(toolName)
-            .toolParams(params)
-            .build();
-        return toolCall(toolName, toolCallParams, reasoning);
-    }
+
     
     /**
      * 创建RAG检索动作（使用特定参数类型）
@@ -147,21 +135,7 @@ public class AgentAction {
             .description("检索知识库: " + (params != null ? params.getQuery() : ""))
             .build();
     }
-    
-    /**
-     * 创建RAG检索动作（兼容旧版本，使用Map）
-     * @deprecated 建议使用 ragRetrieve(RAGRetrieveParams, String)
-     */
-    @Deprecated
-    @SuppressWarnings("unchecked")
-    public static AgentAction ragRetrieve(String query, Map<String, Object> params, String reasoning) {
-        RAGRetrieveParams ragParams = RAGRetrieveParams.builder()
-            .query(query)
-            .knowledgeIds((java.util.List<String>) params.getOrDefault("knowledgeIds", new java.util.ArrayList<>()))
-            .build();
-        return ragRetrieve(ragParams, reasoning);
-    }
-    
+
     /**
      * 创建LLM生成动作（使用特定参数类型）
      */
@@ -174,18 +148,7 @@ public class AgentAction {
             .description("生成回复")
             .build();
     }
-    
-    /**
-     * 创建LLM生成动作（兼容旧版本，使用String prompt）
-     * @deprecated 建议使用 llmGenerate(LLMGenerateParams, String)
-     */
-    @Deprecated
-    public static AgentAction llmGenerate(String prompt, String reasoning) {
-        LLMGenerateParams params = LLMGenerateParams.builder()
-            .prompt(prompt)
-            .build();
-        return llmGenerate(params, reasoning);
-    }
+
     
     /**
      * 创建完成动作

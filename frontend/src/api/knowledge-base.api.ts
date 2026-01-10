@@ -192,9 +192,7 @@ export async function uploadDocument(
     const response = await http.post<ApiResponse<Document>>({
       url: DocumentApi.upload,
       data: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      // 不设置 Content-Type，让 axios 自动处理 FormData（包含 boundary）
     });
     if (!response?.data) {
       throw new Error(response?.message || '上传失败');
@@ -221,9 +219,7 @@ export async function importDocumentsFromZip(
     const response = await http.post<ApiResponse<Document[]>>({
       url: DocumentApi.importZip,
       data: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      // 不设置 Content-Type，让 axios 自动处理 FormData（包含 boundary）
     });
     return response?.data || [];
   } catch (error) {

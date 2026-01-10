@@ -102,7 +102,6 @@ public class MyBatisDocumentRepository implements DocumentRepository {
         entity.setContent(model.getContent());
         entity.setMetadata(model.getMetadata());
         entity.setStatus(model.getStatus());
-        entity.setFailedReason(model.getFailedReason());
         entity.setCreateTime(model.getCreateTime());
         entity.setUpdateTime(model.getUpdateTime());
         return entity;
@@ -120,7 +119,6 @@ public class MyBatisDocumentRepository implements DocumentRepository {
                 .content(entity.getContent())
                 .metadata(entity.getMetadata())
                 .status(entity.getStatus())
-                .failedReason(entity.getFailedReason())
                 .createTime(entity.getCreateTime())
                 .updateTime(entity.getUpdateTime())
                 .build();

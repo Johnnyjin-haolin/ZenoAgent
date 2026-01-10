@@ -50,11 +50,6 @@ public class DocumentEntity {
     private String status;
     
     /**
-     * 失败原因
-     */
-    private String failedReason;
-    
-    /**
      * 创建时间
      */
     private Date createTime;

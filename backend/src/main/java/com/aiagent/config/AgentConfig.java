@@ -80,6 +80,19 @@ public class AgentConfig {
             private String provider = "OPENAI";
             
             /**
+             * 模型类型（CHAT: 对话模型, EMBEDDING: 向量模型）
+             * 默认为 CHAT
+             */
+            private String type = "CHAT";
+            
+            /**
+             * 实际模型名称（用于API调用）
+             * 对于Embedding模型，这是实际的模型名称（如 text-embedding-3-small）
+             * 对于Chat模型，如果未指定，则使用 id
+             */
+            private String modelName;
+            
+            /**
              * API Key
              */
             private String apiKey;
@@ -117,6 +130,11 @@ public class AgentConfig {
     public static class RAGConfig {
         private int defaultTopK = 5;
         private double defaultMinScore = 0.5;
+        
+        /**
+         * 默认 Embedding 模型ID（从 llm.models 中选择）
+         */
+        private String defaultEmbeddingModelId = "text-embedding-3-small";
     }
     
     @Data

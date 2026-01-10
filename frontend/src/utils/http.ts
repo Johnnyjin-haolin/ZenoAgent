@@ -24,6 +24,13 @@ const httpInstance: AxiosInstance = axios.create({
  */
 httpInstance.interceptors.request.use(
   (config) => {
+    // 如果是 FormData，删除默认的 Content-Type，让 axios 自动设置（包含 boundary）
+    if (config.data instanceof FormData) {
+      // 删除默认的 Content-Type，让 axios 自动设置 multipart/form-data 和 boundary
+      if (config.headers) {
+        delete (config.headers as any)['Content-Type'];
+      }
+    }
     // 可以在这里添加 token 等认证信息
     // const token = localStorage.getItem('token');
     // if (token) {
@@ -87,19 +94,31 @@ export const http = {
       responseType?: string;
       timeout?: number;
       signal?: AbortSignal;
+      headers?: Record<string, string>;
     },
     options?: { isTransformResponse?: boolean }
   ): Promise<T> {
-    const { adapter, responseType, signal, ...restConfig } = config;
+    const { adapter, responseType, signal, headers, ...restConfig } = config;
     
     // 处理 SSE 流式响应
     if (adapter === 'fetch' || responseType === 'stream') {
       return handleStreamRequest(config) as Promise<T>;
     }
 
+    // 判断是否是 FormData
+    const isFormData = config.data instanceof FormData;
+    
+    // 如果是 FormData，删除手动设置的 Content-Type，让 axios 自动设置（包含 boundary）
+    let requestHeaders = headers;
+    if (isFormData && headers) {
+      const { 'Content-Type': _, ...otherHeaders } = headers;
+      requestHeaders = otherHeaders;
+    }
+
     return httpInstance
       .post(config.url, config.data || config.params, {
         params: config.params,
+        headers: requestHeaders,
         signal,
         timeout: config.timeout,
       })
