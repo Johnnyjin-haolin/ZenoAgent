@@ -72,14 +72,34 @@ public class EmbeddingModelManager {
     
     /**
      * 获取默认 Embedding 模型
+     * 优先从 task-model-mapping 的 RAG_QUERY 场景获取，如果没有配置则使用 rag.default-embedding-model-id
      * 
      * @return EmbeddingModel实例
      */
     public EmbeddingModel getDefaultEmbeddingModel() {
-        String defaultModelId = agentConfig.getRag().getDefaultEmbeddingModelId();
-        if (defaultModelId == null || defaultModelId.isEmpty()) {
-            throw new RuntimeException("未配置默认 Embedding 模型ID");
+        String defaultModelId = null;
+        
+        // 优先从 task-model-mapping 的 RAG_QUERY 场景获取
+        Map<String, List<String>> taskModelMapping = agentConfig.getModel().getTaskModelMapping();
+        if (taskModelMapping != null && taskModelMapping.containsKey("RAG_QUERY")) {
+            List<String> modelIds = taskModelMapping.get("RAG_QUERY");
+            if (modelIds != null && !modelIds.isEmpty()) {
+                // 取第一个模型（最高优先级）
+                defaultModelId = modelIds.get(0);
+                log.debug("从 task-model-mapping.RAG_QUERY 获取默认 Embedding 模型: {}", defaultModelId);
+            }
         }
+        
+        // 如果没有配置，使用 rag.default-embedding-model-id
+        if (defaultModelId == null || defaultModelId.isEmpty()) {
+            defaultModelId = agentConfig.getRag().getDefaultEmbeddingModelId();
+            log.debug("从 rag.default-embedding-model-id 获取默认 Embedding 模型: {}", defaultModelId);
+        }
+        
+        if (defaultModelId == null || defaultModelId.isEmpty()) {
+            throw new RuntimeException("未配置默认 Embedding 模型ID，请在 task-model-mapping.RAG_QUERY 或 rag.default-embedding-model-id 中配置");
+        }
+        
         return getOrCreateEmbeddingModel(defaultModelId);
     }
     

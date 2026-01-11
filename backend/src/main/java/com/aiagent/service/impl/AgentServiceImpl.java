@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -49,6 +50,9 @@ public class AgentServiceImpl implements IAgentService {
     
     @Autowired
     private ConversationService conversationService;
+    
+    @Autowired
+    private com.aiagent.service.rag.RAGEnhancer ragEnhancer;
     
     @Override
     public SseEmitter execute(AgentRequest request) {
@@ -199,6 +203,11 @@ public class AgentServiceImpl implements IAgentService {
             }
         });
         
+        // 3.2 如果有知识库，执行预检索（仅在第一次请求时）
+        if (context.getKnowledgeIds() != null && !context.getKnowledgeIds().isEmpty()) {
+            performInitialRagRetrieval(request, context, requestId, emitter);
+        }
+        
         // 4. 注册状态变更监听器
         stateMachine.initialize(context, newState -> {
             sendEvent(emitter, AgentEventData.builder()
@@ -303,6 +312,66 @@ public class AgentServiceImpl implements IAgentService {
         
         // 8. 关闭SSE（此时所有流式事件都已发送完成）
         closeSSE(emitter, requestId);
+    }
+    
+    /**
+     * 执行初始 RAG 检索（仅在第一次请求时）
+     */
+    private void performInitialRagRetrieval(
+            AgentRequest request, 
+            AgentContext context, 
+            String requestId, 
+            SseEmitter emitter) {
+        
+        try {
+            String query = request.getContent();
+            List<String> knowledgeIds = context.getKnowledgeIds();
+            
+            if (StringUtils.isEmpty(query) || knowledgeIds == null || knowledgeIds.isEmpty()) {
+                return;
+            }
+            
+            // 发送检索开始事件
+            sendEvent(emitter, AgentEventData.builder()
+                .requestId(requestId)
+                .event(AgentConstants.EVENT_AGENT_RAG_QUERYING)
+                .message("正在检索知识库...")
+                .conversationId(context.getConversationId())
+                .build());
+            
+            // 执行 RAG 检索
+            com.aiagent.vo.AgentKnowledgeResult ragResult = ragEnhancer.retrieve(query, knowledgeIds);
+            
+            // 记录检索历史并保存结果
+            if (ragResult != null && ragResult.isNotEmpty()) {
+                memorySystem.recordRAGRetrieve(
+                    context, 
+                    query, 
+                    knowledgeIds, 
+                    ragResult.getTotalCount()
+                );
+                
+                // 保存检索结果到 context
+                context.setInitialRagResult(ragResult);
+                
+                // 发送检索完成事件（用于前端展示）
+                sendEvent(emitter, AgentEventData.builder()
+                    .requestId(requestId)
+                    .event(AgentConstants.EVENT_AGENT_RAG_RETRIEVE)
+                    .data(ragResult)
+                    .message("检索到 " + ragResult.getTotalCount() + " 条相关知识")
+                    .conversationId(context.getConversationId())
+                    .build());
+                
+                log.info("预检索完成，检索到 {} 条知识", ragResult.getTotalCount());
+            } else {
+                log.info("预检索完成，未检索到相关知识");
+            }
+            
+        } catch (Exception e) {
+            log.warn("预检索失败，不影响后续流程", e);
+            // 预检索失败不应该影响主流程，只记录日志
+        }
     }
     
     /**

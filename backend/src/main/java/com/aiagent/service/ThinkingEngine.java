@@ -5,6 +5,8 @@ import com.aiagent.service.action.DirectResponseParams;
 import com.aiagent.service.action.LLMGenerateParams;
 import com.aiagent.service.action.RAGRetrieveParams;
 import com.aiagent.service.action.ToolCallParams;
+import com.aiagent.model.KnowledgeBase;
+import com.aiagent.repository.KnowledgeBaseRepository;
 import com.aiagent.service.rag.RAGEnhancer;
 import com.aiagent.util.StringUtils;
 import com.aiagent.vo.AgentContext;
@@ -42,6 +44,9 @@ public class ThinkingEngine {
     
     @Autowired
     private RAGEnhancer ragEnhancer;
+    
+    @Autowired
+    private KnowledgeBaseRepository knowledgeBaseRepository;
     
     /**
      * 决策框架提示词
@@ -349,10 +354,79 @@ public class ThinkingEngine {
             prompt.append("\n");
         }
         
+        // 相关知识库内容（预检索结果）
+        if (context != null && context.getInitialRagResult() != null 
+            && context.getInitialRagResult().isNotEmpty()) {
+            
+            com.aiagent.vo.AgentKnowledgeResult ragResult = context.getInitialRagResult();
+            prompt.append("**相关知识库内容**（已预检索）:\n");
+            prompt.append("- 检索查询: ").append(ragResult.getQuery()).append("\n");
+            prompt.append("- 检索结果数量: ").append(ragResult.getTotalCount()).append(" 条\n\n");
+            
+            // 添加检索到的文档内容（限制数量，避免 prompt 过长）
+            List<com.aiagent.vo.AgentKnowledgeDocument> docs = ragResult.getDocuments();
+            int maxDocs = Math.min(3, docs.size()); // 最多显示3条
+            
+            for (int i = 0; i < maxDocs; i++) {
+                com.aiagent.vo.AgentKnowledgeDocument doc = docs.get(i);
+                prompt.append(i + 1).append(". ");
+                if (StringUtils.isNotEmpty(doc.getDocName())) {
+                    prompt.append("[").append(doc.getDocName()).append("] ");
+                }
+                
+                // 限制内容长度
+                String content = doc.getContent();
+                if (content != null && content.length() > 500) {
+                    content = content.substring(0, 500) + "...";
+                }
+                prompt.append(content != null ? content : "");
+                if (doc.getScore() != null) {
+                    prompt.append(" (相关度: ").append(String.format("%.1f%%", doc.getScore() * 100)).append(")");
+                }
+                prompt.append("\n\n");
+            }
+            
+            if (docs.size() > maxDocs) {
+                prompt.append("... (还有 ").append(docs.size() - maxDocs).append(" 条结果未显示)\n\n");
+            }
+            
+            prompt.append("注意：如果这些知识库内容与用户问题相关，请直接使用；如果需要更多信息，可以再次使用 RAG_RETRIEVE 动作检索。\n\n");
+        }
+        
         // ========== 第二部分：决策框架 ==========
         prompt.append(DECISION_FRAMEWORK_PROMPT);
         
-        // ========== 第五部分：可用工具 ==========
+        // ========== 第三部分：可用知识库 ==========
+        if (context != null && context.getKnowledgeIds() != null && !context.getKnowledgeIds().isEmpty()) {
+            List<String> knowledgeIds = context.getKnowledgeIds();
+            List<KnowledgeBase> knowledgeBases = new ArrayList<>();
+            
+            // 获取知识库详细信息
+            for (String knowledgeId : knowledgeIds) {
+                try {
+                    knowledgeBaseRepository.findById(knowledgeId)
+                        .ifPresent(knowledgeBases::add);
+                } catch (Exception e) {
+                    log.warn("获取知识库信息失败: knowledgeId={}", knowledgeId, e);
+                }
+            }
+            
+            if (!knowledgeBases.isEmpty()) {
+                prompt.append("## 可用知识库\n\n");
+                prompt.append("以下知识库可用于检索相关信息。如果用户问题涉及这些知识库的内容，请使用 RAG_RETRIEVE 动作先检索相关知识，然后再回答问题。\n\n");
+                
+                for (KnowledgeBase kb : knowledgeBases) {
+                    prompt.append("**").append(kb.getName()).append("**\n");
+                    if (StringUtils.isNotEmpty(kb.getDescription())) {
+                        prompt.append("- 描述: ").append(kb.getDescription()).append("\n");
+                    }
+                    prompt.append("- ID: ").append(kb.getId()).append("\n");
+                    prompt.append("\n");
+                }
+            }
+        }
+        
+        // ========== 第四部分：可用工具 ==========
         List<McpToolInfo> availableTools = toolSelector.selectTools(goal,
             context != null ? context.getEnabledMcpGroups() : null,
             context != null ? context.getEnabledTools() : null);

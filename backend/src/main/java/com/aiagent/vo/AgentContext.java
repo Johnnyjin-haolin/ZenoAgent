@@ -129,6 +129,12 @@ public class AgentContext implements Serializable {
     private transient java.util.function.Consumer<AgentEventData> eventPublisher;
     
     /**
+     * 初始 RAG 检索结果（仅在第一次请求时使用，不序列化）
+     */
+    @JsonIgnore
+    private transient com.aiagent.vo.AgentKnowledgeResult initialRagResult;
+    
+    /**
      * 从 ChatMessage 列表设置消息（自动转换为DTO）
      */
     public void setMessages(List<ChatMessage> messages) {

@@ -63,39 +63,8 @@ public class RAGEnhancer {
     
     @Autowired
     private EmbeddingModelManager embeddingModelManager;
-    
-    /**
-     * Embedding模型（用于生成文本向量）
-     * 如果未注入，将使用 EmbeddingModelManager 获取
-     */
-    private EmbeddingModel embeddingModel;
-    
-    /**
-     * 初始化Embedding模型
-     */
-    private EmbeddingModel getOrCreateEmbeddingModel() {
-        // 如果已注入自定义模型，使用自定义模型
-        if (embeddingModel != null) {
-            return embeddingModel;
-        }
-        
-        // 否则使用 EmbeddingModelManager 获取默认模型
-        try {
-            return embeddingModelManager.getDefaultEmbeddingModel();
-        } catch (Exception e) {
-            log.warn("无法获取 Embedding 模型: {}", e.getMessage());
-            return null;
-        }
-    }
-    
-    /**
-     * 注入自定义的Embedding模型（可选，优先级高于配置）
-     */
-    @Autowired(required = false)
-    public void setEmbeddingModel(EmbeddingModel embeddingModel) {
-        this.embeddingModel = embeddingModel;
-        log.info("注入自定义Embedding模型: {}", embeddingModel != null ? embeddingModel.getClass().getSimpleName() : "null");
-    }
+
+
     
     
     /**
@@ -129,7 +98,7 @@ public class RAGEnhancer {
         // 使用langchain4j实现RAG检索
         try {
             // 1. 获取或创建Embedding模型
-            EmbeddingModel model = getOrCreateEmbeddingModel();
+            EmbeddingModel model = embeddingModelManager.getDefaultEmbeddingModel();
             if (model == null) {
                 log.warn("Embedding模型不可用，返回空结果");
                 return createEmptyResult(query);
