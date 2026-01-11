@@ -81,21 +81,22 @@ export async function checkHealth(): Promise<boolean> {
 
 /**
  * 获取知识库列表
- * 注意：这里复用现有的知识库接口
+ * 使用现有的知识库接口 /api/knowledge-bases
  */
 export async function getKnowledgeList(): Promise<KnowledgeInfo[]> {
   try {
     const response = await defHttp.get(
-      { url: '/airag/knowledge/list' },
+      { url: '/api/knowledge-bases' },
       { isTransformResponse: false }
     );
-    if (response.success && response.result?.records) {
-      return response.result.records.map((item: any) => ({
+    // 后端返回格式：Result<List<KnowledgeBase>>，即 { success: true, data: [...] }
+    if (response.success && response.data && Array.isArray(response.data)) {
+      return response.data.map((item: any) => ({
         id: item.id,
         name: item.name,
         description: item.description,
-        icon: item.icon,
-        documentCount: item.documentCount,
+        icon: '📚', // 默认图标
+        documentCount: 0, // 默认文档数量（如果需要可以后续调用统计接口获取）
       }));
     }
     return [];

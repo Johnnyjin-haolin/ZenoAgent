@@ -39,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import { Icon } from '@/components/Icon';
 import { message } from 'ant-design-vue';
 import { getKnowledgeList } from '../agent.api';
@@ -63,6 +63,13 @@ const emit = defineEmits<{
 const selectedKnowledgeIds = ref<string[]>(props.modelValue || []);
 const knowledgeList = ref<KnowledgeInfo[]>([]);
 const loading = ref(false);
+
+// 计算当前选中的知识库列表
+const selectedKnowledgeList = computed(() => {
+  return knowledgeList.value.filter((kb) =>
+    selectedKnowledgeIds.value.includes(kb.id)
+  );
+});
 
 // 监听外部值变化
 watch(
@@ -88,21 +95,21 @@ const loadKnowledgeList = async () => {
 
 // 处理选择变化
 const handleChange = (value: string[]) => {
+  selectedKnowledgeIds.value = value;
   emit('update:modelValue', value);
   
-  const selectedList = knowledgeList.value.filter((kb) =>
-    value.includes(kb.id)
-  );
-  emit('change', value, selectedList);
+  // 使用 computed 属性获取选中的知识库列表
+  emit('change', value, selectedKnowledgeList.value);
 };
 
 onMounted(() => {
   loadKnowledgeList();
 });
 
-// 暴露方法
+// 暴露方法和属性
 defineExpose({
   loadKnowledgeList,
+  selectedKnowledgeList, // 暴露选中的知识库列表（computed 属性）
 });
 </script>
 
