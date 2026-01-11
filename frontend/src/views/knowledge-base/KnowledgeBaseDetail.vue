@@ -179,16 +179,46 @@ onMounted(() => {
 .knowledge-base-detail {
   padding: 24px;
   background: #f0f2f5;
-  min-height: calc(100vh - 64px);
+  min-height: 100vh;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  position: relative;
+
+  // 滚动条样式优化
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: #f0f0f0;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #bfbfbf;
+    border-radius: 4px;
+
+    &:hover {
+      background: #999;
+    }
+  }
 
   .back-button {
     margin-bottom: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #f0f2f5;
+    padding: 8px 0;
   }
 
   .info-card,
   .document-card {
     margin-bottom: 16px;
     background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   }
 
   .loading-container {

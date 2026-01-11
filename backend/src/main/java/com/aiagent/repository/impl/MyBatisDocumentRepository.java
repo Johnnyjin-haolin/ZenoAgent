@@ -53,6 +53,30 @@ public class MyBatisDocumentRepository implements DocumentRepository {
     }
     
     @Override
+    public List<Document> findPage(
+            String knowledgeBaseId,
+            String keyword,
+            String status,
+            String type,
+            String orderBy,
+            String orderDirection,
+            int offset,
+            int limit) {
+        List<DocumentEntity> entities = documentMapper.selectPage(
+                knowledgeBaseId, keyword, status, type, orderBy, orderDirection, offset, limit);
+        List<Document> result = new ArrayList<>();
+        for (DocumentEntity entity : entities) {
+            result.add(convertToModel(entity));
+        }
+        return result;
+    }
+    
+    @Override
+    public int countByConditions(String knowledgeBaseId, String keyword, String status, String type) {
+        return documentMapper.countByConditions(knowledgeBaseId, keyword, status, type);
+    }
+    
+    @Override
     public void saveAll(List<Document> documents) {
         if (documents == null || documents.isEmpty()) {
             return;

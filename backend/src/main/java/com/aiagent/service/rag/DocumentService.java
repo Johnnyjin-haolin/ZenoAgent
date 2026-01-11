@@ -304,6 +304,63 @@ public class DocumentService {
     }
     
     /**
+     * 分页查询文档列表（支持搜索、筛选、排序）
+     * 
+     * @param knowledgeBaseId 知识库ID
+     * @param pageNo 页码（从1开始）
+     * @param pageSize 每页大小
+     * @param keyword 关键词（文档名称搜索）
+     * @param status 状态筛选
+     * @param type 类型筛选
+     * @param orderBy 排序字段（如：create_time）
+     * @param orderDirection 排序方向（ASC/DESC）
+     * @return 分页结果
+     */
+    public com.aiagent.dto.Page<Document> listDocumentsPage(
+            String knowledgeBaseId,
+            int pageNo,
+            int pageSize,
+            String keyword,
+            String status,
+            String type,
+            String orderBy,
+            String orderDirection) {
+        int offset = (pageNo - 1) * pageSize;
+        
+        // 处理排序字段，防止SQL注入
+        String safeOrderBy = validateOrderBy(orderBy);
+        String safeOrderDirection = "DESC".equalsIgnoreCase(orderDirection) ? "DESC" : "ASC";
+        
+        List<Document> documents = documentRepository.findPage(
+                knowledgeBaseId, keyword, status, type, safeOrderBy, safeOrderDirection, offset, pageSize);
+        int total = documentRepository.countByConditions(knowledgeBaseId, keyword, status, type);
+        
+        com.aiagent.dto.Page<Document> page = new com.aiagent.dto.Page<>();
+        page.setRecords(documents);
+        page.setTotal(total);
+        page.setCurrent(pageNo);
+        page.setSize(pageSize);
+        
+        log.debug("查询文档列表: knowledgeBaseId={}, pageNo={}, pageSize={}, total={}", 
+                knowledgeBaseId, pageNo, pageSize, total);
+        return page;
+    }
+    
+    /**
+     * 验证排序字段，防止SQL注入
+     */
+    private String validateOrderBy(String orderBy) {
+        if (orderBy == null || orderBy.isEmpty()) {
+            return null;
+        }
+        // 只允许字母、数字和下划线
+        if (orderBy.matches("^[a-zA-Z_][a-zA-Z0-9_]*$")) {
+            return orderBy;
+        }
+        return null;
+    }
+    
+    /**
      * 异步向量化文档
      */
     private void asyncVectorizeDocument(KnowledgeBase knowledgeBase, Document document) {

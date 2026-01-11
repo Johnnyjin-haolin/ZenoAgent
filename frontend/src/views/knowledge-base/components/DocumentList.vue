@@ -14,6 +14,7 @@
         placeholder="筛选状态"
         style="width: 150px; margin-right: 16px;"
         allow-clear
+        @change="loadDocuments(true)"
       >
         <a-select-option value="">全部状态</a-select-option>
         <a-select-option value="DRAFT">草稿</a-select-option>
@@ -26,6 +27,7 @@
         placeholder="筛选类型"
         style="width: 150px;"
         allow-clear
+        @change="loadDocuments(true)"
       >
         <a-select-option value="">全部类型</a-select-option>
         <a-select-option value="FILE">文件</a-select-option>
@@ -37,7 +39,7 @@
     <!-- 文档表格 -->
     <a-table
       :columns="columns"
-      :data-source="filteredList"
+      :data-source="documents"
       :loading="loading"
       :pagination="pagination"
       row-key="id"
@@ -125,6 +127,8 @@ const loading = ref(false);
 const searchKeyword = ref('');
 const statusFilter = ref<string>('');
 const typeFilter = ref<string>('');
+const orderBy = ref<string>('');
+const orderDirection = ref<'ASC' | 'DESC'>('DESC');
 
 // 分页配置
 const pagination = ref({
@@ -174,30 +178,7 @@ const columns = [
   },
 ];
 
-// 筛选后的列表
-const filteredList = computed(() => {
-  let list = documents.value;
-
-  // 按状态筛选
-  if (statusFilter.value) {
-    list = list.filter((doc) => doc.status === statusFilter.value);
-  }
-
-  // 按类型筛选
-  if (typeFilter.value) {
-    list = list.filter((doc) => doc.type === typeFilter.value);
-  }
-
-  // 按关键词搜索
-  if (searchKeyword.value) {
-    const keyword = searchKeyword.value.toLowerCase();
-    list = list.filter((doc) => doc.title.toLowerCase().includes(keyword));
-  }
-
-  return list;
-});
-
-// 检查是否有处理中的文档
+// 检查是否有处理中的文档（用于自动刷新）
 const hasBuildingDocuments = computed(() => {
   return documents.value.some((doc) => doc.status === 'BUILDING');
 });
@@ -239,12 +220,24 @@ const formatTime = (time?: string) => {
 };
 
 // 加载文档列表
-const loadDocuments = async () => {
+const loadDocuments = async (resetPage = false) => {
+  if (resetPage) {
+    pagination.value.current = 1;
+  }
+  
   loading.value = true;
   try {
-    const list = await getDocumentList(props.knowledgeBaseId);
-    documents.value = list;
-    pagination.value.total = list.length;
+    const pageResult = await getDocumentList(props.knowledgeBaseId, {
+      pageNo: pagination.value.current,
+      pageSize: pagination.value.pageSize,
+      keyword: searchKeyword.value || undefined,
+      status: statusFilter.value || undefined,
+      type: typeFilter.value || undefined,
+      orderBy: orderBy.value || undefined,
+      orderDirection: orderDirection.value,
+    });
+    documents.value = pageResult.records;
+    pagination.value.total = pageResult.total;
   } catch (error: any) {
     message.error('加载文档列表失败: ' + (error?.message || '未知错误'));
   } finally {
@@ -252,12 +245,20 @@ const loadDocuments = async () => {
   }
 };
 
-// 刷新文档列表
+// 刷新文档列表（不重置页码）
 const refreshDocuments = async () => {
   try {
-    const list = await getDocumentList(props.knowledgeBaseId);
-    documents.value = list;
-    pagination.value.total = list.length;
+    const pageResult = await getDocumentList(props.knowledgeBaseId, {
+      pageNo: pagination.value.current,
+      pageSize: pagination.value.pageSize,
+      keyword: searchKeyword.value || undefined,
+      status: statusFilter.value || undefined,
+      type: typeFilter.value || undefined,
+      orderBy: orderBy.value || undefined,
+      orderDirection: orderDirection.value,
+    });
+    documents.value = pageResult.records;
+    pagination.value.total = pageResult.total;
   } catch (error: any) {
     console.error('刷新文档列表失败:', error);
   }
@@ -286,7 +287,7 @@ const stopAutoRefresh = () => {
 
 // 搜索
 const handleSearch = () => {
-  // 搜索已在computed中处理
+  loadDocuments(true); // 搜索时重置到第一页
 };
 
 // 重建文档
@@ -312,11 +313,25 @@ const handleDelete = async (record: Document) => {
   }
 };
 
-// 表格变化处理
+// 表格变化处理（分页、排序）
 const handleTableChange = (pag: any, filters: any, sorter: any) => {
-  pagination.value.current = pag.current;
-  pagination.value.pageSize = pag.pageSize;
-  // 可以在这里添加排序逻辑
+  // 处理分页
+  if (pag) {
+    pagination.value.current = pag.current;
+    pagination.value.pageSize = pag.pageSize;
+  }
+  
+  // 处理排序
+  if (sorter && sorter.field) {
+    orderBy.value = sorter.field === 'createTime' ? 'create_time' : sorter.field;
+    orderDirection.value = sorter.order === 'ascend' ? 'ASC' : 'DESC';
+  } else {
+    orderBy.value = '';
+    orderDirection.value = 'DESC';
+  }
+  
+  // 重新加载数据
+  loadDocuments();
 };
 
 // 监听是否有处理中的文档，启动/停止自动刷新
@@ -337,7 +352,7 @@ watch(
   () => props.knowledgeBaseId,
   () => {
     if (props.knowledgeBaseId) {
-      loadDocuments();
+      loadDocuments(true); // 切换知识库时重置到第一页
     }
   },
   { immediate: true }

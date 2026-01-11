@@ -163,14 +163,45 @@ export async function getKnowledgeBaseStats(id: string): Promise<KnowledgeBaseSt
 }
 
 /**
- * 获取文档列表
+ * 文档列表分页响应
  */
-export async function getDocumentList(knowledgeBaseId: string): Promise<Document[]> {
+export interface DocumentPageResponse {
+  records: Document[];
+  total: number;
+  pageNo: number;
+  pageSize: number;
+  pages: number;
+}
+
+/**
+ * 获取文档列表（分页）
+ */
+export async function getDocumentList(
+  knowledgeBaseId: string,
+  params?: {
+    pageNo?: number;
+    pageSize?: number;
+    keyword?: string;
+    status?: string;
+    type?: string;
+    orderBy?: string;
+    orderDirection?: 'ASC' | 'DESC';
+  }
+): Promise<DocumentPageResponse> {
   try {
-    const response = await http.get<ApiResponse<Document[]>>({
+    const response = await http.get<ApiResponse<DocumentPageResponse>>({
       url: DocumentApi.list(knowledgeBaseId),
+      params: {
+        pageNo: params?.pageNo || 1,
+        pageSize: params?.pageSize || 10,
+        keyword: params?.keyword,
+        status: params?.status,
+        type: params?.type,
+        orderBy: params?.orderBy,
+        orderDirection: params?.orderDirection || 'DESC',
+      },
     });
-    return response?.data || [];
+    return response?.data || { records: [], total: 0, pageNo: 1, pageSize: 10, pages: 0 };
   } catch (error) {
     console.error('获取文档列表失败:', error);
     throw error;

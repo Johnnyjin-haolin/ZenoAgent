@@ -30,6 +30,30 @@ public interface DocumentMapper {
     List<DocumentEntity> selectByKnowledgeBaseId(@Param("knowledgeBaseId") String knowledgeBaseId);
     
     /**
+     * 分页查询文档列表（支持搜索、筛选、排序）
+     */
+    List<DocumentEntity> selectPage(
+        @Param("knowledgeBaseId") String knowledgeBaseId,
+        @Param("keyword") String keyword,
+        @Param("status") String status,
+        @Param("type") String type,
+        @Param("orderBy") String orderBy,
+        @Param("orderDirection") String orderDirection,
+        @Param("offset") int offset,
+        @Param("limit") int limit
+    );
+    
+    /**
+     * 统计文档数量（支持搜索、筛选）
+     */
+    int countByConditions(
+        @Param("knowledgeBaseId") String knowledgeBaseId,
+        @Param("keyword") String keyword,
+        @Param("status") String status,
+        @Param("type") String type
+    );
+    
+    /**
      * 批量插入文档
      */
     void insertBatch(@Param("documents") List<DocumentEntity> documents);

@@ -1,5 +1,8 @@
 <template>
-  <a-tag :color="statusColor" :icon="statusIcon">
+  <a-tag :color="statusColor">
+    <template #icon>
+      <Icon :icon="statusIcon" />
+    </template>
     {{ statusText }}
   </a-tag>
 </template>

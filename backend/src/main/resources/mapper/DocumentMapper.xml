@@ -28,6 +28,51 @@
         SELECT * FROM document WHERE knowledge_base_id = #{knowledgeBaseId} ORDER BY create_time DESC
     </select>
     
+    <select id="selectPage" resultMap="BaseResultMap">
+        SELECT id, knowledge_base_id, title, type, metadata, status, create_time, update_time
+        FROM document
+        <where>
+            knowledge_base_id = #{knowledgeBaseId}
+            <if test="keyword != null and keyword != ''">
+                AND title LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+            <if test="type != null and type != ''">
+                AND type = #{type}
+            </if>
+        </where>
+        <choose>
+            <when test="orderBy != null and orderBy != ''">
+                ORDER BY ${orderBy}
+                <if test="orderDirection != null and orderDirection != ''">
+                    ${orderDirection}
+                </if>
+            </when>
+            <otherwise>
+                ORDER BY create_time DESC
+            </otherwise>
+        </choose>
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+    
+    <select id="countByConditions" resultType="int">
+        SELECT COUNT(*) FROM document
+        <where>
+            knowledge_base_id = #{knowledgeBaseId}
+            <if test="keyword != null and keyword != ''">
+                AND title LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+            <if test="type != null and type != ''">
+                AND type = #{type}
+            </if>
+        </where>
+    </select>
+    
     <insert id="insertBatch">
         INSERT INTO document (id, knowledge_base_id, title, type, content, metadata, status, create_time, update_time)
         VALUES
