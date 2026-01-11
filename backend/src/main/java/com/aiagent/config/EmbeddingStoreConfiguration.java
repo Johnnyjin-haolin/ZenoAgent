@@ -39,10 +39,8 @@ public class EmbeddingStoreConfiguration {
      * @param modelId 模型ID（用于缓存key）
      * @return EmbeddingStore实例
      */
-    @Bean
-    @Lazy
     public EmbeddingStore<TextSegment> getEmbeddingStore(EmbeddingModel embeddingModel, String modelId) {
-        AgentConfig.EmbeddingStoreConfig config = agentConfig.getEmbeddingStore();
+        AgentConfig.RAGConfig.EmbeddingStoreConfig config = agentConfig.getRag().getEmbeddingStore();
         
         String connectionInfo = config.getHost() + ":" + config.getPort() + "/" + config.getDatabase();
         String key = (modelId != null ? modelId : "default") + ":" + connectionInfo;

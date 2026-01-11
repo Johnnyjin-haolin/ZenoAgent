@@ -41,11 +41,6 @@ public class AgentConfig {
     private RAGConfig rag = new RAGConfig();
     
     /**
-     * 向量存储配置
-     */
-    private EmbeddingStoreConfig embeddingStore = new EmbeddingStoreConfig();
-    
-    /**
      * 工具配置
      */
     private ToolConfig tools = new ToolConfig();
@@ -135,23 +130,28 @@ public class AgentConfig {
          * 默认 Embedding 模型ID（从 llm.models 中选择）
          */
         private String defaultEmbeddingModelId = "text-embedding-3-small";
+        
+        /**
+         * 向量存储配置
+         */
+        private EmbeddingStoreConfig embeddingStore = new EmbeddingStoreConfig();
+        
+        @Data
+        public static class EmbeddingStoreConfig {
+            private String host = "localhost";
+            private int port = 5432;
+            private String database = "aiagent";
+            private String user = "postgres";
+            private String password = "postgres";
+            private String table = "embeddings";
+            private boolean useIndex = true;
+            private int indexListSize = 100;
+        }
     }
     
     @Data
     public static class ToolConfig {
         private boolean enabledByDefault = true;
-    }
-    
-    @Data
-    public static class EmbeddingStoreConfig {
-        private String host = "localhost";
-        private int port = 5432;
-        private String database = "aiagent";
-        private String user = "postgres";
-        private String password = "postgres";
-        private String table = "embeddings";
-        private boolean useIndex = true;
-        private int indexListSize = 100;
     }
 }
 

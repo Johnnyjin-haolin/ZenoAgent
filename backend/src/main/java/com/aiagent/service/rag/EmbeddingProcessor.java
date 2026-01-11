@@ -98,10 +98,13 @@ public class EmbeddingProcessor {
             deleteDocumentVectors(document.getId(), embeddingStore);
             
             // 4. 分段器
+            // 注意：TokenCountEstimator 用于文档分段时的 token 估算，不需要匹配实际的 embedding 模型
+            // 对于自定义模型（如通过 LM Studio 部署的模型），使用已知的 OpenAI 模型名称
+            String tokenEstimatorModel = getTokenEstimatorModelName(embeddingModel.modelName());
             DocumentSplitter splitter = DocumentSplitters.recursive(
                     segmentSize > 0 ? segmentSize : DEFAULT_SEGMENT_SIZE,
                     overlapSize > 0 ? overlapSize : DEFAULT_OVERLAP_SIZE,
-                    new OpenAiTokenCountEstimator(embeddingModel.modelName())
+                    new OpenAiTokenCountEstimator(tokenEstimatorModel)
             );
             
             // 5. 构建元数据
@@ -206,6 +209,38 @@ public class EmbeddingProcessor {
             return embeddingModelManager.getDefaultEmbeddingModel();
         }
         return embeddingModelManager.getOrCreateEmbeddingModel(embeddingModelId);
+    }
+    
+    /**
+     * 获取用于 TokenCountEstimator 的模型名称
+     * 
+     * TokenCountEstimator 用于文档分段时的 token 估算，不需要匹配实际的 embedding 模型
+     * 对于自定义模型（不在 jtokkit 支持列表中），使用已知的 OpenAI 模型名称
+     * 
+     * @param modelName 实际的 embedding 模型名称
+     * @return 用于 TokenCountEstimator 的模型名称
+     */
+    private String getTokenEstimatorModelName(String modelName) {
+        if (modelName == null || modelName.isEmpty()) {
+            return "gpt-3.5-turbo"; // 默认使用 gpt-3.5-turbo
+        }
+        
+        // 常见 OpenAI 模型名称，直接使用
+        String[] knownModels = {
+            "gpt-4", "gpt-4-turbo", "gpt-4-32k",
+            "gpt-3.5-turbo", "gpt-3.5-turbo-16k",
+            "text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"
+        };
+        
+        for (String knownModel : knownModels) {
+            if (modelName.equals(knownModel) || modelName.contains(knownModel)) {
+                return knownModel;
+            }
+        }
+        
+        // 对于自定义模型（如通过 LM Studio 部署的模型），使用 gpt-3.5-turbo 作为默认值
+        log.debug("使用默认模型名称 gpt-3.5-turbo 进行 token 估算，实际模型: {}", modelName);
+        return "gpt-3.5-turbo";
     }
     
     /**

@@ -125,10 +125,10 @@ aiagent:
       host: localhost
       port: 5432
       database: zeno_agent
-      user:
-      password:
+      user: rag_user
+      password: Rag@123456
       table: embeddings
-      use-index: true
+      use-index: false  # 禁用索引（2560维向量超过ivfflat索引的2000维限制）
       index-list-size: 100
     # 文档分段配置
     document:
