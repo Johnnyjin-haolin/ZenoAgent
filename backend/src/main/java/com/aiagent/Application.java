@@ -18,7 +18,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * @author aiagent
  */
 @SpringBootApplication
-@MapperScan("com.aiagent.mapper")
+@MapperScan("com.aiagent.infrastructure.mapper")
 public class Application {
     
     public static void main(String[] args) {

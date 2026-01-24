@@ -1,0 +1,342 @@
+package com.aiagent.application.service.agent.impl;
+
+import com.aiagent.infrastructure.config.AgentConfig;
+import com.aiagent.shared.constant.AgentConstants;
+import com.aiagent.application.service.action.ActionResult;
+import com.aiagent.application.service.agent.AgentContextService;
+import com.aiagent.application.service.agent.AgentStateMachine;
+import com.aiagent.application.service.agent.AgentStreamingService;
+import com.aiagent.application.service.conversation.ConversationService;
+import com.aiagent.application.service.agent.IAgentService;
+import com.aiagent.application.service.engine.ReActEngine;
+import com.aiagent.application.service.StreamingCallback;
+import com.aiagent.application.service.memory.MemorySystem;
+import com.aiagent.api.dto.AgentEventData;
+import com.aiagent.api.dto.AgentRequest;
+import com.aiagent.application.model.AgentContext;
+import com.aiagent.infrastructure.storage.ConversationStorage;
+import com.aiagent.shared.util.UUIDGenerator;
+import dev.langchain4j.data.message.UserMessage;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+
+/**
+ * AI Agent 服务实现（ReAct架构版本）
+ * 
+ * 使用ReAct循环实现自主思考和决策能力
+ * 
+ * @author aiagent
+ */
+@Slf4j
+@Service
+public class AgentServiceImpl implements IAgentService {
+    
+    @Autowired
+    private ReActEngine reActEngine;
+    
+    @Autowired
+    private MemorySystem memorySystem;
+    
+    @Autowired
+    private ConversationStorage conversationStorage;
+    
+    @Autowired
+    private AgentStateMachine stateMachine;
+    
+    @Autowired
+    private AgentConfig agentConfig;
+    
+    @Autowired
+    private ConversationService conversationService;
+
+    @Autowired
+    private AgentContextService agentContextService;
+
+    @Autowired
+    private AgentStreamingService streamingService;
+    
+    @Override
+    public SseEmitter execute(AgentRequest request) {
+        log.info("开始执行Agent任务（ReAct架构）: {}", request.getContent());
+        
+        // 标准化会话ID：前端临时ID不直接入库
+        request.setConversationId(agentContextService.normalizeConversationId(request.getConversationId()));
+        
+        // 1. 创建SSE连接
+        String requestId = UUIDGenerator.generate();
+        SseEmitter emitter = streamingService.createEmitter(requestId);
+        
+        // 3. 发送初始事件
+        streamingService.sendEvent(emitter, AgentEventData.builder()
+            .requestId(requestId)
+            .event(AgentConstants.EVENT_AGENT_START)
+            .message(AgentConstants.MESSAGE_AGENT_START)
+            .conversationId(request.getConversationId())
+            .build());
+        
+        // 4. 缓存emitter
+        streamingService.cacheEmitter(requestId, emitter);
+        
+        // 5. 异步执行任务
+        CompletableFuture.runAsync(() -> {
+            try {
+                executeWithReAct(request, requestId, emitter);
+            } catch (Exception e) {
+                log.error("Agent任务执行失败", e);
+                streamingService.sendEvent(emitter, AgentEventData.builder()
+                    .requestId(requestId)
+                    .event(AgentConstants.EVENT_AGENT_ERROR)
+                    .message("执行失败: " + e.getMessage())
+                    .conversationId(request.getConversationId())
+                    .build());
+                streamingService.closeEmitter(emitter, requestId);
+            }
+        });
+        
+        return emitter;
+    }
+    
+    /**
+     * 使用ReAct循环执行任务
+     */
+    private void executeWithReAct(AgentRequest request, String requestId, SseEmitter emitter) {
+        // 1. 加载或创建上下文
+        AgentContext context = agentContextService.loadOrCreateContext(request);
+        String conversationId = context.getConversationId();
+                
+        // 1.1 确保会话在MySQL中存在（如果不存在则创建）
+        agentContextService.ensureConversationExists(conversationId, request);
+        
+        // 2. 保存用户消息到记忆和MySQL（统一通过MemorySystem处理）
+        UserMessage userMessage = new UserMessage(request.getContent());
+        memorySystem.saveShortTermMemory(conversationId, userMessage, null, null, null, null);
+        if (context.getMessages() == null) {
+            context.setMessages(new java.util.ArrayList<>());
+        }
+        context.getMessages().add(userMessage);
+        
+        // 3. 设置上下文变量（使用具体属性）
+        // 智能选择模型：如果未指定modelId，使用配置的默认模型
+        String modelId = request.getModelId();
+        if (modelId == null || modelId.trim().isEmpty()) {
+            modelId = agentConfig.getModel().getDefaultModelId();
+            log.info("未指定模型，使用默认模型: {}", modelId);
+            
+            // 发送模型选择事件
+            streamingService.sendEvent(emitter, AgentEventData.builder()
+                .requestId(requestId)
+                .event(AgentConstants.EVENT_AGENT_THINKING)
+                .message("使用默认模型: " + modelId)
+                .conversationId(context.getConversationId())
+                .build());
+        } else {
+            log.info("使用指定模型: {}", modelId);
+        }
+        context.setModelId(modelId);
+        context.setEnabledMcpGroups(request.getEnabledMcpGroups());
+        context.setKnowledgeIds(request.getKnowledgeIds());
+        // 设置启用的工具名称列表（为空则允许所有工具）
+        context.setEnabledTools(request.getEnabledTools());
+        context.setRequestId(requestId);
+        
+        // 设置事件发布器，用于各个Engine向前端发送进度事件
+        context.setEventPublisher(eventData -> {
+            // 自动填充requestId和conversationId
+            if (eventData.getRequestId() == null) {
+                eventData.setRequestId(requestId);
+            }
+            if (eventData.getConversationId() == null) {
+                eventData.setConversationId(context.getConversationId());
+            }
+            streamingService.sendEvent(emitter, eventData);
+        });
+        
+        // 3.1 设置流式输出回调（使用CountDownLatch确保流式完成后再关闭SSE）
+        CountDownLatch streamingCompleteLatch = new CountDownLatch(1);
+        context.setStreamingCallback(new StreamingCallback() {
+            @Override
+            public void onToken(String token) {
+                // 实时发送token到前端
+                streamingService.sendEvent(emitter, AgentEventData.builder()
+                    .requestId(requestId)
+                    .event(AgentConstants.EVENT_AGENT_MESSAGE)
+                    .content(token)
+                    .conversationId(context.getConversationId())
+                    .build());
+            }
+            
+            @Override
+            public void onComplete(String fullText) {
+                log.debug("LLM生成完成，文本长度: {}", fullText.length());
+                // 发送流式完成事件，通知前端所有token都已发送
+                streamingService.sendEvent(emitter, AgentEventData.builder()
+                    .requestId(requestId)
+                    .event(AgentConstants.EVENT_AGENT_STREAM_COMPLETE)
+                .message(AgentConstants.MESSAGE_STREAM_COMPLETE)
+                    .conversationId(context.getConversationId())
+                    .build());
+                // 释放锁，允许主线程继续执行并关闭SSE
+                streamingCompleteLatch.countDown();
+            }
+            
+            @Override
+            public void onError(Throwable error) {
+                log.error("LLM流式输出错误", error);
+                streamingService.sendEvent(emitter, AgentEventData.builder()
+                    .requestId(requestId)
+                    .event(AgentConstants.EVENT_AGENT_ERROR)
+                    .message("生成失败: " + error.getMessage())
+                    .conversationId(context.getConversationId())
+                    .build());
+                // 发生错误也要释放锁
+                streamingCompleteLatch.countDown();
+            }
+            
+            @Override
+            public void onStart() {
+                log.debug("LLM开始生成");
+            }
+        });
+        
+        // 3.2 如果有知识库，执行预检索（仅在第一次请求时）
+        if (context.getKnowledgeIds() != null && !context.getKnowledgeIds().isEmpty()) {
+            agentContextService.performInitialRagRetrieval(
+                request,
+                context,
+                requestId,
+                eventData -> streamingService.sendEvent(emitter, eventData)
+            );
+        }
+        
+        // 4. 注册状态变更监听器
+        stateMachine.initialize(context, newState -> {
+            streamingService.sendEvent(emitter, AgentEventData.builder()
+                .requestId(requestId)
+                .event(AgentConstants.EVENT_AGENT_THINKING)
+                .message("状态: " + newState.getDescription())
+                .conversationId(context.getConversationId())
+                .build());
+        });
+        
+        // 5. 执行ReAct循环
+        streamingService.sendEvent(emitter, AgentEventData.builder()
+            .requestId(requestId)
+            .event(AgentConstants.EVENT_AGENT_THINKING)
+            .message("开始ReAct循环...")
+            .conversationId(context.getConversationId())
+            .build());
+        
+        ActionResult finalResult = reActEngine.execute(request.getContent(), context);
+        
+        // 6. 处理最终结果
+        if (finalResult.isSuccess()) {
+            // 保存AI回复到记忆和MySQL（统一通过MemorySystem处理）
+            dev.langchain4j.data.message.AiMessage aiMessage = 
+                new dev.langchain4j.data.message.AiMessage(finalResult.getData().toString());
+            context.getMessages().add(aiMessage);
+            
+            // 提取元数据
+            Map<String, Object> metadata = null;
+            if (finalResult.getMetadata() instanceof Map) {
+                metadata = (Map<String, Object>) finalResult.getMetadata();
+            }
+            
+            // 保存到Redis和MySQL（包含模型ID和元数据）
+            memorySystem.saveShortTermMemory(
+                context.getConversationId(), 
+                aiMessage, 
+                context.getModelId(),
+                null, // tokens - 可以从finalResult中获取
+                null, // duration - 可以从finalResult中获取
+                metadata
+            );
+            
+            // 更新对话消息数量（Redis和MySQL都要更新）
+            conversationStorage.incrementMessageCount(context.getConversationId());
+            try {
+                conversationService.incrementMessageCount(context.getConversationId());
+            } catch (Exception e) {
+                log.warn("更新MySQL消息数量失败: conversationId={}", context.getConversationId(), e);
+            }
+            
+            // 注意：如果是LLM_GENERATE且使用了流式输出，内容已经通过callback发送了
+            // 这里不再重复发送完整内容，只在metadata中标记streaming为false的情况下才发送
+            boolean isStreaming = false;
+            if (metadata != null && metadata.containsKey("streaming")) {
+                isStreaming = Boolean.TRUE.equals(metadata.get("streaming"));
+            }
+            
+            // 如果actionType是complete或direct_response，说明目标已达成，内容应该已经通过之前的动作发送过了
+            // 不需要再发送，避免重复
+            String actionType = finalResult.getActionType();
+            boolean shouldSendMessage = !isStreaming && 
+                                       !"complete".equals(actionType) && 
+                                       !"direct_response".equals(actionType);
+            
+            if (shouldSendMessage) {
+                // 非流式结果（如工具调用结果），需要发送完整内容
+                streamingService.sendEvent(emitter, AgentEventData.builder()
+                    .requestId(requestId)
+                    .event(AgentConstants.EVENT_AGENT_MESSAGE)
+                    .content(finalResult.getData().toString())
+                    .conversationId(context.getConversationId())
+                    .build());
+            } else {
+                log.debug("流式输出已完成，等待所有SSE事件发送完成...");
+                // 如果是流式输出，等待流式完成后再继续
+                // 这样可以确保所有token都通过SSE发送完毕，避免关闭SSE时还有残留事件
+                try {
+                    // 等待最多30秒（正常情况下应该很快完成）
+                    boolean completed = streamingCompleteLatch.await(
+                        AgentConstants.STREAMING_WAIT_TIMEOUT_SECONDS,
+                        java.util.concurrent.TimeUnit.SECONDS
+                    );
+                    if (completed) {
+                        log.debug("流式输出已完全结束，可以安全关闭SSE");
+                    } else {
+                        log.warn("等待流式输出完成超时（{}秒），强制继续", AgentConstants.STREAMING_WAIT_TIMEOUT_SECONDS);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.warn("等待流式输出完成被中断", e);
+                }
+            }
+        } else {
+            streamingService.sendEvent(emitter, AgentEventData.builder()
+                .requestId(requestId)
+                .event(AgentConstants.EVENT_AGENT_ERROR)
+                .message("执行失败: " + finalResult.getError())
+                .conversationId(context.getConversationId())
+                .build());
+        }
+        
+        // 7. 保存上下文
+        memorySystem.saveContext(context);
+        
+        // 8. 关闭SSE（此时所有流式事件都已发送完成）
+        streamingService.closeEmitter(emitter, requestId);
+    }
+    
+    @Override
+    public boolean stop(String requestId) {
+        SseEmitter emitter = streamingService.getEmitter(requestId);
+        if (emitter != null) {
+            streamingService.closeEmitter(emitter, requestId);
+            return true;
+        }
+        return false;
+    }
+    
+    @Override
+    public boolean clearMemory(String conversationId) {
+        memorySystem.clearMemory(conversationId);
+        return true;
+    }
+}
+
