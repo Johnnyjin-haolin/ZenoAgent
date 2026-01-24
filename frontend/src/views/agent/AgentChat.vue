@@ -193,13 +193,15 @@ import { useRouter } from 'vue-router';
 import { Icon } from '@/components/Icon';
 import { message } from 'ant-design-vue';
 import { useAgentChat } from './hooks/useAgentChat';
-import { getConversations, updateConversationTitle } from './agent.api';
+import { getAvailableModels, getConversations, getKnowledgeList, updateConversationTitle } from './agent.api';
+import { getMcpTools } from './agent.api.adapted';
 import AgentMessage from './components/AgentMessage.vue';
 import AgentSlide from './components/AgentSlide.vue';
 import AgentModelSelector from './components/AgentModelSelector.vue';
 import AgentKnowledgeSelector from './components/AgentKnowledgeSelector.vue';
 import AgentToolConfig from './components/AgentToolConfig.vue';
 import type { ConversationInfo, ModelInfo, KnowledgeInfo } from './agent.types';
+import { ModelType } from '@/types/model.types';
 
 const router = useRouter();
 
@@ -225,6 +227,17 @@ const selectedModelId = ref('');
 const selectedKnowledgeIds = ref<string[]>([]);
 const selectedTools = ref<string[]>([]);
 const executionMode = ref<'AUTO' | 'MANUAL'>('AUTO');
+const isConfigInitialized = ref(false);
+
+const AGENT_CONFIG_STORAGE_KEY = 'agent.chat.config.v1';
+
+type AgentConfigCache = {
+  modelId: string;
+  knowledgeIds: string[];
+  enabledTools: string[];
+  mode: 'AUTO' | 'MANUAL';
+  updatedAt: number;
+};
 
 // 使用 Agent Chat Hook
 const {
@@ -256,6 +269,78 @@ const inputPlaceholder = computed(() => {
   return '请输入您的问题...（Shift + Enter 换行，Enter 发送）';
 });
 
+const readConfigCache = (): AgentConfigCache | null => {
+  try {
+    const raw = localStorage.getItem(AGENT_CONFIG_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return {
+      modelId: typeof parsed.modelId === 'string' ? parsed.modelId : '',
+      knowledgeIds: Array.isArray(parsed.knowledgeIds) ? parsed.knowledgeIds.filter(Boolean) : [],
+      enabledTools: Array.isArray(parsed.enabledTools) ? parsed.enabledTools.filter(Boolean) : [],
+      mode: parsed.mode === 'MANUAL' ? 'MANUAL' : 'AUTO',
+      updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : Date.now(),
+    };
+  } catch (error) {
+    console.warn('读取Agent配置缓存失败:', error);
+    return null;
+  }
+};
+
+const persistConfigCache = () => {
+  if (!isConfigInitialized.value) return;
+  const payload: AgentConfigCache = {
+    modelId: selectedModelId.value || '',
+    knowledgeIds: [...selectedKnowledgeIds.value],
+    enabledTools: [...selectedTools.value],
+    mode: executionMode.value,
+    updatedAt: Date.now(),
+  };
+  localStorage.setItem(AGENT_CONFIG_STORAGE_KEY, JSON.stringify(payload));
+};
+
+const applyCachedConfig = (cache: AgentConfigCache) => {
+  selectedModelId.value = cache.modelId || '';
+  selectedKnowledgeIds.value = [...cache.knowledgeIds];
+  selectedTools.value = [...cache.enabledTools];
+  executionMode.value = cache.mode || 'AUTO';
+};
+
+const validateConfigWithLatestLists = async () => {
+  const [models, knowledgeList, tools] = await Promise.all([
+    getAvailableModels(ModelType.CHAT).catch(() => []),
+    getKnowledgeList().catch(() => []),
+    getMcpTools().catch(() => []),
+  ]);
+
+  if (models.length > 0) {
+    const modelIds = new Set(models.map((item) => item.id));
+    if (selectedModelId.value && !modelIds.has(selectedModelId.value)) {
+      const defaultModel = models.find((item) => item.isDefault);
+      selectedModelId.value = defaultModel?.id || '';
+    }
+  }
+
+  if (knowledgeList.length > 0) {
+    const knowledgeIdSet = new Set(knowledgeList.map((item) => item.id));
+    selectedKnowledgeIds.value = selectedKnowledgeIds.value.filter((id) => knowledgeIdSet.has(id));
+  }
+
+  if (tools.length > 0) {
+    const toolNameSet = new Set(tools.map((tool) => tool.name));
+    selectedTools.value = selectedTools.value.filter((name) => toolNameSet.has(name));
+  }
+};
+
+const initAgentConfig = async () => {
+  const cached = readConfigCache();
+  if (cached) {
+    applyCachedConfig(cached);
+  }
+  await validateConfigWithLatestLists();
+  isConfigInitialized.value = true;
+  persistConfigCache();
+};
 
 // 加载会话列表
 const loadConversations = async () => {
@@ -451,8 +536,17 @@ const handleToolsChange = (tools: string[]) => {
 
 // 初始化
 onMounted(() => {
+  initAgentConfig();
   loadConversations();
 });
+
+watch(
+  [selectedModelId, selectedKnowledgeIds, selectedTools, executionMode],
+  () => {
+    persistConfigCache();
+  },
+  { deep: true }
+);
 
 const syncConversationTitle = async (conversationId: string) => {
   try {
