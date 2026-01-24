@@ -1,0 +1,20 @@
+{
+  "name": "ZenoAgent",
+  "logo": "",
+  "primaryColor": "#1890ff",
+  "links": [
+    {
+      "label": "GitHub",
+      "url": "https://github.com/your-org/zenoagent"
+    },
+    {
+      "label": "Docs",
+      "url": "https://docs.example.com"
+    }
+  ],
+  "showFooter": true,
+  "showTitle": true,
+  "embedMode": false,
+  "version": "v0.1.0"
+}
+
