@@ -15,12 +15,13 @@
         v-for="(item, index) in conversations"
         :key="item.id"
         class="conversation-item"
-        :class="{ active: item.id === activeId }"
+        :class="{ active: item.id === activeId, temporary: item.isTemporary }"
         @click="handleSelect(item)"
       >
         <div class="conversation-main">
           <div v-if="!item.isEdit" class="conversation-title">
-            {{ item.title }}
+            <span>{{ item.title }}</span>
+            <span v-if="item.isTemporary" class="conversation-temp-tag">未保存</span>
           </div>
           <a-input
             v-else
@@ -72,8 +73,10 @@ import { Empty, Modal, message } from 'ant-design-vue';
 import { deleteConversation } from '../agent.api';
 import type { ConversationInfo } from '../agent.types';
 
+type ConversationView = ConversationInfo & { isTemporary?: boolean };
+
 const props = defineProps<{
-  conversations: ConversationInfo[];
+  conversations: ConversationView[];
   activeId?: string;
 }>();
 
@@ -180,6 +183,10 @@ const handleDelete = (conversation: ConversationInfo) => {
     border-color: #d9d9d9;
   }
 
+  &.temporary {
+    background: #fffbe6;
+  }
+
   &.active {
     background: #e6f7ff;
     border-color: #1890ff;
@@ -196,11 +203,29 @@ const handleDelete = (conversation: ConversationInfo) => {
   }
 
   .conversation-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 14px;
     color: #262626;
+  }
+
+  .conversation-title > span:first-child {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .conversation-temp-tag {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: #8c8c8c;
+    background: #f5f5f5;
+    border-radius: 4px;
+    padding: 0 6px;
+    line-height: 18px;
   }
 
   .conversation-actions {

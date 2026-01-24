@@ -58,6 +58,9 @@ public class AgentServiceImpl implements IAgentService {
     public SseEmitter execute(AgentRequest request) {
         log.info("开始执行Agent任务（ReAct架构）: {}", request.getContent());
         
+        // 标准化会话ID：前端临时ID不直接入库
+        request.setConversationId(normalizeConversationId(request.getConversationId()));
+        
         // 1. 创建SSE连接
         SseEmitter emitter = new SseEmitter(-1L);
         String requestId = UUIDGenerator.generate();
@@ -378,10 +381,7 @@ public class AgentServiceImpl implements IAgentService {
      * 加载或创建上下文
      */
     private AgentContext loadOrCreateContext(AgentRequest request) {
-        String conversationId = request.getConversationId();
-        if (StringUtils.isEmpty(conversationId)) {
-            conversationId = UUIDGenerator.generate();
-        }
+        String conversationId = normalizeConversationId(request.getConversationId());
         
         AgentContext context = memorySystem.getContext(conversationId);
         
@@ -415,6 +415,16 @@ public class AgentServiceImpl implements IAgentService {
         }
         
         return context;
+    }
+
+    /**
+     * 标准化会话ID：空值或临时ID时生成新的ID
+     */
+    private String normalizeConversationId(String conversationId) {
+        if (StringUtils.isEmpty(conversationId) || conversationId.startsWith("temp-")) {
+            return UUIDGenerator.generate();
+        }
+        return conversationId;
     }
     
     /**

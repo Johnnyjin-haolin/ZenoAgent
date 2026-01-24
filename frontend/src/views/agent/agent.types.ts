@@ -71,6 +71,10 @@ export interface AgentEvent {
   totalTokens?: number;
   /** 耗时（毫秒） */
   duration?: number;
+  /** 会话ID */
+  conversationId?: string;
+  /** 主题ID */
+  topicId?: string;
 }
 
 /**

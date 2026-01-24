@@ -188,7 +188,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted } from 'vue';
+import { ref, computed, nextTick, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { Icon } from '@/components/Icon';
 import { message } from 'ant-design-vue';
@@ -204,10 +204,13 @@ import type { ConversationInfo, ModelInfo, KnowledgeInfo } from './agent.types';
 const router = useRouter();
 
 // 会话管理
-const conversations = ref<ConversationInfo[]>([]);
+type ConversationView = ConversationInfo & { isTemporary?: boolean };
+const conversations = ref<ConversationView[]>([]);
 const currentConversationId = ref('');
 const showSlide = ref(true);
 const slideCollapsed = ref(false);
+const temporaryConversationId = ref<string | null>(null);
+const temporaryHasMessages = ref(false);
 
 // 配置抽屉
 const showConfigDrawer = ref(false);
@@ -273,6 +276,15 @@ const loadConversations = async () => {
 
 // 选择会话
 const handleSelectConversation = async (conversation: ConversationInfo) => {
+  // 选择其他会话前，清理未发送消息的临时会话
+  if (temporaryConversationId.value === currentConversationId.value && !temporaryHasMessages.value) {
+    const index = conversations.value.findIndex((c) => c.id === temporaryConversationId.value);
+    if (index !== -1) {
+      conversations.value.splice(index, 1);
+    }
+    temporaryConversationId.value = null;
+  }
+
   currentConversationId.value = conversation.id;
   clearMessages();
   
@@ -285,8 +297,36 @@ const handleSelectConversation = async (conversation: ConversationInfo) => {
 
 // 新建会话
 const handleNewConversation = () => {
-  currentConversationId.value = '';
+  // 若已有临时会话且已开始对话，直接切换到该会话
+  if (temporaryConversationId.value && temporaryHasMessages.value) {
+    currentConversationId.value = temporaryConversationId.value;
+    userInput.value = '';
+    return;
+  }
+
+  // 如果已有未发送消息的临时会话，先移除
+  if (temporaryConversationId.value && !temporaryHasMessages.value) {
+    const index = conversations.value.findIndex((c) => c.id === temporaryConversationId.value);
+    if (index !== -1) {
+      conversations.value.splice(index, 1);
+    }
+  }
+
+  const tempId = `temp-${Date.now()}`;
+  const tempConversation: ConversationView = {
+    id: tempId,
+    title: '新对话',
+    isEdit: false,
+    disabled: true,
+    isTemporary: true,
+  };
+  conversations.value.unshift(tempConversation);
+  temporaryConversationId.value = tempId;
+  temporaryHasMessages.value = false;
+
+  currentConversationId.value = tempId;
   clearMessages();
+  userInput.value = '';
   message.success('已创建新对话');
 };
 
@@ -333,6 +373,9 @@ const handleSend = async () => {
   const content = userInput.value.trim();
   if (!content) {
     return;
+  }
+  if (temporaryConversationId.value === currentConversationId.value) {
+    temporaryHasMessages.value = true;
   }
 
   // 先清空输入框
@@ -409,6 +452,48 @@ const handleToolsChange = (tools: string[]) => {
 // 初始化
 onMounted(() => {
   loadConversations();
+});
+
+const syncConversationTitle = async (conversationId: string) => {
+  try {
+    const result = await getConversations();
+    const matched = result.find((item) => item.id === conversationId);
+    if (matched) {
+      const index = conversations.value.findIndex((c) => c.id === conversationId);
+      if (index !== -1) {
+        conversations.value[index].title = matched.title;
+        conversations.value[index].modelId = matched.modelId;
+        conversations.value[index].modelName = matched.modelName;
+        conversations.value[index].messageCount = matched.messageCount;
+      }
+    }
+  } catch (error) {
+    console.error('同步会话标题失败:', error);
+  }
+};
+
+// 临时会话在服务端生成 ID 后，替换成正式会话
+watch(currentConversationId, async (newId, oldId) => {
+  if (!newId || !oldId) return;
+  if (oldId !== temporaryConversationId.value) return;
+
+  const existingIndex = conversations.value.findIndex((c) => c.id === newId);
+  const tempIndex = conversations.value.findIndex((c) => c.id === oldId);
+
+  if (existingIndex !== -1) {
+    if (tempIndex !== -1) {
+      conversations.value.splice(tempIndex, 1);
+    }
+  } else if (tempIndex !== -1) {
+    conversations.value[tempIndex].id = newId;
+    conversations.value[tempIndex].isTemporary = false;
+    conversations.value[tempIndex].disabled = false;
+  }
+
+  await syncConversationTitle(newId);
+
+  temporaryConversationId.value = null;
+  temporaryHasMessages.value = false;
 });
 </script>
 

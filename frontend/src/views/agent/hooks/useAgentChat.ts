@@ -207,6 +207,13 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     loading.value = true;
     currentStatus.value = '准备发送...';
 
+    const updateConversationId = (event: AgentEvent) => {
+      const newConversationId = event.conversationId || (event.data && event.data.conversationId);
+      if (newConversationId && conversationId && conversationId.value !== newConversationId) {
+        conversationId.value = newConversationId;
+      }
+    };
+
     // 添加用户消息
     const userMessage: AgentMessage = {
       id: `user-${Date.now()}`,
@@ -252,6 +259,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       currentController = await executeAgent(request, {
         onStart: (event) => {
           console.log('任务开始:', event);
+          updateConversationId(event);
           assistantMessage.status = 'thinking';
           assistantMessage.statusText = '开始处理...';
           currentStatus.value = '任务已启动';
@@ -259,6 +267,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
         onThinking: (event) => {
           console.log('AI 思考中:', event);
+          updateConversationId(event);
           assistantMessage.status = 'thinking';
           assistantMessage.statusText = event.message || '思考中...';
           currentStatus.value = event.message || '思考中...';
@@ -314,6 +323,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
         onModelSelected: (event) => {
           console.log('模型已选择:', event);
+          updateConversationId(event);
           if (event.data) {
             assistantMessage.model = event.data.name || event.data.id;
           }
@@ -322,6 +332,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
         onRagRetrieve: (event) => {
           console.log('RAG 检索:', event);
+          updateConversationId(event);
           assistantMessage.status = 'retrieving';
           assistantMessage.statusText = '正在检索知识库...';
           currentStatus.value = '检索知识库中...';
@@ -366,6 +377,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
         onToolCall: (event) => {
           console.log('工具调用:', event);
+          updateConversationId(event);
           const requiresConfirmation = Boolean(event.data?.requiresConfirmation);
           assistantMessage.status = 'calling_tool';
           assistantMessage.statusText = requiresConfirmation
@@ -415,6 +427,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
         onToolResult: (event) => {
           console.log('工具结果:', event);
+          updateConversationId(event);
           currentStatus.value = '工具执行完成';
 
           const steps = assistantMessage.process!.steps;
@@ -447,6 +460,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         onMessage: (event) => {
           // 流式内容
           console.log('[useAgentChat] 收到消息片段:', event.content);
+          updateConversationId(event);
           
           // 标记流式输出已开始
           if (!assistantMessage.process!.streamingStarted) {
@@ -487,6 +501,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         onStreamComplete: (event) => {
           // 流式输出完成（所有 token 已发送）
           console.log('[useAgentChat] 流式输出完成');
+          updateConversationId(event);
           
           const steps = assistantMessage.process!.steps;
           
@@ -506,6 +521,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
         onComplete: (event) => {
           console.log('任务完成:', event);
+          updateConversationId(event);
           assistantMessage.status = 'done';
           assistantMessage.statusText = '';
           assistantMessage.loading = false;
@@ -549,6 +565,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
         onError: (event) => {
           console.error('发生错误:', event);
+          updateConversationId(event);
           assistantMessage.status = 'error';
           assistantMessage.statusText = '';
           assistantMessage.loading = false;
