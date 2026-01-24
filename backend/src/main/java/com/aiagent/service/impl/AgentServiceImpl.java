@@ -410,6 +410,9 @@ public class AgentServiceImpl implements IAgentService {
         if (request.getEnabledTools() != null) {
             context.setEnabledTools(request.getEnabledTools());
         }
+        if (request.getMode() != null) {
+            context.setMode(request.getMode());
+        }
         
         return context;
     }

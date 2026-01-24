@@ -6,7 +6,7 @@
 
 import { ref, Ref, computed, reactive, nextTick } from 'vue';
 import { message } from 'ant-design-vue';
-import { executeAgent, getConversationMessages } from '../agent.api';
+import { executeAgent, getConversationMessages, confirmToolExecution } from '../agent.api';
 import type {
   AgentMessage,
   AgentRequest,
@@ -54,6 +54,16 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
   let currentController: AbortController | null = null;
 
   /**
+   * 工具确认队列
+   */
+  const pendingToolConfirmations = ref<Array<{
+    requestId: string;
+    toolExecutionId: string;
+    toolName: string;
+    params: Record<string, any>;
+  }>>([]);
+
+  /**
    * 创建执行步骤
    */
   const createStep = (
@@ -78,8 +88,10 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
    */
   const findStep = (steps: ProcessStep[], type: ProcessStepType, toolName?: string): ProcessStep | undefined => {
     if (type === 'tool_call' && toolName) {
-      // 查找特定工具的调用步骤
-      return steps.find((s) => s.type === type && s.metadata?.toolName === toolName && s.status === 'running');
+      // 查找特定工具的调用步骤（允许waiting/running）
+      return [...steps].reverse().find((s) =>
+        s.type === type && s.metadata?.toolName === toolName && ['waiting', 'running'].includes(s.status)
+      );
     }
     // 查找最后一个该类型的步骤
     return [...steps].reverse().find((s) => s.type === type);
@@ -100,6 +112,27 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       step.status = status;
       step.endTime = Date.now();
       step.duration = step.startTime ? step.endTime - step.startTime : undefined;
+      if (metadata) {
+        step.metadata = { ...step.metadata, ...metadata };
+      }
+    }
+  };
+
+  /**
+   * 更新工具步骤状态
+   */
+  const updateToolStepStatus = (
+    steps: ProcessStep[],
+    toolName: string,
+    status: ProcessStepStatus,
+    metadata?: any
+  ) => {
+    const step = findStep(steps, 'tool_call', toolName);
+    if (step) {
+      step.status = status;
+      if (status === 'running') {
+        step.startTime = step.startTime || Date.now();
+      }
       if (metadata) {
         step.metadata = { ...step.metadata, ...metadata };
       }
@@ -333,9 +366,12 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
         onToolCall: (event) => {
           console.log('工具调用:', event);
+          const requiresConfirmation = Boolean(event.data?.requiresConfirmation);
           assistantMessage.status = 'calling_tool';
-          assistantMessage.statusText = `调用工具: ${event.data?.toolName || ''}`;
-          currentStatus.value = `调用工具: ${event.data?.toolName || ''}`;
+          assistantMessage.statusText = requiresConfirmation
+            ? `等待确认: ${event.data?.toolName || ''}`
+            : `调用工具: ${event.data?.toolName || ''}`;
+          currentStatus.value = assistantMessage.statusText || '';
 
           const steps = assistantMessage.process!.steps;
 
@@ -358,11 +394,22 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             assistantMessage.toolCalls?.push(toolCall);
 
             // 添加工具调用步骤
-            const step = createStep('tool_call', `调用工具: ${event.data.toolName}`, 'running', {
+            const stepStatus: ProcessStepStatus = requiresConfirmation ? 'waiting' : 'running';
+            const step = createStep('tool_call', `调用工具: ${event.data.toolName}`, stepStatus, {
               toolName: event.data.toolName,
               toolParams: event.data.params || {},
+              requiresConfirmation,
             });
             steps.push(step);
+
+            if (requiresConfirmation && event.data.toolExecutionId) {
+              pendingToolConfirmations.value.push({
+                requestId: event.requestId,
+                toolExecutionId: event.data.toolExecutionId,
+                toolName: event.data.toolName,
+                params: event.data.params || {},
+              });
+            }
           }
         },
 
@@ -565,6 +612,33 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
   };
 
   /**
+   * 确认/拒绝当前工具执行
+   */
+  const resolvePendingTool = async (approve: boolean) => {
+    const current = pendingToolConfirmations.value[0];
+    if (!current) return;
+
+    const success = await confirmToolExecution(current.toolExecutionId, approve, current.requestId);
+    if (!success) {
+      message.error('工具确认失败，请重试');
+      return;
+    }
+
+    const lastMessage = messages.value[messages.value.length - 1];
+    if (lastMessage && lastMessage.role === 'assistant' && lastMessage.process) {
+      if (approve) {
+        updateToolStepStatus(lastMessage.process.steps, current.toolName, 'running');
+      } else {
+        updateToolStepStatus(lastMessage.process.steps, current.toolName, 'error', {
+          toolError: '用户拒绝执行',
+        });
+      }
+    }
+
+    pendingToolConfirmations.value.shift();
+  };
+
+  /**
    * 清空消息
    */
   const clearMessages = () => {
@@ -752,6 +826,8 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     deleteMessage,
     regenerate,
     loadMessages,
+    pendingToolConfirmations,
+    resolvePendingTool,
   };
 }
 

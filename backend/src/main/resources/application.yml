@@ -65,6 +65,8 @@ mybatis:
 aiagent:
   # LLM配置
   llm:
+    # 请求超时（秒）
+    timeout-seconds: 180
     # 模型列表配置（支持多个模型，按id引用）
     models:
       - id: gpt-4o-mini
@@ -73,6 +75,7 @@ aiagent:
         type: CHAT  # 模型类型：CHAT（对话模型）或 EMBEDDING（向量模型）
         apiKey:
         baseUrl: https://api.openai.com/v1
+        timeout-seconds: 240
       - id: gpt-4o
         name: GPT-4o
         provider: OPENAI

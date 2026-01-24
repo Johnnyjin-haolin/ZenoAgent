@@ -39,6 +39,8 @@
           :key="step.id"
           :step="step"
           @toggle-expand="handleToggleStepExpand"
+          @confirm-tool="handleConfirmTool"
+          @reject-tool="handleRejectTool"
         />
       </div>
     </transition>
@@ -58,6 +60,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   toggleCollapse: [];
   toggleStepExpand: [stepId: string];
+  confirmTool: [];
+  rejectTool: [];
 }>();
 
 // 总步骤数
@@ -88,6 +92,14 @@ const toggleCollapse = () => {
 // 切换步骤展开状态
 const handleToggleStepExpand = (stepId: string) => {
   emit('toggleStepExpand', stepId);
+};
+
+const handleConfirmTool = () => {
+  emit('confirmTool');
+};
+
+const handleRejectTool = () => {
+  emit('rejectTool');
 };
 
 // 格式化耗时

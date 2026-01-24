@@ -1,6 +1,7 @@
 package com.aiagent.service.llm;
 
 import com.aiagent.config.AgentConfig;
+import dev.langchain4j.http.client.jdk.JdkHttpClientBuilder;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -13,6 +14,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.time.Duration;
+import java.net.http.HttpClient;
 
 /**
  * 模型管理器
@@ -231,11 +234,13 @@ public class ModelManager {
                 // 所有OpenAI兼容接口的提供商都使用OpenAiStreamingChatModel
                 log.info("创建流式模型: provider={}, modelId={}, baseUrl={}", 
                     provider, modelDef.getId(), baseUrl);
+                int timeoutSeconds = resolveTimeoutSeconds(modelDef);
                 return OpenAiStreamingChatModel.builder()
                     .apiKey(modelDef.getApiKey())
                     .baseUrl(baseUrl)
                     .modelName(modelDef.getId())
                     .temperature(0.7)
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
                     .build();
         }
     }
@@ -291,13 +296,26 @@ public class ModelManager {
                 // 所有OpenAI兼容接口的提供商都使用OpenAiChatModel
                 log.info("创建非流式模型: provider={}, modelId={}, baseUrl={}", 
                     provider, modelDef.getId(), baseUrl);
+                int timeoutSeconds = resolveTimeoutSeconds(modelDef);
                 return OpenAiChatModel.builder()
+                    .httpClientBuilder(new JdkHttpClientBuilder()
+                        .httpClientBuilder(HttpClient.newBuilder()
+                            .version(HttpClient.Version.HTTP_1_1)))
                     .apiKey(modelDef.getApiKey())
                     .baseUrl(baseUrl)
                     .modelName(modelDef.getId())
                     .temperature(0.7)
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
                     .build();
         }
+    }
+
+    private int resolveTimeoutSeconds(AgentConfig.LLMConfig.ModelDefinition modelDef) {
+        if (modelDef.getTimeoutSeconds() != null && modelDef.getTimeoutSeconds() > 0) {
+            return modelDef.getTimeoutSeconds();
+        }
+        int globalTimeout = agentConfig.getLlm().getTimeoutSeconds();
+        return globalTimeout > 0 ? globalTimeout : 120;
     }
     
     /**

@@ -51,6 +51,11 @@ public class AgentConfig {
          * 模型列表配置
          */
         private List<ModelDefinition> models = new ArrayList<>();
+
+        /**
+         * 默认请求超时（秒）
+         */
+        private int timeoutSeconds = 120;
         
         /**
          * 默认模型ID（从models列表中选择）
@@ -96,6 +101,11 @@ public class AgentConfig {
              * Base URL
              */
             private String baseUrl = "https://api.openai.com/v1";
+
+            /**
+             * 请求超时（秒），为空则使用全局默认值
+             */
+            private Integer timeoutSeconds;
         }
     }
     

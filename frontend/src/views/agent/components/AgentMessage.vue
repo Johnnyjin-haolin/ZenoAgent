@@ -26,6 +26,7 @@
         <span class="status-text">{{ getStatusText }}</span>
       </div>
 
+
       <!-- 用户上传的图片 -->
       <div v-if="message.role === 'user' && message.images && message.images.length > 0" class="message-images">
         <div v-for="(img, idx) in message.images" :key="idx" class="image-item">
@@ -39,6 +40,8 @@
         :process="message.process!"
         @toggle-collapse="handleToggleCollapse"
         @toggle-step-expand="handleToggleStepExpand"
+        @confirm-tool="handleConfirmTool"
+        @reject-tool="handleRejectTool"
       />
 
       <!-- RAG 检索结果 -->
@@ -139,6 +142,11 @@ const props = defineProps<{
   message: AgentMessage;
 }>();
 
+const emit = defineEmits<{
+  (e: 'confirm-tool'): void;
+  (e: 'reject-tool'): void;
+}>();
+
 const userStore = useUserStore();
 
 // 用户头像
@@ -237,6 +245,14 @@ const showStatusCard = computed(() => {
       ['thinking', 'retrieving', 'calling_tool'].includes(props.message.status)))
   );
 });
+
+const handleConfirmTool = () => {
+  emit('confirm-tool');
+};
+
+const handleRejectTool = () => {
+  emit('reject-tool');
+};
 
 // 获取状态文本
 const getStatusText = computed(() => {
@@ -431,6 +447,7 @@ function handleToggleStepExpand(stepId: string) {
     color: #595959;
   }
 }
+
 
 .message-images {
   display: flex;

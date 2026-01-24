@@ -54,6 +54,23 @@
       </div>
     </div>
 
+    <!-- 工具确认（紧凑内联） -->
+    <div v-if="shouldConfirmTool" class="tool-confirm-row">
+      <div class="tool-confirm-left">
+        <span class="tool-confirm-icon">🔧</span>
+        <span class="tool-confirm-name">{{ step.metadata?.toolName }}</span>
+        <span class="tool-confirm-params">参数：{{ toolParamsSummary }}</span>
+      </div>
+      <div class="tool-confirm-actions">
+        <a-button type="primary" size="small" @click.stop="emitConfirm">
+          确认执行
+        </a-button>
+        <a-button size="small" danger @click.stop="emitReject">
+          取消
+        </a-button>
+      </div>
+    </div>
+
     <!-- 步骤详情 -->
     <transition name="slide-fade">
       <div v-if="step.expanded && hasDetails" class="step-details">
@@ -162,6 +179,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   toggleExpand: [stepId: string];
+  confirmTool: [];
+  rejectTool: [];
 }>();
 
 // 是否有子步骤
@@ -197,6 +216,29 @@ const hasDetails = computed(() => {
   // 有错误信息
   return !!meta.errorMessage;
 });
+
+const shouldConfirmTool = computed(() => {
+  return props.step.type === 'tool_call' &&
+    props.step.status === 'waiting' &&
+    props.step.metadata?.requiresConfirmation;
+});
+
+const toolParamsSummary = computed(() => {
+  const params = props.step.metadata?.toolParams || {};
+  const raw = JSON.stringify(params);
+  if (raw.length <= 80) {
+    return raw;
+  }
+  return raw.slice(0, 80) + '...';
+});
+
+const emitConfirm = () => {
+  emit('confirmTool');
+};
+
+const emitReject = () => {
+  emit('rejectTool');
+};
 
 // 切换展开状态
 const toggleExpand = () => {
@@ -341,6 +383,46 @@ const formatResult = (result: any) => {
   font-size: 12px;
   color: #8c8c8c;
   transition: transform 0.2s;
+}
+
+.tool-confirm-row {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.tool-confirm-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+
+  .tool-confirm-name {
+    font-weight: 600;
+    color: #262626;
+    flex-shrink: 0;
+  }
+
+  .tool-confirm-params {
+    color: #8c8c8c;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.tool-confirm-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .step-details {

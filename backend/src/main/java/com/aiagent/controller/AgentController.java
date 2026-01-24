@@ -51,6 +51,9 @@ public class AgentController {
     
     @Autowired
     private com.aiagent.service.MessageService messageService;
+
+    @Autowired
+    private com.aiagent.service.tool.ToolConfirmationManager toolConfirmationManager;
     
     /**
      * 执行Agent任务
@@ -59,6 +62,24 @@ public class AgentController {
     public SseEmitter execute(@RequestBody AgentRequest request) {
         log.info("收到Agent执行请求: {}", request.getContent());
         return agentService.execute(request);
+    }
+
+    /**
+     * 工具执行确认（手动模式）
+     */
+    @PostMapping("/tool/confirm")
+    public ResponseEntity<?> confirmTool(@RequestBody com.aiagent.vo.ToolConfirmRequest request) {
+        if (request == null || request.getToolExecutionId() == null || request.getApprove() == null) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "参数不完整"));
+        }
+        boolean success = Boolean.TRUE.equals(request.getApprove())
+            ? toolConfirmationManager.approve(request.getToolExecutionId())
+            : toolConfirmationManager.reject(request.getToolExecutionId());
+
+        if (success) {
+            return ResponseEntity.ok().body(Map.of("success", true, "message", "操作成功"));
+        }
+        return ResponseEntity.badRequest().body(Map.of("success", false, "message", "未找到待确认的工具执行"));
     }
     
     /**

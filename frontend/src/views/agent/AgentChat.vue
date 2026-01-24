@@ -49,6 +49,8 @@
             v-for="msg in messages"
             :key="msg.id"
             :message="msg"
+            @confirm-tool="handleConfirmTool"
+            @reject-tool="handleRejectTool"
           />
         </template>
         
@@ -181,6 +183,7 @@
         </div>
       </div>
     </a-drawer>
+
   </div>
 </template>
 
@@ -229,6 +232,7 @@ const {
   stopGeneration,
   clearMessages,
   loadMessages,
+  resolvePendingTool,
 } = useAgentChat({
   conversationId: currentConversationId,  // Ref 会自动响应
   defaultModelId: selectedModelId.value,  // 初始值
@@ -248,6 +252,7 @@ const inputPlaceholder = computed(() => {
   }
   return '请输入您的问题...（Shift + Enter 换行，Enter 发送）';
 });
+
 
 // 加载会话列表
 const loadConversations = async () => {
@@ -357,6 +362,15 @@ const handleSend = async () => {
 // 停止生成
 const handleStop = () => {
   stopGeneration();
+};
+
+// 确认/拒绝工具执行
+const handleConfirmTool = async () => {
+  await resolvePendingTool(true);
+};
+
+const handleRejectTool = async () => {
+  await resolvePendingTool(false);
 };
 
 // 处理回车

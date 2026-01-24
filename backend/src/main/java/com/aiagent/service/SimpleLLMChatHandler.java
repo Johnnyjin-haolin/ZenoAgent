@@ -89,7 +89,9 @@ public class SimpleLLMChatHandler {
      * @return 完整的AI回复文本
      */
     public String chatNonStreaming(String modelId, List<ChatMessage> messages) {
-        log.info("开始LLM非流式对话，模型: {}", modelId);
+        int messageCount = messages != null ? messages.size() : 0;
+        int totalChars = estimateMessageChars(messages);
+        log.info("开始LLM非流式对话，模型: {}, messages={}, chars={}", modelId, messageCount, totalChars);
         
         try {
             // 使用ModelManager获取模型实例（支持故障转移）
@@ -108,14 +110,7 @@ public class SimpleLLMChatHandler {
             throw new RuntimeException("LLM调用失败: " + e.getMessage(), e);
         }
     }
-    
-    /**
-     * 使用默认模型非流式聊天
-     */
-    public String chatNonStreamingByDefaultModel(List<ChatMessage> messages) {
-        return chatNonStreaming(null, messages);
-    }
-    
+
     /**
      * 流式聊天（使用回调处理）
      * 真正的流式实现！使用LangChain4j的StreamingChatResponseHandler
@@ -243,5 +238,18 @@ public class SimpleLLMChatHandler {
             }
             throw new RuntimeException("LLM调用失败: " + e.getMessage(), e);
         }
+    }
+
+    private int estimateMessageChars(List<ChatMessage> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return 0;
+        }
+        int total = 0;
+        for (ChatMessage message : messages) {
+            if (message != null) {
+                total += message.toString().length();
+            }
+        }
+        return total;
     }
 }

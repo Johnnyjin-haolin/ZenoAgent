@@ -39,6 +39,8 @@ export enum AgentApi {
   enumMessageRoles = '/aiagent/enums/message-roles',
   enumMessageStatus = '/aiagent/enums/message-status',
   enumConversationStatus = '/aiagent/enums/conversation-status',
+  /** 工具执行确认 */
+  toolConfirm = '/aiagent/tool/confirm',
 }
 
 /**
@@ -155,6 +157,29 @@ export async function executeAgent(
   }
 
   return controller;
+}
+
+/**
+ * 确认/拒绝工具执行（手动模式）
+ */
+export async function confirmToolExecution(
+  toolExecutionId: string,
+  approve: boolean,
+  requestId?: string
+): Promise<boolean> {
+  try {
+    const response = await defHttp.post(
+      {
+        url: AgentApi.toolConfirm,
+        params: { toolExecutionId, approve, requestId },
+      },
+      { isTransformResponse: false }
+    );
+    return response.success === true;
+  } catch (error) {
+    console.error('工具确认失败:', error);
+    return false;
+  }
 }
 
 /**

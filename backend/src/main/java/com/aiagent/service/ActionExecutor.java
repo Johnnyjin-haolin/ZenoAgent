@@ -1,6 +1,7 @@
 package com.aiagent.service;
 
 import com.aiagent.constant.AgentConstants;
+import com.aiagent.enums.AgentMode;
 import com.aiagent.service.action.DirectResponseParams;
 import com.aiagent.service.action.LLMGenerateParams;
 import com.aiagent.service.action.RAGRetrieveParams;
@@ -8,7 +9,10 @@ import com.aiagent.service.action.ToolCallParams;
 import com.aiagent.service.memory.MemorySystem;
 import com.aiagent.service.rag.RAGEnhancer;
 import com.aiagent.service.tool.McpToolExecutor;
+import com.aiagent.service.tool.ToolConfirmationDecision;
+import com.aiagent.service.tool.ToolConfirmationManager;
 import com.aiagent.util.StringUtils;
+import com.aiagent.util.UUIDGenerator;
 import com.aiagent.vo.AgentContext;
 import com.aiagent.vo.AgentEventData;
 import com.aiagent.vo.AgentKnowledgeResult;
@@ -51,6 +55,9 @@ public class ActionExecutor {
     
     @Autowired
     private IntelligentToolSelector toolSelector;
+
+    @Autowired
+    private ToolConfirmationManager toolConfirmationManager;
     
     /**
      * 并行执行线程池（限制最多5个并发）
@@ -66,6 +73,11 @@ public class ActionExecutor {
      * 最大并行执行数量
      */
     private static final int MAX_PARALLEL_ACTIONS = 5;
+
+    /**
+     * 工具执行确认超时（毫秒）
+     */
+    private static final long TOOL_CONFIRM_TIMEOUT_MS = 60_000L;
     
     /**
      * 执行动作
@@ -123,6 +135,39 @@ public class ActionExecutor {
             if (toolInfo == null) {
                 throw new IllegalArgumentException("工具未找到: " + toolName);
             }
+
+            String toolExecutionId = UUIDGenerator.generate();
+            boolean requiresConfirmation = context != null && context.getMode() == AgentMode.MANUAL;
+
+            // 手动模式下等待用户确认
+            if (requiresConfirmation) {
+                toolConfirmationManager.register(toolExecutionId);
+            }
+
+            // 发送工具调用事件（包含确认信息）
+            sendToolCallEvent(context, toolExecutionId, toolName, params, requiresConfirmation);
+
+            if (requiresConfirmation) {
+                ToolConfirmationDecision decision = toolConfirmationManager.waitForDecision(
+                    toolExecutionId, TOOL_CONFIRM_TIMEOUT_MS);
+                if (decision != ToolConfirmationDecision.APPROVED) {
+                    String rejectMessage = decision == ToolConfirmationDecision.TIMEOUT
+                        ? "用户拒绝执行（确认超时）"
+                        : "用户拒绝执行";
+                    long duration = System.currentTimeMillis() - startTime;
+                    ActionResult rejectResult = ActionResult.failure("tool_call", toolName,
+                        rejectMessage, "USER_REJECTED");
+                    rejectResult.setDuration(duration);
+                    rejectResult.setMetadata(Map.of(
+                        "toolExecutionId", toolExecutionId,
+                        "toolName", toolName,
+                        "params", params,
+                        "rejectReason", rejectMessage
+                    ));
+                    sendToolResultEvent(context, toolExecutionId, toolName, null, rejectMessage);
+                    return rejectResult;
+                }
+            }
             
             // 检查工具是否在启用列表中（如果指定了enabledTools）
             if (context != null && context.getEnabledTools() != null && !context.getEnabledTools().isEmpty()) {
@@ -158,10 +203,13 @@ public class ActionExecutor {
             ActionResult actionResult = ActionResult.success("tool_call", toolName, toolResult);
             actionResult.setDuration(duration);
             actionResult.setMetadata(Map.of(
+                "toolExecutionId", toolExecutionId,
                 "toolName", toolName, 
                 "params", params,
                 "resultStr", resultStr
             ));
+
+            sendToolResultEvent(context, toolExecutionId, toolName, toolResult, null);
             
             log.info("工具调用成功: name={}, duration={}ms", toolName, duration);
             return actionResult;
@@ -174,6 +222,10 @@ public class ActionExecutor {
             sendProgressEvent(context, AgentConstants.EVENT_AGENT_TOOL_EXECUTING,
                     "调用工具失败");
             result.setDuration(duration);
+            result.setMetadata(Map.of(
+                "toolName", action.getName()
+            ));
+            sendToolResultEvent(context, null, action.getName(), null, e.getMessage());
             return result;
         }
     }
@@ -509,6 +561,47 @@ public class ActionExecutor {
                 AgentEventData.builder()
                     .event(event)
                     .message(message)
+                    .build()
+            );
+        }
+    }
+
+    private void sendToolCallEvent(AgentContext context, String toolExecutionId, String toolName,
+                                   Map<String, Object> params, boolean requiresConfirmation) {
+        if (context != null && context.getEventPublisher() != null) {
+            Map<String, Object> data = new HashMap<>();
+            data.put("toolExecutionId", toolExecutionId);
+            data.put("toolName", toolName);
+            data.put("params", params);
+            data.put("requiresConfirmation", requiresConfirmation);
+            data.put("mode", context.getMode() != null ? context.getMode().name() : AgentMode.AUTO.name());
+            context.getEventPublisher().accept(
+                AgentEventData.builder()
+                    .event(AgentConstants.EVENT_AGENT_TOOL_CALL)
+                    .data(data)
+                    .build()
+            );
+        }
+    }
+
+    private void sendToolResultEvent(AgentContext context, String toolExecutionId, String toolName,
+                                     Object result, String error) {
+        if (context != null && context.getEventPublisher() != null) {
+            Map<String, Object> data = new HashMap<>();
+            if (toolExecutionId != null) {
+                data.put("toolExecutionId", toolExecutionId);
+            }
+            data.put("toolName", toolName);
+            if (result != null) {
+                data.put("result", result);
+            }
+            if (error != null) {
+                data.put("error", error);
+            }
+            context.getEventPublisher().accept(
+                AgentEventData.builder()
+                    .event(AgentConstants.EVENT_AGENT_TOOL_RESULT)
+                    .data(data)
                     .build()
             );
         }

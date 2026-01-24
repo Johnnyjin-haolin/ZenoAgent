@@ -1,5 +1,6 @@
 package com.aiagent.vo;
 
+import com.aiagent.enums.AgentMode;
 import com.aiagent.service.StreamingCallback;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import dev.langchain4j.data.message.ChatMessage;
@@ -63,6 +64,11 @@ public class AgentContext implements Serializable {
      * 模型ID
      */
     private String modelId;
+
+    /**
+     * 执行模式（自动/手动）
+     */
+    private AgentMode mode;
     
     /**
      * 启用的MCP分组列表
