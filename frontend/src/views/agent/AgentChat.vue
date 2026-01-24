@@ -1,5 +1,5 @@
 <template>
-  <div class="agent-chat-container">
+  <div class="agent-chat-container" :style="brandStyle">
     <!-- 左侧会话列表 -->
     <div v-if="showSlide" class="left-slide" :class="{ collapsed: slideCollapsed }">
       <AgentSlide
@@ -23,7 +23,8 @@
       <div class="chat-header">
         <div class="header-title">
           <Icon icon="ant-design:robot-outlined" class="title-icon" />
-          <h2>AI Agent 智能助手</h2>
+          <img v-if="brandConfig.logo" :src="brandConfig.logo" class="brand-logo" alt="brand" />
+          <h2 v-if="showBrandTitle">{{ brandConfig.name }}</h2>
         </div>
         
         <div class="header-actions">
@@ -39,6 +40,22 @@
             </template>
             配置
           </a-button>
+          <a-dropdown v-if="brandLinks.length > 0" placement="bottomRight">
+            <a-button size="small" type="default" class="header-help-button">
+              <template #icon>
+                <Icon icon="ant-design:question-circle-outlined" />
+              </template>
+              帮助
+            </a-button>
+            <template #overlay>
+              <a-menu>
+                <a-menu-item v-for="link in brandLinks" :key="link.label">
+                  <a :href="link.url" target="_blank" rel="noopener noreferrer">{{ link.label }}</a>
+                </a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown>
+          <a-tag v-if="brandVersion" class="header-version-tag">{{ brandVersion }}</a-tag>
         </div>
       </div>
 
@@ -57,15 +74,29 @@
         <!-- 欢迎消息 -->
         <div v-else class="welcome-message">
           <div class="welcome-icon">🤖</div>
-          <h3>欢迎使用 AI Agent 智能助手</h3>
-          <p>我可以帮你：</p>
-          <ul>
-            <li>💡 智能问答 - 根据知识库提供准确回答</li>
-            <li>🔧 工具调用 - 执行设备查询、命令等操作</li>
-            <li>📊 数据分析 - 分析设备数据并提供见解</li>
-            <li>🎯 任务编排 - 自动规划和执行复杂任务</li>
-          </ul>
-          <p class="welcome-hint">请在下方输入您的问题开始对话</p>
+          <h3>欢迎使用 ZenoAgent</h3>
+          <p class="welcome-subtitle">企业级 AI Agent，支持 RAG / MCP / 多模型 / 流式过程</p>
+          <div class="welcome-capabilities">
+            <div v-for="item in capabilityItems" :key="item.title" class="capability-card">
+              <div class="capability-icon">{{ item.icon }}</div>
+              <div class="capability-title">{{ item.title }}</div>
+              <div class="capability-desc">{{ item.desc }}</div>
+            </div>
+          </div>
+          <div class="welcome-scenarios">
+            <div class="section-title">场景示例</div>
+            <div class="scenario-tags">
+              <a-tag
+                v-for="prompt in scenarioPrompts"
+                :key="prompt"
+                class="scenario-tag"
+                @click="applyScenarioPrompt(prompt)"
+              >
+                {{ prompt }}
+              </a-tag>
+            </div>
+          </div>
+          <p class="welcome-hint">选择模型 → 选择知识库 → 输入问题开始对话</p>
         </div>
       </div>
 
@@ -132,6 +163,7 @@
           </div>
         </div>
       </div>
+
     </div>
 
     <!-- 配置抽屉 -->
@@ -203,7 +235,85 @@ import AgentToolConfig from './components/AgentToolConfig.vue';
 import type { ConversationInfo, ModelInfo, KnowledgeInfo } from './agent.types';
 import { ModelType } from '@/types/model.types';
 
+declare global {
+  interface Window {
+    __ZENO_AGENT_BRAND__?: Partial<BrandConfig>;
+  }
+}
+
 const router = useRouter();
+
+type BrandLink = {
+  label: string;
+  url: string;
+};
+
+type BrandConfig = {
+  name: string;
+  logo?: string;
+  primaryColor?: string;
+  links?: BrandLink[];
+  version?: string;
+  showFooter?: boolean;
+  showTitle?: boolean;
+  embedMode?: boolean;
+};
+
+const defaultBrandConfig: BrandConfig = {
+  name: 'ZenoAgent',
+  primaryColor: '#1890ff',
+  showFooter: true,
+  showTitle: true,
+  embedMode: false,
+  links: [],
+};
+
+const normalizeBrandConfig = (config?: Partial<BrandConfig>): BrandConfig => {
+  const merged = {
+    ...defaultBrandConfig,
+    ...(config || {}),
+  };
+  return {
+    ...merged,
+    links: Array.isArray(merged.links) ? merged.links : defaultBrandConfig.links,
+  };
+};
+
+const resolveBrandConfig = (fileConfig?: Partial<BrandConfig>): BrandConfig => {
+  const windowConfig = window.__ZENO_AGENT_BRAND__ || {};
+  return normalizeBrandConfig({
+    ...fileConfig,
+    ...windowConfig,
+  });
+};
+
+const brandConfig = ref<BrandConfig>(normalizeBrandConfig());
+const brandStyle = computed(() => ({
+  '--brand-primary': brandConfig.value.primaryColor || defaultBrandConfig.primaryColor,
+}));
+const showBrandTitle = computed(() => {
+  if (typeof brandConfig.value.showTitle === 'boolean') {
+    return brandConfig.value.showTitle;
+  }
+  return defaultBrandConfig.showTitle;
+});
+const brandLinks = computed(() => brandConfig.value.links || []);
+const brandVersion = computed(() => brandConfig.value.version || '');
+
+const loadBrandConfig = async () => {
+  try {
+    const response = await fetch('/brand.json', { cache: 'no-store' });
+    if (!response.ok) {
+      brandConfig.value = resolveBrandConfig();
+      return;
+    }
+    const fileConfig = await response.json();
+    brandConfig.value = resolveBrandConfig(fileConfig);
+  } catch (error) {
+    console.warn('加载品牌配置失败:', error);
+    brandConfig.value = resolveBrandConfig();
+  }
+};
 
 // 会话管理
 type ConversationView = ConversationInfo & { isTemporary?: boolean };
@@ -268,6 +378,45 @@ const inputPlaceholder = computed(() => {
   }
   return '请输入您的问题...（Shift + Enter 换行，Enter 发送）';
 });
+
+const capabilityItems = [
+  {
+    icon: '📚',
+    title: 'RAG 知识检索',
+    desc: '连接企业知识库，检索并引用来源',
+  },
+  {
+    icon: '🧰',
+    title: 'MCP 工具调用',
+    desc: '调用企业系统工具，支持审批/确认',
+  },
+  {
+    icon: '⚡',
+    title: '流式过程可视化',
+    desc: '实时展示思考、检索、调用过程',
+  },
+  {
+    icon: '🧠',
+    title: '多模型选择',
+    desc: '按任务选择合适模型，支持自定义',
+  },
+];
+
+const scenarioPrompts = [
+  '查询设备近7天异常并分析原因',
+  '根据知识库输出规范合规检查项',
+  '调用工具查询资产信息并总结',
+  '检索合同条款并输出风险点',
+];
+
+const applyScenarioPrompt = (prompt: string) => {
+  userInput.value = prompt;
+  nextTick(() => {
+    if (inputRef.value) {
+      inputRef.value.focus();
+    }
+  });
+};
 
 const readConfigCache = (): AgentConfigCache | null => {
   try {
@@ -536,6 +685,7 @@ const handleToolsChange = (tools: string[]) => {
 
 // 初始化
 onMounted(() => {
+  loadBrandConfig();
   initAgentConfig();
   loadConversations();
 });
@@ -597,6 +747,7 @@ watch(currentConversationId, async (newId, oldId) => {
   height: 100%;
   background: #f5f5f5;
   overflow: hidden;
+  --brand-primary: #1890ff;
 }
 
 .left-slide {
@@ -664,7 +815,14 @@ watch(currentConversationId, async (newId, oldId) => {
 
     .title-icon {
       font-size: 24px;
-      color: #1890ff;
+      color: var(--brand-primary);
+    }
+
+    .brand-logo {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      object-fit: contain;
     }
 
     h2 {
@@ -673,6 +831,23 @@ watch(currentConversationId, async (newId, oldId) => {
       font-weight: 600;
       color: #262626;
     }
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .header-help-button {
+    padding: 0 8px;
+  }
+
+  .header-version-tag {
+    margin-left: 4px;
+    background: #f0f5ff;
+    color: #2f54eb;
+    border-color: #adc6ff;
   }
 }
 
@@ -726,6 +901,84 @@ watch(currentConversationId, async (newId, oldId) => {
     margin-bottom: 16px;
   }
 
+  .welcome-subtitle {
+    color: #8c8c8c;
+    margin-bottom: 18px;
+  }
+
+  .welcome-capabilities {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .capability-card {
+    text-align: left;
+    background: #f7f9fc;
+    border: 1px solid #edf1f7;
+    border-radius: 10px;
+    padding: 12px;
+    transition: all 0.2s;
+
+    &:hover {
+      border-color: #cfe3ff;
+      background: #ffffff;
+      box-shadow: 0 4px 12px rgba(24, 144, 255, 0.08);
+    }
+  }
+
+  .capability-icon {
+    font-size: 18px;
+    margin-bottom: 6px;
+  }
+
+  .capability-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #262626;
+    margin-bottom: 4px;
+  }
+
+  .capability-desc {
+    font-size: 12px;
+    color: #8c8c8c;
+    line-height: 1.5;
+  }
+
+  .welcome-scenarios {
+    margin-bottom: 16px;
+    text-align: left;
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #262626;
+      margin-bottom: 8px;
+    }
+
+    .scenario-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+  }
+
+  .scenario-tag {
+    cursor: pointer;
+    border-radius: 16px;
+    padding: 2px 10px;
+    font-size: 12px;
+    color: #1d39c4;
+    background: #f0f5ff;
+    border: 1px solid #adc6ff;
+
+    &:hover {
+      color: #10239e;
+      border-color: #85a5ff;
+    }
+  }
+
   ul {
     text-align: left;
     list-style: none;
@@ -748,6 +1001,7 @@ watch(currentConversationId, async (newId, oldId) => {
     font-style: italic;
     font-size: 13px;
   }
+
 }
 
 .chat-footer {
