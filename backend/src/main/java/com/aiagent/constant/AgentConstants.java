@@ -80,6 +80,27 @@ public class AgentConstants {
     public static final String CACHE_PREFIX_AGENT_MEMORY = "aiagent:memory:";
     public static final String CACHE_PREFIX_AGENT_CONVERSATION = "aiagent:conversation:";
     public static final String CACHE_PREFIX_AGENT_SSE = "aiagent:sse:";
+
+    /**
+     * SSE配置
+     */
+    public static final long SSE_TIMEOUT_MILLIS = -1L;
+    public static final int STREAMING_WAIT_TIMEOUT_SECONDS = 30;
+
+    /**
+     * 会话默认值
+     */
+    public static final String DEFAULT_CONVERSATION_TITLE = "新对话";
+    public static final String DEFAULT_CONVERSATION_STATUS = "active";
+    public static final String ARCHIVED_CONVERSATION_STATUS = "archived";
+
+    /**
+     * 常用提示消息
+     */
+    public static final String MESSAGE_AGENT_START = "zeno agent 启动中";
+    public static final String MESSAGE_STREAM_COMPLETE = "流式输出完成";
+    public static final String MESSAGE_TASK_COMPLETE = "任务完成";
+    public static final String MESSAGE_RAG_QUERYING = "正在检索知识库...";
 }
 
 

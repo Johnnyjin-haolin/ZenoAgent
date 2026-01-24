@@ -516,7 +516,7 @@ export async function getConversationStatus(): Promise<Array<{ code: string; nam
 export async function getMcpGroups(): Promise<McpGroupInfo[]> {
   try {
     const response = await http.get({ url: AgentApi.mcpGroups });
-    return response.result || [];
+    return response.data || [];
   } catch (error) {
     console.error('获取MCP分组列表失败:', error);
     return [];
@@ -530,8 +530,8 @@ export async function getMcpGroup(groupId: string): Promise<McpGroupInfo | null>
   try {
     const url = AgentApi.mcpGroup.replace('{id}', groupId);
     const response = await http.get({ url });
-    if (response.success && response.result) {
-      return response.result;
+    if (response.success && response.data) {
+      return response.data;
     }
     return null;
   } catch (error) {
@@ -556,7 +556,7 @@ export async function getMcpTools(groups?: string[]): Promise<McpToolInfo[]> {
       url: AgentApi.mcpTools,
       params: groups && groups.length > 0 ? { groups: groups.join(',') } : undefined,
     });
-    return response.result || [];
+    return response.data || [];
   } catch (error) {
     console.error('获取MCP工具列表失败:', error);
     return [];

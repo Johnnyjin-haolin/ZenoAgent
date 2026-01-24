@@ -1,5 +1,6 @@
 package com.aiagent.vo;
 
+import com.aiagent.enums.ErrorCode;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -34,7 +35,7 @@ public class Result<T> {
     /**
      * 错误代码
      */
-    private String errorCode;
+    private Integer errorCode;
     
     /**
      * 成功响应
@@ -44,6 +45,7 @@ public class Result<T> {
                 .success(true)
                 .message("操作成功")
                 .data(data)
+                .errorCode(ErrorCode.SUCCESS.getCode())
                 .build();
     }
     
@@ -55,6 +57,7 @@ public class Result<T> {
                 .success(true)
                 .message(message)
                 .data(data)
+                .errorCode(ErrorCode.SUCCESS.getCode())
                 .build();
     }
     
@@ -65,16 +68,17 @@ public class Result<T> {
         return Result.<T>builder()
                 .success(false)
                 .message(message)
+                .errorCode(ErrorCode.GENERAL_ERROR.getCode())
                 .build();
     }
     
     /**
      * 失败响应（带错误代码）
      */
-    public static <T> Result<T> error(String errorCode, String message) {
+    public static <T> Result<T> error(ErrorCode errorCode, String message) {
         return Result.<T>builder()
                 .success(false)
-                .errorCode(errorCode)
+                .errorCode(errorCode.getCode())
                 .message(message)
                 .build();
     }

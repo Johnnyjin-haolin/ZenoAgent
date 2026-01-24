@@ -54,7 +54,7 @@ export async function getAvailableModels(type?: ModelType): Promise<ModelInfo[]>
       { url: AgentApi.availableModels, params },
       { isTransformResponse: false }
     );
-    return response.result || [];
+    return response.data || [];
   } catch (error) {
     console.error('获取模型列表失败:', error);
     return [];
@@ -367,8 +367,8 @@ export async function getConversations(pageNo = 1, pageSize = 50, status?: strin
       { isTransformResponse: false }
     );
     
-    if (response.success && response.result?.records) {
-      return response.result.records.map((item: any) => ({
+    if (response.success && response.data?.records) {
+      return response.data.records.map((item: any) => ({
         id: item.id,
         title: item.title,
         isEdit: false,
@@ -403,7 +403,7 @@ export async function getConversationMessages(conversationId: string, limit = 50
     );
     
     if (response.success) {
-      return response.result || [];
+      return response.data || [];
     }
     return [];
   } catch (error) {
@@ -475,7 +475,7 @@ export async function getMessageRoles(): Promise<Array<{ code: string; name: str
       { url: AgentApi.enumMessageRoles },
       { isTransformResponse: false }
     );
-    return response.result || [];
+    return response.data || [];
   } catch (error) {
     console.error('获取消息角色枚举失败:', error);
     return [];
@@ -491,7 +491,7 @@ export async function getMessageStatus(): Promise<Array<{ code: string; name: st
       { url: AgentApi.enumMessageStatus },
       { isTransformResponse: false }
     );
-    return response.result || [];
+    return response.data || [];
   } catch (error) {
     console.error('获取消息状态枚举失败:', error);
     return [];
@@ -507,7 +507,7 @@ export async function getConversationStatus(): Promise<Array<{ code: string; nam
       { url: AgentApi.enumConversationStatus },
       { isTransformResponse: false }
     );
-    return response.result || [];
+    return response.data || [];
   } catch (error) {
     console.error('获取对话状态枚举失败:', error);
     return [];
