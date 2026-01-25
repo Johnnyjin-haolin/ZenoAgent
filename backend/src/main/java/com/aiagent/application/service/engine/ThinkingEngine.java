@@ -7,9 +7,6 @@ import com.aiagent.application.service.action.DirectResponseParams;
 import com.aiagent.application.service.action.LLMGenerateParams;
 import com.aiagent.application.service.action.RAGRetrieveParams;
 import com.aiagent.application.service.action.ToolCallParams;
-import com.aiagent.domain.model.KnowledgeBase;
-import com.aiagent.infrastructure.repository.KnowledgeBaseRepository;
-import com.aiagent.application.service.rag.RAGEnhancer;
 import com.aiagent.shared.util.StringUtils;
 import com.aiagent.application.model.AgentContext;
 import com.aiagent.api.dto.AgentEventData;
@@ -44,193 +41,32 @@ public class ThinkingEngine {
     @Autowired
     private IntelligentToolSelector toolSelector;
     
-    @Autowired
-    private RAGEnhancer ragEnhancer;
     
-    @Autowired
-    private KnowledgeBaseRepository knowledgeBaseRepository;
     
     /**
      * 决策框架提示词
      */
-    private static final String DECISION_FRAMEWORK_PROMPT = "## 决策框架\n\n" +
-            "请按照以下步骤进行**结构化思考**：\n\n" +
-            "### 步骤1：理解当前状态\n" +
-            "- 用户的当前需求是什么？\n" +
-            "- 这是新的需求，还是之前任务的延续？\n" +
-            "- 对话历史中有哪些关键信息？\n\n" +
-            "### 步骤2：评估已有信息\n" +
-            "- 我已经知道什么？（检查对话历史、工具执行结果）\n" +
-            "- 还需要什么信息才能回答？\n" +
-            "- 上次工具调用的结果是否已经足够回答用户的问题？\n\n" +
-            "### 步骤3：选择动作\n" +
-            "根据评估结果，选择最合适的动作类型：\n\n" +
-            "**何时选择 DIRECT_RESPONSE？**\n" +
-            "✅ 用户询问系统能力、MCP工具列表等元信息（如\"你能做什么\"、\"有哪些MCP工具\"）\n" +
-            "✅ 简单的元信息查询，回复内容可以从系统配置直接获取，无需LLM生成\n" +
-            "✅ 内容已准备好，可以直接返回给用户，无需调用LLM处理\n" +
-            "⚠️ 注意：DIRECT_RESPONSE 与 LLM_GENERATE 的区别\n" +
-            "   - DIRECT_RESPONSE: 回复内容已经完全准备好（如系统配置的工具列表），直接返回即可\n" +
-            "   - LLM_GENERATE: 需要LLM根据上下文和已有信息生成新的回复内容\n\n" +
-            "**何时选择 LLM_GENERATE？**\n" +
-            "✅ 打招呼、闲聊等社交性对话（如\"你好\"、\"谢谢\"）\n" +
-            "✅ 已有足够信息但需要LLM加工整理后回答用户问题\n" +
-            "✅ 需要解释、总结、分析已有数据\n" +
-            "✅ 需要根据上下文生成个性化的回复\n\n" +
-            "**何时选择 TOOL_CALL？**\n" +
-            "✅ 需要查询外部系统的实时数据\n" +
-            "✅ 需要执行具体操作（创建、删除、修改等）\n" +
-            "✅ 用户明确要求执行某个任务\n" +
-            "❌ 不要：如果上次刚调用过同一工具且已有有效结果\n\n" +
-            "**何时选择 RAG_RETRIEVE？**\n" +
-            "✅ 需要查询知识库中的文档、资料\n" +
-            "✅ 用户询问特定领域知识或历史记录\n\n" +
-            "**何时选择 COMPLETE？**\n" +
-            "✅ 用户的需求已经完全满足\n" +
-            "✅ 已经给出了完整的回答\n\n" +
-            "### 步骤4：自我检查\n" +
-            "- 这个决策是否合理？\n" +
-            "- 是否会导致重复调用？\n" +
-            "- 是否真的需要外部信息？\n\n" +
-            "## 关键约束\n\n" +
-            "🚫 **禁止行为**:\n" +
-            "1. 不要重复调用刚执行过的工具（除非有新的参数或明确需要）\n" +
-            "2. 不要为了\"看起来智能\"而调用工具\n" +
-            "3. 不要在已有答案时继续查询\n\n" +
-            "✅ **推荐行为**:\n" +
-            "1. 优先使用已有信息回答\n" +
-            "2. 只在确实需要时才调用工具\n" +
-            "3. 对简单问题直接回答\n\n" +
-            "## 示例参考\n\n" +
-            "【示例1：系统能力询问（简单场景）】\n" +
-            "用户输入: \"你能调用哪些MCP工具？\"\n" +
-            "分析: 这是询问MCP工具列表的元信息查询，可以从系统配置直接获取工具列表\n" +
-            "决策: DIRECT_RESPONSE\n" +
-            "原因: 工具列表已配置好，无需LLM生成，直接返回即可\n" +
-            "directResponseParams: {\n" +
-            "  \"content\": \"我可以调用以下MCP能力：\\n\\n**[服务器名]**:\\n1. 工具名 - 描述\\n...\",\n" +
-            "  \"streaming\": true\n" +
-            "}\n\n" +
-            "【示例1-2：系统能力询问（需要LLM加工）】\n" +
-            "用户输入: \"你好呀，你有什么功能\"\n" +
-            "分析: 这是询问系统能力的元信息查询，但需要LLM友好地介绍功能\n" +
-            "决策: LLM_GENERATE\n" +
-            "原因: 需要LLM根据系统能力生成个性化的介绍，而不是直接返回配置内容\n\n" +
-            "【示例2：明确的任务需求】\n" +
-            "用户输入: \"帮我搜索华东区域的ECS实例\"\n" +
-            "分析: 这是明确的查询需求，需要调用资源搜索工具\n" +
-            "决策: TOOL_CALL\n" +
-            "原因: 需要查询外部系统的实时数据\n\n" +
-            "【示例3：已有信息场景】\n" +
-            "用户输入: \"有哪些资源？\"\n" +
-            "上次工具调用: SearchResources，已返回资源列表\n" +
-            "分析: 上次调用已经获取了资源列表，无需重复调用\n" +
-            "决策: LLM_GENERATE\n" +
-            "原因: 直接总结并展示已有的资源列表\n\n" +
-            "【示例4：需要更多细节】\n" +
-            "用户输入: \"第一个资源的详细配置是什么？\"\n" +
-            "上次结果: 只有资源列表摘要，没有详细配置\n" +
-            "分析: 需要查询资源详情\n" +
-            "决策: TOOL_CALL\n" +
-            "原因: 需要新的数据（详细配置）\n\n";
+    private static final String DECISION_FRAMEWORK_PROMPT = "## 决策要求\n\n" +
+            "1. 先判断已有信息是否足够回答用户问题\n" +
+            "2. 仅在需要实时/外部数据时才选 TOOL_CALL\n" +
+            "3. 需要知识库资料时选 RAG_RETRIEVE\n" +
+            "4. 内容可直接回复时选 DIRECT_RESPONSE 或 LLM_GENERATE\n" +
+            "5. 避免重复调用同一工具\n\n";
     
     /**
      * 输出格式提示词
      */
     private static final String OUTPUT_FORMAT_PROMPT = "## 输出格式\n\n" +
-            "请严格按照以下JSON格式返回你的决定：\n\n" +
-            "**重要说明**：\n" +
-            "1. 如果多个动作可以并行执行（没有依赖关系），请返回多个动作\n" +
-            "2. 可以并行的动作类型：多个独立的TOOL_CALL、多个独立的RAG_RETRIEVE、TOOL_CALL+RAG_RETRIEVE混合\n" +
-            "3. 不能并行的动作：包含LLM_GENERATE（需要等待其他结果）、包含COMPLETE（任务完成）\n" +
-            "4. 如果返回多个动作，这些动作会并行执行，所有执行结果会在下一次循环的thinking阶段提供给AI判断\n" +
-            "5. 最多返回5个动作\n\n" +
-            "**单个动作格式**：\n" +
-            "**TOOL_CALL格式**:\n" +
-            "```json\n" +
-            "{\n" +
-            "  \"actionType\": \"TOOL_CALL\",\n" +
-            "  \"actionName\": \"工具名称\",\n" +
-            "  \"reasoning\": \"为什么选择这个动作\",\n" +
-            "  \"toolCallParams\": {\n" +
-            "    \"toolName\": \"工具名称\",\n" +
-            "    \"toolParams\": {\"参数名\": \"参数值\"}\n" +
-            "  }\n" +
-            "}\n" +
-            "```\n\n" +
-            "**RAG_RETRIEVE格式**:\n" +
-            "```json\n" +
-            "{\n" +
-            "  \"actionType\": \"RAG_RETRIEVE\",\n" +
-            "  \"actionName\": \"rag_retrieve\",\n" +
-            "  \"reasoning\": \"为什么需要检索知识库\",\n" +
-            "  \"ragRetrieveParams\": {\n" +
-            "    \"query\": \"检索查询文本\",\n" +
-            "    \"knowledgeIds\": [],\n" +
-            "    \"maxResults\": 10\n" +
-            "  }\n" +
-            "}\n" +
-            "```\n\n" +
-            "**LLM_GENERATE格式**:\n" +
-            "```json\n" +
-            "{\n" +
-            "  \"actionType\": \"LLM_GENERATE\",\n" +
-            "  \"actionName\": \"llm_generate\",\n" +
-            "  \"reasoning\": \"为什么可以直接生成回复\",\n" +
-            "  \"llmGenerateParams\": {\n" +
-            "    \"prompt\": \"用户说'XXX'，请友好地回复并...\"\n" +
-            "  }\n" +
-            "}\n" +
-            "```\n\n" +
-            "**DIRECT_RESPONSE格式**:\n" +
-            "```json\n" +
-            "{\n" +
-            "  \"actionType\": \"DIRECT_RESPONSE\",\n" +
-            "  \"actionName\": \"direct_response\",\n" +
-            "  \"reasoning\": \"为什么直接返回回复\",\n" +
-            "  \"directResponseParams\": {\n" +
-            "    \"content\": \"要返回给用户的完整回复内容（必需）\",\n" +
-            "    \"systemPrompt\": \"可选：系统提示（用于后续LLM格式化）\",\n" +
-            "    \"streaming\": true\n" +
-            "  }\n" +
-            "}\n" +
-            "```\n" +
-            "⚠️ **DIRECT_RESPONSE 使用说明**：\n" +
-            "- content 字段是必需的，应该包含要返回给用户的完整回复内容\n" +
-            "- 适用于：系统能力介绍、工具列表展示等可以直接回复用户的场景\n" +
-            "- streaming 默认为 true，表示使用流式输出（模拟打字效果）\n" +
-            "- 如果内容很长，可以分段返回，提高用户体验\n\n" +
-            "**COMPLETE格式**:\n" +
-            "```json\n" +
-            "{\n" +
-            "  \"actionType\": \"COMPLETE\",\n" +
-            "  \"actionName\": \"complete\",\n" +
-            "  \"reasoning\": \"任务已完成的原因\"\n" +
-            "}\n" +
-            "```\n\n" +
-            "**返回格式**（支持单个或多个动作）：\n" +
-            "```json\n" +
-            "{\n" +
-            "  \"actions\": [\n" +
-            "    {\n" +
-            "      \"actionType\": \"TOOL_CALL\",\n" +
-            "      \"actionName\": \"工具名称\",\n" +
-            "      \"reasoning\": \"为什么选择这个动作\",\n" +
-            "      \"toolCallParams\": {...}\n" +
-            "    },\n" +
-            "    {\n" +
-            "      \"actionType\": \"RAG_RETRIEVE\",\n" +
-            "      \"actionName\": \"rag_retrieve\",\n" +
-            "      \"reasoning\": \"为什么需要检索\",\n" +
-            "      \"ragRetrieveParams\": {...}\n" +
-            "    }\n" +
-            "  ]\n" +
-            "}\n" +
-            "```\n\n" +
-            "⚠️ **重要**: \n" +
-            "- 如果只有一个动作，可以直接返回单个动作对象，或使用actions数组\n" +
-            "- 如果有多个动作，必须使用actions数组格式\n" +
-            "- 只返回JSON对象，不要包含其他文字说明或Markdown代码块标记！\n";
+            "只返回JSON对象，不要包含其他文字。\n" +
+            "actionType 只能是 TOOL_CALL / RAG_RETRIEVE / LLM_GENERATE / DIRECT_RESPONSE / COMPLETE。\n\n" +
+            "单个动作示例：\n" +
+            "{\"actionType\":\"TOOL_CALL\",\"actionName\":\"工具名\",\"reasoning\":\"原因\",\"toolCallParams\":{\"toolName\":\"工具名\",\"toolParams\":{}}}\n" +
+            "{\"actionType\":\"RAG_RETRIEVE\",\"actionName\":\"rag_retrieve\",\"reasoning\":\"原因\",\"ragRetrieveParams\":{\"query\":\"检索词\",\"knowledgeIds\":[],\"maxResults\":10}}\n" +
+            "{\"actionType\":\"LLM_GENERATE\",\"actionName\":\"llm_generate\",\"reasoning\":\"原因\",\"llmGenerateParams\":{\"prompt\":\"...\"}}\n" +
+            "{\"actionType\":\"DIRECT_RESPONSE\",\"actionName\":\"direct_response\",\"reasoning\":\"原因\",\"directResponseParams\":{\"content\":\"...\",\"streaming\":true}}\n" +
+            "{\"actionType\":\"COMPLETE\",\"actionName\":\"complete\",\"reasoning\":\"原因\"}\n\n" +
+            "多个动作示例：\n" +
+            "{\"actions\":[{\"actionType\":\"TOOL_CALL\",\"actionName\":\"工具名\",\"reasoning\":\"原因\",\"toolCallParams\":{\"toolName\":\"工具名\",\"toolParams\":{}}}]}\n";
     
     /**
      * 思考：分析目标、上下文和历史结果，决定下一步动作（支持返回多个动作）
@@ -243,7 +79,7 @@ public class ThinkingEngine {
         
         // 构建思考提示词
         String thinkingPrompt = buildThinkingPrompt(goal, context, lastResults);
-        log.info("思考提示词: {}", thinkingPrompt);
+        log.info("思考提示词长度: {}", thinkingPrompt.length());
         // 调用LLM进行思考
         String thinkingResult = callLLMForThinking(thinkingPrompt, context);
         log.info("思考结果: {}", thinkingResult);
@@ -296,46 +132,51 @@ public class ThinkingEngine {
     private String buildThinkingPrompt(String goal, AgentContext context, List<ActionResult> lastResults) {
         StringBuilder prompt = new StringBuilder();
         
-        prompt.append("你是一个智能Agent的思考模块，遵循ReAct（Reasoning + Acting）框架。\n\n");
+        prompt.append("你是一个智能Agent的思考模块，需要决定下一步动作。\n\n");
         
         // ========== 第一部分：当前状态 ==========
         prompt.append("## 当前状态\n\n");
         prompt.append("**用户需求**: ").append(goal).append("\n\n");
         
-        // 对话历史
+        // 对话历史（最近3轮，截断）
         if (context != null && context.getMessages() != null && !context.getMessages().isEmpty()) {
-            prompt.append("**对话历史**（最近5轮）:\n");
+            prompt.append("**对话历史**（最近3轮）:\n");
             List<ChatMessage> recentMessages = context.getMessages();
-            int start = Math.max(0, recentMessages.size() - 5);
+            int start = Math.max(0, recentMessages.size() - 3);
             for (int i = start; i < recentMessages.size(); i++) {
                 ChatMessage msg = recentMessages.get(i);
                 if (msg instanceof UserMessage) {
-                    prompt.append("- 用户: ").append(((UserMessage) msg).singleText()).append("\n");
+                    String text = ((UserMessage) msg).singleText();
+                    if (text.length() > 200) {
+                        text = text.substring(0, 200) + "...";
+                    }
+                    prompt.append("- 用户: ").append(text).append("\n");
                 } else if (msg instanceof dev.langchain4j.data.message.AiMessage) {
                     dev.langchain4j.data.message.AiMessage aiMsg = (dev.langchain4j.data.message.AiMessage) msg;
-                    prompt.append("- 助手: ").append(aiMsg.text()).append("\n");
+                    String text = aiMsg.text();
+                    if (text.length() > 200) {
+                        text = text.substring(0, 200) + "...";
+                    }
+                    prompt.append("- 助手: ").append(text).append("\n");
                 }
             }
             prompt.append("\n");
         }
         
-        // 工具调用历史
+        // 工具调用历史（最近2次）
         if (context != null && context.getToolCallHistory() != null && !context.getToolCallHistory().isEmpty()) {
-            prompt.append("**工具调用历史**（最近3次）:\n");
+            prompt.append("**工具调用历史**（最近2次）:\n");
             int historySize = context.getToolCallHistory().size();
-            int start = Math.max(0, historySize - 3);
+            int start = Math.max(0, historySize - 2);
             for (int i = start; i < historySize; i++) {
                 Map<String, Object> call = context.getToolCallHistory().get(i);
                 prompt.append("- ").append(call.get("toolName"));
-                if (call.containsKey("params")) {
-                    prompt.append(" (参数: ").append(call.get("params")).append(")");
-                }
                 prompt.append("\n");
             }
             prompt.append("\n");
         }
         
-        // 上次执行结果（显示所有结果）
+        // 上次执行结果（简要）
         if (lastResults != null && !lastResults.isEmpty()) {
             prompt.append("**上次执行结果**（共 ").append(lastResults.size()).append(" 个动作）:\n");
             for (int i = 0; i < lastResults.size(); i++) {
@@ -343,115 +184,42 @@ public class ThinkingEngine {
                 prompt.append("动作 ").append(i + 1).append(" (").append(result.getActionName()).append("): ");
                 if (result.isSuccess()) {
                     String resultData = result.getData() != null ? result.getData().toString() : "";
-                    // 限制结果长度，避免提示词过长
-                    if (resultData.length() > 500) {
-                        resultData = resultData.substring(0, 500) + "... (结果过长，已截断)";
+                    if (resultData.length() > 300) {
+                        resultData = resultData.substring(0, 300) + "...";
                     }
-                    prompt.append("✅ 成功: ").append(resultData);
+                    prompt.append("成功: ").append(resultData);
                 } else {
-                    prompt.append("❌ 失败: ").append(result.getError());
+                    prompt.append("失败: ").append(result.getError());
                 }
                 prompt.append("\n");
             }
             prompt.append("\n");
         }
         
-        // 相关知识库内容（预检索结果）
-        if (context != null && context.getInitialRagResult() != null 
-            && context.getInitialRagResult().isNotEmpty()) {
-            
-            com.aiagent.application.model.AgentKnowledgeResult ragResult = context.getInitialRagResult();
-            prompt.append("**相关知识库内容**（已预检索）:\n");
-            prompt.append("- 检索查询: ").append(ragResult.getQuery()).append("\n");
-            prompt.append("- 检索结果数量: ").append(ragResult.getTotalCount()).append(" 条\n\n");
-            
-            // 添加检索到的文档内容（限制数量，避免 prompt 过长）
-            List<com.aiagent.application.model.AgentKnowledgeDocument> docs = ragResult.getDocuments();
-            int maxDocs = Math.min(3, docs.size()); // 最多显示3条
-            
-            for (int i = 0; i < maxDocs; i++) {
-                com.aiagent.application.model.AgentKnowledgeDocument doc = docs.get(i);
-                prompt.append(i + 1).append(". ");
-                if (StringUtils.isNotEmpty(doc.getDocName())) {
-                    prompt.append("[").append(doc.getDocName()).append("] ");
-                }
-                
-                // 限制内容长度
-                String content = doc.getContent();
-                if (content != null && content.length() > 500) {
-                    content = content.substring(0, 500) + "...";
-                }
-                prompt.append(content != null ? content : "");
-                if (doc.getScore() != null) {
-                    prompt.append(" (相关度: ").append(String.format("%.1f%%", doc.getScore() * 100)).append(")");
-                }
-                prompt.append("\n\n");
-            }
-            
-            if (docs.size() > maxDocs) {
-                prompt.append("... (还有 ").append(docs.size() - maxDocs).append(" 条结果未显示)\n\n");
-            }
-            
-            prompt.append("注意：如果这些知识库内容与用户问题相关，请直接使用；如果需要更多信息，可以再次使用 RAG_RETRIEVE 动作检索。\n\n");
-        }
-        
-        // ========== 第二部分：决策框架 ==========
+        // ========== 第二部分：决策要求 ==========
         prompt.append(DECISION_FRAMEWORK_PROMPT);
         
-        // ========== 第三部分：可用知识库 ==========
-        if (context != null && context.getKnowledgeIds() != null && !context.getKnowledgeIds().isEmpty()) {
-            List<String> knowledgeIds = context.getKnowledgeIds();
-            List<KnowledgeBase> knowledgeBases = new ArrayList<>();
-            
-            // 获取知识库详细信息
-            for (String knowledgeId : knowledgeIds) {
-                try {
-                    knowledgeBaseRepository.findById(knowledgeId)
-                        .ifPresent(knowledgeBases::add);
-                } catch (Exception e) {
-                    log.warn("获取知识库信息失败: knowledgeId={}", knowledgeId, e);
-                }
-            }
-            
-            if (!knowledgeBases.isEmpty()) {
-                prompt.append("## 可用知识库\n\n");
-                prompt.append("以下知识库可用于检索相关信息。如果用户问题涉及这些知识库的内容，请使用 RAG_RETRIEVE 动作先检索相关知识，然后再回答问题。\n\n");
-                
-                for (KnowledgeBase kb : knowledgeBases) {
-                    prompt.append("**").append(kb.getName()).append("**\n");
-                    if (StringUtils.isNotEmpty(kb.getDescription())) {
-                        prompt.append("- 描述: ").append(kb.getDescription()).append("\n");
-                    }
-                    prompt.append("- ID: ").append(kb.getId()).append("\n");
-                    prompt.append("\n");
-                }
-            }
-        }
-        
-        // ========== 第四部分：可用工具 ==========
+        // ========== 第三部分：可用工具 ==========
         List<McpToolInfo> availableTools = toolSelector.selectTools(goal,
             context != null ? context.getEnabledMcpGroups() : null,
             context != null ? context.getEnabledTools() : null);
         if (!availableTools.isEmpty()) {
             prompt.append("## 可用工具\n\n");
             for (McpToolInfo tool : availableTools) {
-                prompt.append("**").append(tool.getName()).append("**\n");
+                prompt.append("- ").append(tool.getName());
                 if (StringUtils.isNotEmpty(tool.getDescription())) {
-                    // 限制描述长度
                     String desc = tool.getDescription();
-                    if (desc.length() > 500) {
-                        desc = desc.substring(0, 500) + "...";
+                    if (desc.length() > 120) {
+                        desc = desc.substring(0, 120) + "...";
                     }
-                    prompt.append("- 描述: ").append(desc).append("\n");
-                }
-                if (tool.getParameters() != null && !tool.getParameters().isEmpty()) {
-                    prompt.append("- 参数: ").append(com.alibaba.fastjson2.JSON.toJSONString(tool.getParameters())).append("\n");
+                    prompt.append(" (").append(desc).append(")");
                 }
                 prompt.append("\n");
             }
+            prompt.append("\n");
         }
         
-        // ========== 第六部分：输出格式 ==========
+        // ========== 第四部分：输出格式 ==========
         prompt.append(OUTPUT_FORMAT_PROMPT);
         
         return prompt.toString();
@@ -472,10 +240,13 @@ public class ThinkingEngine {
             if (StringUtils.isEmpty(modelId)) {
                 modelId = "gpt-4o-mini";
             }
+            long startNs = System.nanoTime();
+            log.info("思考LLM请求开始，modelId={}, promptChars={}", modelId, prompt != null ? prompt.length() : 0);
             
             // 调用非流式LLM获取完整响应
             String response = llmChatHandler.chatNonStreaming(modelId, messages);
             
+            log.info("思考LLM请求完成，耗时 {} ms", java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs));
             log.debug("LLM思考响应: {}", response);
             return response;
             

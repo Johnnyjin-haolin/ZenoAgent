@@ -57,8 +57,12 @@ public class ReflectionEngine {
         boolean hasSuccess = results.stream().anyMatch(ActionResult::isSuccess);
         
         if (hasSuccess) {
-            // 有成功的结果：使用LLM判断目标是否达成，并同时判断是否需要总结
-            GoalCheckResult checkResult = checkGoalAchievedWithLLM(results, goal, context);
+            // 优先使用规则判断，避免不必要的LLM调用
+            GoalCheckResult checkResult = checkGoalAchievedWithRules(results);
+            if (checkResult == null) {
+                // 有成功的结果：使用LLM判断目标是否达成，并同时判断是否需要总结
+                checkResult = checkGoalAchievedWithLLM(results, goal, context);
+            }
             reflection.setGoalAchieved(checkResult.isGoalAchieved());
             
             if (checkResult.isGoalAchieved()) {
@@ -154,6 +158,31 @@ public class ReflectionEngine {
                 .needsSummary(false)
                 .build();
         }
+    }
+
+    private GoalCheckResult checkGoalAchievedWithRules(List<ActionResult> results) {
+        if (results == null || results.size() != 1) {
+            return null;
+        }
+        ActionResult result = results.get(0);
+        if (result == null || !result.isSuccess()) {
+            return null;
+        }
+        String actionType = result.getActionType();
+        if (StringUtils.isEmpty(actionType)) {
+            return null;
+        }
+        String normalized = actionType.toLowerCase();
+        if ("complete".equals(normalized)) {
+            return GoalCheckResult.builder().goalAchieved(true).needsSummary(false).build();
+        }
+        if ("direct_response".equals(normalized) || "llm_generate".equals(normalized)) {
+            return GoalCheckResult.builder().goalAchieved(true).needsSummary(false).build();
+        }
+        if ("tool_call".equals(normalized) || "rag_retrieve".equals(normalized)) {
+            return GoalCheckResult.builder().goalAchieved(true).needsSummary(false).build();
+        }
+        return null;
     }
     
     /**

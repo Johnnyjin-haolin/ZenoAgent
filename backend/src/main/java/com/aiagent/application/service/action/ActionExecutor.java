@@ -3,10 +3,6 @@ package com.aiagent.application.service.action;
 import com.aiagent.shared.constant.AgentConstants;
 import com.aiagent.domain.enums.AgentMode;
 import com.aiagent.application.service.StreamingCallback;
-import com.aiagent.application.service.action.DirectResponseParams;
-import com.aiagent.application.service.action.LLMGenerateParams;
-import com.aiagent.application.service.action.RAGRetrieveParams;
-import com.aiagent.application.service.action.ToolCallParams;
 import com.aiagent.application.service.engine.IntelligentToolSelector;
 import com.aiagent.application.service.engine.SimpleLLMChatHandler;
 import com.aiagent.application.service.memory.MemorySystem;
@@ -537,10 +533,21 @@ public class ActionExecutor {
                 return result;
             } else {
                 // 非流式输出：直接返回
+                if (context != null && context.getStreamingCallback() != null) {
+                    StreamingCallback callback = context.getStreamingCallback();
+                    try {
+                        callback.onStart();
+                        callback.onToken(content);
+                        callback.onComplete(content);
+                    } catch (Exception e) {
+                        log.warn("非流式直接返回回调失败", e);
+                    }
+                }
                 long duration = System.currentTimeMillis() - startTime;
                 ActionResult result = ActionResult.success("direct_response", "direct_response", content);
                 result.setDuration(duration);
-                result.setMetadata(Map.of("streaming", false));
+                // 已通过callback输出，标记为streaming避免上层重复发送
+                result.setMetadata(Map.of("streaming", true));
                 log.info("直接返回响应成功（非流式）: duration={}ms", duration);
                 return result;
             }

@@ -233,12 +233,62 @@ public class MemorySystem {
         Map<String, Object> record = new LinkedHashMap<>();
         record.put("toolName", toolName);
         record.put("params", params);
-        record.put("result", result);
+        record.put("result", normalizeToolCallResult(result));
         record.put("timestamp", System.currentTimeMillis());
         
         context.getToolCallHistory().add(record);
         
         log.debug("记录工具调用: toolName={}", toolName);
+    }
+
+    private Object normalizeToolCallResult(Object result) {
+        if (result == null) {
+            return null;
+        }
+        if (isJsonSafeValue(result)) {
+            return result;
+        }
+        if (isLangchainToolExecutionResult(result)) {
+            return convertToolExecutionResult(result);
+        }
+        return String.valueOf(result);
+    }
+
+    private boolean isJsonSafeValue(Object value) {
+        if (value == null) {
+            return true;
+        }
+        return value instanceof CharSequence
+            || value instanceof Number
+            || value instanceof Boolean
+            || value instanceof Character
+            || value instanceof Map
+            || value instanceof List
+            || value.getClass().isArray();
+    }
+
+    private boolean isLangchainToolExecutionResult(Object value) {
+        return "dev.langchain4j.service.tool.ToolExecutionResult"
+            .equals(value.getClass().getName());
+    }
+
+    private Map<String, Object> convertToolExecutionResult(Object result) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("type", "ToolExecutionResult");
+        data.put("isError", invokeNoArg(result, "isError"));
+        Object resultText = invokeNoArg(result, "resultText");
+        data.put("resultText", resultText != null ? String.valueOf(resultText) : null);
+        Object rawResult = invokeNoArg(result, "result");
+        data.put("result", isJsonSafeValue(rawResult) ? rawResult : String.valueOf(rawResult));
+        return data;
+    }
+
+    private Object invokeNoArg(Object target, String methodName) {
+        try {
+            return target.getClass().getMethod(methodName).invoke(target);
+        } catch (Exception ex) {
+            return null;
+        }
     }
     
     /**

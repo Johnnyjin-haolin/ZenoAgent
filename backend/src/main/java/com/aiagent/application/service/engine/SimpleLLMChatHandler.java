@@ -93,6 +93,7 @@ public class SimpleLLMChatHandler {
         int messageCount = messages != null ? messages.size() : 0;
         int totalChars = estimateMessageChars(messages);
         log.info("开始LLM非流式对话，模型: {}, messages={}, chars={}", modelId, messageCount, totalChars);
+        long startNs = System.nanoTime();
         
         try {
             // 使用ModelManager获取模型实例（支持故障转移）
@@ -103,11 +104,12 @@ public class SimpleLLMChatHandler {
             AiMessage aiMessage = response.aiMessage();
             String responseText = aiMessage != null ? aiMessage.text() : "";
             
-            log.debug("LLM非流式对话完成，响应长度: {}", responseText != null ? responseText.length() : 0);
+            log.info("LLM非流式对话完成，耗时 {} ms，响应长度: {}", elapsedMs(startNs),
+                responseText != null ? responseText.length() : 0);
             return responseText;
                 
         } catch (Exception e) {
-            log.error("LLM非流式调用失败", e);
+            log.error("LLM非流式调用失败，耗时 {} ms", elapsedMs(startNs), e);
             throw new RuntimeException("LLM调用失败: " + e.getMessage(), e);
         }
     }
@@ -125,6 +127,7 @@ public class SimpleLLMChatHandler {
      */
     public String chatWithCallback(String modelId, List<ChatMessage> messages, StreamingCallback callback) {
         log.info("开始LLM真正流式对话，模型: {}", modelId);
+        long startNs = System.nanoTime();
         
         try {
             // 通知开始生成
@@ -225,11 +228,11 @@ public class SimpleLLMChatHandler {
             if (error[0] != null) {
                 throw new RuntimeException("LLM生成失败", error[0]);
             }
-            
+            log.info("LLM真正流式对话完成，耗时 {} ms", elapsedMs(startNs));
             return fullTextBuilder.toString();
                 
         } catch (Exception e) {
-            log.error("LLM真正流式调用失败", e);
+            log.error("LLM真正流式调用失败，耗时 {} ms", elapsedMs(startNs), e);
             if (callback != null) {
                 try {
                     callback.onError(e);
@@ -252,5 +255,9 @@ public class SimpleLLMChatHandler {
             }
         }
         return total;
+    }
+
+    private long elapsedMs(long startNs) {
+        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs);
     }
 }
