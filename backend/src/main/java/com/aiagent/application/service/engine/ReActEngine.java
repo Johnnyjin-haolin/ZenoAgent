@@ -105,11 +105,6 @@ public class ReActEngine {
                 collectAssistantMessages(results, context);
 
                 log.info("观察开始");
-                //todo 这里看下是否能合并到观察阶段
-                // 检查是否有 DIRECT_RESPONSE action（简单场景直接返回）
-                actions.stream()
-                        .filter(a -> a.getType() == ActionType.DIRECT_RESPONSE)
-                        .findFirst().ifPresent(directResponseAction -> log.info("识别为简单场景，执行直接返回响应"));
 
                 // 3. 观察阶段（Observe）
                 stateMachine.transition(AgentState.OBSERVING);
