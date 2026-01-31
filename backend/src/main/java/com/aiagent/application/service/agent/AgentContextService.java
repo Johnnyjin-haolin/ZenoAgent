@@ -55,7 +55,7 @@ public class AgentContextService {
                 .conversationId(conversationId)
                 .agentId(StringUtils.getString(request.getAgentId(), AgentConstants.DEFAULT_AGENT_ID))
                 .messageDTOs(new java.util.ArrayList<>())
-                .toolCallHistory(new java.util.ArrayList<>())
+                .actionExecutionHistory(new java.util.ArrayList<>())
                 .ragRetrieveHistory(new java.util.ArrayList<>())
                 .iterations(0)
                 .build();

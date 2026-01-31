@@ -38,7 +38,6 @@
       <ProcessCard
         v-if="showProcessCard"
         :process="message.process!"
-        @toggle-collapse="handleToggleCollapse"
         @toggle-step-expand="handleToggleStepExpand"
         @confirm-tool="handleConfirmTool"
         @reject-tool="handleRejectTool"
@@ -201,7 +200,8 @@ const showProcessCard = computed(() => {
   return (
     props.message.role === 'assistant' &&
     props.message.process &&
-    props.message.process.steps.length > 0
+    props.message.process.iterations &&
+    props.message.process.iterations.length > 0
   );
 });
 
@@ -333,19 +333,18 @@ function formatDuration(ms: number) {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-// 切换执行过程折叠状态
-function handleToggleCollapse() {
-  if (props.message.process) {
-    props.message.process.collapsed = !props.message.process.collapsed;
-  }
-}
-
 // 切换步骤展开状态
 function handleToggleStepExpand(stepId: string) {
-  if (props.message.process) {
-    const step = props.message.process.steps.find((s) => s.id === stepId);
-    if (step) {
-      step.expanded = !step.expanded;
+  if (props.message.process && props.message.process.iterations) {
+    // 遍历所有迭代，查找对应的步骤
+    for (const iteration of props.message.process.iterations) {
+      if (iteration.steps) {
+        const step = iteration.steps.find((s) => s.id === stepId);
+        if (step) {
+          step.expanded = !step.expanded;
+          return;
+        }
+      }
     }
   }
 }

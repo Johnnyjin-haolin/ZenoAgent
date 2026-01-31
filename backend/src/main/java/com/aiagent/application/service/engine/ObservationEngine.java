@@ -5,6 +5,7 @@ import com.aiagent.application.service.memory.MemorySystem;
 import com.aiagent.application.model.AgentContext;
 import com.aiagent.domain.enums.ActionType;
 import com.aiagent.domain.enums.AgentState;
+import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -91,35 +92,21 @@ public class ObservationEngine {
                 result
             );
         }
-        
-        // 3. 更新上下文（原有逻辑）
-        ActionResult lastResult = results.get(results.size() - 1);
-        context.setLastActionResult(lastResult);
-        context.setLastActionSuccess(lastResult.isSuccess());
-        
-        if (lastResult.isSuccess()) {
-            context.setLastActionData(lastResult.getData());
-            context.setLastActionError(null);
-            context.setLastActionErrorType(null);
-            log.debug("最后一个动作执行成功，结果已保存到上下文");
-        } else {
-            context.setLastActionError(lastResult.getError());
-            context.setLastActionErrorType(lastResult.getErrorType());
-            context.setLastActionData(null);
-            log.debug("最后一个动作执行失败，错误信息已记录: {}", lastResult.getError());
-        }
-        
-        // 4. 统计成功和失败数量
+
+        // 3. 统计成功和失败数量
         long successCount = results.stream().filter(ActionResult::isSuccess).count();
         long failureCount = results.size() - successCount;
         log.debug("动作执行统计: 总数={}, 成功={}, 失败={}", results.size(), successCount, failureCount);
+
+        // 4.收集AI回复消息（DIRECT_RESPONSE 或 LLM_GENERATE 成功时）
+        collectAssistantMessages(results, context);
         
         // 5. 更新迭代次数
         context.setIterations(currentIteration);
         
         // 6. 检查是否包含 DIRECT_RESPONSE（任务完成）
         ActionResult completeAction = results.stream()
-            .filter(a -> a.getActionType() == ActionType.DIRECT_RESPONSE)
+            .filter(a -> a.getAction() != null && a.getAction().getType() == ActionType.DIRECT_RESPONSE)
             .findFirst()
             .orElse(null);
             
@@ -149,6 +136,38 @@ public class ObservationEngine {
         memorySystem.saveContext(context);
         
         return ObservationResult.continueLoop();
+    }
+
+    /**
+     * 收集AI回复消息
+     * 当 DIRECT_RESPONSE 或 LLM_GENERATE 动作成功时，将回复内容添加到上下文中
+     */
+    private void collectAssistantMessages(List<ActionResult> results, AgentContext context) {
+        if (results == null || results.isEmpty()) {
+            return;
+        }
+
+        for (ActionResult result : results) {
+            // 只处理成功的结果
+            if (!result.isSuccess()||result.getAction()==null) {
+                continue;
+            }
+
+            // 处理 DIRECT_RESPONSE 或 LLM_GENERATE 类型的成功结果
+            if (result.getAction().getType() == ActionType.DIRECT_RESPONSE ||
+                    result.getAction().getType() == ActionType.LLM_GENERATE) {
+
+                String content = result.getRes();
+                if (content != null) {
+                    if (!content.trim().isEmpty()) {
+                        AiMessage aiMessage = new AiMessage(content);
+                        context.addMessage(aiMessage);
+                        log.debug("收集AI回复消息，类型: {}, 长度: {}",
+                                result.getAction().getType(), content.length());
+                    }
+                }
+            }
+        }
     }
 }
 

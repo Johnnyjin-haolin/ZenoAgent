@@ -1,6 +1,5 @@
 package com.aiagent.application.service.action;
 
-import com.aiagent.domain.enums.ActionType;
 import com.aiagent.shared.constant.AgentConstants;
 import com.aiagent.domain.enums.AgentMode;
 import com.aiagent.application.service.StreamingCallback;
@@ -29,8 +28,6 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
  * 动作执行器
@@ -99,14 +96,12 @@ public class ActionExecutor {
                 case DIRECT_RESPONSE:
                     return executeDirectResponse(action, context, startTime);
                 default:
-                    return ActionResult.failure(action.getType(), action.getName(),
-                        "不支持的动作类型: " + action.getType(), "UNSUPPORTED_ACTION");
+                    return ActionResult.failure(action, "不支持的动作类型: " + action.getType());
             }
         } catch (Exception e) {
             log.error("执行动作失败", e);
             long duration = System.currentTimeMillis() - startTime;
-            ActionResult result = ActionResult.failure(action.getType(), action.getName(),
-                e.getMessage(), "EXCEPTION");
+            ActionResult result = ActionResult.failure(action, e.getMessage());
             result.setDuration(duration);
             return result;
         }
@@ -153,15 +148,9 @@ public class ActionExecutor {
                         ? "用户拒绝执行（确认超时）"
                         : "用户拒绝执行";
                     long duration = System.currentTimeMillis() - startTime;
-                    ActionResult rejectResult = ActionResult.failure(ActionType.TOOL_CALL, toolName,
-                        rejectMessage, "USER_REJECTED");
+                    
+                    ActionResult rejectResult = ActionResult.failure(action, rejectMessage);
                     rejectResult.setDuration(duration);
-                    rejectResult.setMetadata(Map.of(
-                        "toolExecutionId", toolExecutionId,
-                        "toolName", toolName,
-                        "params", params,
-                        "rejectReason", rejectMessage
-                    ));
                     sendToolResultEvent(context, toolExecutionId, toolName, null, rejectMessage);
                     return rejectResult;
                 }
@@ -189,23 +178,19 @@ public class ActionExecutor {
             // 使用McpToolExecutor执行工具
             Object toolResult = mcpToolExecutor.execute(toolInfo, toolCallParams.getToolParams());
 
-            // 将结果转换为字符串（用于记录和返回）
-            String resultStr = parseToolResult(toolResult);
             sendProgressEvent(context, AgentConstants.EVENT_AGENT_TOOL_EXECUTING,
                     "调用工具: " + toolInfo.getName() + " 成功");
             
-            // 记录工具调用历史
-            memorySystem.recordToolCall(context, toolName, params, toolResult);
+            // 注意：动作执行历史会在 executeParallel 方法结束后统一记录
             
             long duration = System.currentTimeMillis() - startTime;
-            ActionResult actionResult = ActionResult.success(ActionType.TOOL_CALL, toolName, toolResult);
+            
+            // 构造出参字符串
+            String output = formatToolOutput(toolResult);
+            
+            // 创建结果对象
+            ActionResult actionResult = ActionResult.success(action, output);
             actionResult.setDuration(duration);
-            actionResult.setMetadata(Map.of(
-                "toolExecutionId", toolExecutionId,
-                "toolName", toolName, 
-                "params", params,
-                "resultStr", resultStr
-            ));
 
             sendToolResultEvent(context, toolExecutionId, toolName, toolResult, null);
             
@@ -215,14 +200,11 @@ public class ActionExecutor {
         } catch (Exception e) {
             log.error("工具调用失败", e);
             long duration = System.currentTimeMillis() - startTime;
-            ActionResult result = ActionResult.failure(ActionType.TOOL_CALL, action.getName(),
-                e.getMessage(), "TOOL_CALL_ERROR");
-            sendProgressEvent(context, AgentConstants.EVENT_AGENT_TOOL_EXECUTING,
-                    "调用工具失败");
+            
+            ActionResult result = ActionResult.failure(action, e.getMessage());
             result.setDuration(duration);
-            result.setMetadata(Map.of(
-                "toolName", action.getName()
-            ));
+            
+            sendProgressEvent(context, AgentConstants.EVENT_AGENT_TOOL_EXECUTING, "调用工具失败");
             sendToolResultEvent(context, null, action.getName(), null, e.getMessage());
             return result;
         }
@@ -292,18 +274,21 @@ public class ActionExecutor {
                 knowledgeResult != null ? knowledgeResult.getTotalCount() : 0);
             
             long duration = System.currentTimeMillis() - startTime;
-            ActionResult result = ActionResult.success(ActionType.RAG_RETRIEVE, "rag_retrieve", knowledgeResult);
+            
+            // 构造出参字符串
+            String output = formatRAGOutput(knowledgeResult);
+            
+            // 创建结果对象
+            ActionResult result = ActionResult.success(action, output);
             result.setDuration(duration);
-            result.setMetadata(Map.of("query", query, "count",
-                knowledgeResult != null ? knowledgeResult.getTotalCount() : 0));
             
             return result;
             
         } catch (Exception e) {
             log.error("RAG检索失败", e);
             long duration = System.currentTimeMillis() - startTime;
-            ActionResult result = ActionResult.failure(ActionType.RAG_RETRIEVE, "rag_retrieve",
-                e.getMessage(), "RAG_RETRIEVE_ERROR");
+            
+            ActionResult result = ActionResult.failure(action, e.getMessage());
             result.setDuration(duration);
             return result;
         }
@@ -371,12 +356,10 @@ public class ActionExecutor {
             }
             
             String llmResponse;
-            boolean isStreaming = false;
             log.info("调用LLM生成，模型ID: {}, 提示词: {}", modelId, prompt);
 
             if (context != null && context.getStreamingCallback() != null) {
                 // 有回调，使用流式输出
-                isStreaming = true;
                 llmResponse = llmChatHandler.chatWithCallback(modelId, messages, context.getStreamingCallback());
             } else {
                 // 如果没有回调，使用非流式调用
@@ -385,23 +368,21 @@ public class ActionExecutor {
             }
 
             long duration = System.currentTimeMillis() - startTime;
-            ActionResult result = ActionResult.success(ActionType.LLM_GENERATE, "llm_generate", llmResponse);
+            
+            // 构造出参字符串
+            String output = formatLLMOutput(llmResponse);
+            
+            // 创建结果对象
+            ActionResult result = ActionResult.success(action, output);
             result.setDuration(duration);
-            result.setMetadata(Map.of(
-                "prompt", prompt, 
-                "modelId", modelId,
-                "historyMessageCount", messages.size() - 2,
-                "streaming", isStreaming,
-                "textLength", llmResponse.length()
-            ));
             
             return result;
             
         } catch (Exception e) {
             log.error("LLM生成失败", e);
             long duration = System.currentTimeMillis() - startTime;
-            ActionResult result = ActionResult.failure(ActionType.LLM_GENERATE, "llm_generate",
-                e.getMessage(), "LLM_GENERATE_ERROR");
+            
+            ActionResult result = ActionResult.failure(action, e.getMessage());
             result.setDuration(duration);
             return result;
         }
@@ -435,12 +416,7 @@ public class ActionExecutor {
                     return execute(action, context);
                 } catch (Exception e) {
                     log.error("并行执行动作失败: {}", action.getName(), e);
-                    return ActionResult.failure(
-                            action.getType(),
-                            action.getName(),
-                            e.getMessage(),
-                            "EXCEPTION"
-                    );
+                    return ActionResult.failure(action, e.getMessage());
                 }
             }, PARALLEL_EXECUTOR));
         }
@@ -452,8 +428,7 @@ public class ActionExecutor {
                 results.add(future.get());
             } catch (Exception e) {
                 log.error("等待动作执行完成时出错", e);
-                results.add(ActionResult.failure(action.getType(), action.getName(),
-                        "执行异常: " + e.getMessage(), "EXCEPTION"));
+                results.add(ActionResult.failure(action, "执行异常: " + e.getMessage()));
             }
         }
 
@@ -466,6 +441,9 @@ public class ActionExecutor {
 
         log.info("并行执行完成: 总数={}, 成功={}, 失败={}, 耗时={}ms",
             results.size(), successCount, failureCount, duration);
+
+        // 记录这轮迭代的动作执行结果
+        recordIterationResults(results, context);
 
         return results;
 
@@ -513,9 +491,14 @@ public class ActionExecutor {
 
         // 标记为流式输出
         long duration = System.currentTimeMillis() - startTime;
-        ActionResult result = ActionResult.success(ActionType.DIRECT_RESPONSE, "direct_response", content);
+        
+        // 构造出参字符串
+        String output = formatDirectResponseOutput(content);
+        
+        // 创建结果对象
+        ActionResult result = ActionResult.success(action, output);
         result.setDuration(duration);
-        result.setMetadata(Map.of("streaming", true));
+        
         log.info("直接返回响应成功（流式）: duration={}ms", duration);
         return result;
 }
@@ -573,6 +556,126 @@ public class ActionExecutor {
                     .build()
             );
         }
+    }
+    
+    /**
+     * 记录动作执行历史到上下文
+     * 将 ActionResult 转换为历史记录格式，便于思考引擎在下一轮推理时使用
+     */
+    /**
+     * 记录一轮迭代的动作执行结果
+     * 直接将这轮迭代的所有 ActionResult 作为一个整体添加到历史中
+     */
+    private void recordIterationResults(List<ActionResult> results, AgentContext context) {
+        if (context == null || results == null || results.isEmpty()) {
+            return;
+        }
+        
+        // 确保历史列表存在
+        if (context.getActionExecutionHistory() == null) {
+            context.setActionExecutionHistory(new ArrayList<>());
+        }
+        
+        // 直接将这轮迭代的所有结果添加为一个整体
+        // 创建新列表以避免外部修改影响
+        List<ActionResult> iterationResults = new ArrayList<>(results);
+        context.getActionExecutionHistory().add(iterationResults);
+        
+        int iterationNumber = context.getActionExecutionHistory().size();
+        log.debug("记录第 {} 轮迭代的 {} 个动作执行结果", iterationNumber, results.size());
+    }
+    
+    // ========== 格式化工具方法 ==========
+    
+    /**
+     * 截断字符串到指定长度
+     */
+    private String truncate(String str, int maxLength) {
+        if (str == null) return "";
+        if (str.length() <= maxLength) return str;
+        return str.substring(0, maxLength) + "...";
+    }
+    
+    /**
+     * 格式化工具输出结果
+     * 根据结果类型智能格式化
+     */
+    private String formatToolOutput(Object toolResult) {
+        if (toolResult == null) {
+            return "执行成功（无返回值）";
+        }
+        
+        String resultStr = parseToolResult(toolResult); // 使用已有方法
+        
+        // 如果结果过长，截断到合理长度（500字符）
+        int maxLength = 500;
+        if (resultStr.length() > maxLength) {
+            return resultStr.substring(0, maxLength) + "...(已截断，完整结果" + resultStr.length() + "字符)";
+        }
+        
+        return resultStr;
+    }
+    
+    /**
+     * 格式化 RAG 输出结果
+     * 包含检索到的文档数量和前3个文档的摘要
+     */
+    private String formatRAGOutput(AgentKnowledgeResult knowledgeResult) {
+        if (knowledgeResult == null || knowledgeResult.getTotalCount() == 0) {
+            return "未检索到相关知识";
+        }
+        
+        StringBuilder sb = new StringBuilder();
+        sb.append("检索到").append(knowledgeResult.getTotalCount()).append("条知识：\n");
+        
+        // 展示前3个文档
+        int limit = Math.min(3, knowledgeResult.getDocuments().size());
+        for (int i = 0; i < limit; i++) {
+            var doc = knowledgeResult.getDocuments().get(i);
+            sb.append("[").append(i + 1).append("] ");
+            sb.append("标题：").append(doc.getDocName() != null ? doc.getDocName() : "未知").append("\n");
+            sb.append("    内容：").append(truncate(doc.getContent(), 200)).append("\n");
+        }
+        
+        if (knowledgeResult.getTotalCount() > limit) {
+            sb.append("...还有").append(knowledgeResult.getTotalCount() - limit).append("条");
+        }
+        
+        return sb.toString();
+    }
+    
+    /**
+     * 格式化 LLM 输出结果
+     * 截断到合理长度（300字符），保留完整信息供 AI 理解
+     */
+    private String formatLLMOutput(String llmResponse) {
+        if (llmResponse == null || llmResponse.isEmpty()) {
+            return "生成内容为空";
+        }
+        
+        // LLM 生成的内容可能较长，截断到300字符用于提示词
+        int maxLength = 300;
+        if (llmResponse.length() > maxLength) {
+            return llmResponse.substring(0, maxLength) + "...(已截断，完整回复" + llmResponse.length() + "字符)";
+        }
+        
+        return llmResponse;
+    }
+    
+    /**
+     * 格式化直接响应输出结果
+     */
+    private String formatDirectResponseOutput(String content) {
+        if (content == null || content.isEmpty()) {
+            return "响应内容为空";
+        }
+        
+        int maxLength = 300;
+        if (content.length() > maxLength) {
+            return content.substring(0, maxLength) + "...(已截断，完整响应" + content.length() + "字符)";
+        }
+        
+        return content;
     }
     
 }

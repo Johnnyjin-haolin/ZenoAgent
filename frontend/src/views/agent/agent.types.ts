@@ -291,16 +291,49 @@ export interface ProcessStep {
 }
 
 /**
+ * ReAct 迭代信息（动态步骤版本）
+ */
+export interface ReActIteration {
+  /** 迭代编号（1-based）*/
+  iterationNumber: number;
+  
+  /** 动态步骤列表 */
+  steps: ProcessStep[];
+  
+  /** 迭代状态 */
+  status: 'running' | 'completed';
+  
+  /** 开始时间 */
+  startTime: number;
+  
+  /** 结束时间 */
+  endTime?: number;
+  
+  /** 总耗时 */
+  totalDuration?: number;
+  
+  /** 是否折叠 */
+  collapsed: boolean;
+  
+  /** 是否继续迭代（false 表示最后一轮） */
+  shouldContinue?: boolean;
+  
+  /** 终止原因 */
+  terminationReason?: string;
+  
+  /** 终止消息 */
+  terminationMessage?: string;
+}
+
+/**
  * 执行过程
  */
 export interface ExecutionProcess {
-  /** 是否折叠 */
-  collapsed: boolean;
-  /** 步骤列表 */
-  steps: ProcessStep[];
+  /** ReAct 迭代列表 */
+  iterations: ReActIteration[];
   /** 总耗时 */
   totalDuration?: number;
-  /** 完成步骤数 */
+  /** 完成迭代数 */
   completedCount?: number;
   /** 流式输出是否已开始 */
   streamingStarted?: boolean;

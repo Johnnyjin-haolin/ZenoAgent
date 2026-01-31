@@ -219,26 +219,17 @@ public class MemorySystem {
     /**
      * 记录工具调用历史
      * 
+     * @deprecated 已废弃，请使用统一的动作执行历史记录机制（ActionExecutor.recordActionExecutionHistory）
      * @param context Agent上下文
      * @param toolName 工具名称
      * @param params 参数
      * @param result 结果
      */
+    @Deprecated
     public void recordToolCall(AgentContext context, String toolName, 
                               Map<String, Object> params, Object result) {
-        if (context.getToolCallHistory() == null) {
-            context.setToolCallHistory(new ArrayList<>());
-        }
-        
-        Map<String, Object> record = new LinkedHashMap<>();
-        record.put("toolName", toolName);
-        record.put("params", params);
-        record.put("result", normalizeToolCallResult(result));
-        record.put("timestamp", System.currentTimeMillis());
-        
-        context.getToolCallHistory().add(record);
-        
-        log.debug("记录工具调用: toolName={}", toolName);
+        // 该方法已废弃，动作执行历史现在由 ActionExecutor 统一记录到 actionExecutionHistory
+        log.debug("recordToolCall 方法已废弃，工具调用历史现在由 ActionExecutor 统一记录");
     }
 
     private Object normalizeToolCallResult(Object result) {

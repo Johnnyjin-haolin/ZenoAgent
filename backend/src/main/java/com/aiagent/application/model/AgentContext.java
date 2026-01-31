@@ -1,6 +1,7 @@
 package com.aiagent.application.model;
 
 import com.aiagent.api.dto.AgentEventData;
+import com.aiagent.application.service.action.ActionResult;
 import com.aiagent.domain.enums.AgentMode;
 import com.aiagent.application.service.StreamingCallback;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -14,6 +15,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -47,10 +49,12 @@ public class AgentContext implements Serializable {
     private List<MessageDTO> messageDTOs;
     
     /**
-     * 工具调用历史
+     * 动作执行历史（按 ReACT 迭代轮次组织）
+     * 外层 List：迭代轮次索引（第0轮、第1轮、第2轮...）
+     * 内层 List：该轮迭代中执行的所有 ActionResult
      */
-    private List<Map<String, Object>> toolCallHistory;
-    
+    private List<List<ActionResult>> actionExecutionHistory;
+
     /**
      * RAG检索历史
      */
@@ -91,33 +95,7 @@ public class AgentContext implements Serializable {
      * 用于控制提示词构建时的历史长度、截断等行为
      */
     private com.aiagent.api.dto.ThinkingConfig thinkingConfig;
-    
-    /**
-     * 最后一次动作结果
-     */
-    private com.aiagent.application.service.action.ActionResult lastActionResult;
-    
-    /**
-     * 最后一次动作是否成功
-     */
-    private Boolean lastActionSuccess;
-    
-    /**
-     * 最后一次动作数据
-     */
-    private Object lastActionData;
-    
-    /**
-     * 最后一次动作错误信息
-     */
-    private String lastActionError;
-    
-    /**
-     * 最后一次动作错误类型
-     */
-    private String lastActionErrorType;
 
-    
     /**
      * 用户名
      */
@@ -169,7 +147,7 @@ public class AgentContext implements Serializable {
         }
         return messageDTOs.stream()
             .map(MessageDTO::toChatMessage)
-            .filter(msg -> msg != null)
+            .filter(Objects::nonNull)
             .collect(Collectors.toList());
     }
     

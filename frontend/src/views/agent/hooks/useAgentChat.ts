@@ -238,13 +238,15 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       toolCalls: [],
       ragResults: [],
       process: {
-        collapsed: false, // 默认展开（流式输出前展开）
-        steps: [],
+        iterations: [],
         completedCount: 0,
         streamingStarted: false, // 流式输出是否已开始
       },
     });
     messages.value.push(assistantMessage);
+
+    // 当前迭代对象引用
+    let currentIteration: any = null;
 
     // 构建请求
     const request: AgentRequest = {
@@ -268,6 +270,27 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           currentStatus.value = '任务已启动';
         },
 
+        onIterationStart: (event) => {
+          console.log('迭代开始:', event);
+          updateConversationId(event);
+          
+          const iterationNumber = event.data?.iterationNumber || 1;
+          
+          // 创建新迭代
+          const newIteration: any = reactive({
+            iterationNumber,
+            steps: [],
+            status: 'running',
+            startTime: Date.now(),
+            collapsed: false,  // 默认展开
+          });
+          
+          assistantMessage.process!.iterations.push(newIteration);
+          currentIteration = newIteration;
+          
+          console.log(`🔁 创建第 ${iterationNumber} 轮迭代（展开）`);
+        },
+
         onThinking: (event) => {
           console.log('AI 思考中:', event);
           updateConversationId(event);
@@ -275,49 +298,23 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           assistantMessage.statusText = event.message || '思考中...';
           currentStatus.value = event.message || '思考中...';
 
-          const steps = assistantMessage.process!.steps;
-          let thinkingStep = findStep(steps, 'thinking');
+          if (!currentIteration) return;
 
-          // 如果思考步骤不存在，创建一个
+          // 在当前迭代添加或更新思考步骤
+          let thinkingStep = currentIteration.steps.find((s: any) => s.type === 'thinking');
           if (!thinkingStep) {
             thinkingStep = createStep('thinking', '思考与规划', 'running');
             thinkingStep.subSteps = [];
-            steps.push(thinkingStep);
-          }
-
-          // 解析消息类型
-          const parsed = parseThinkingMessage(event);
-
-          // 创建子步骤
-          const subStep: ProcessSubStep = {
-            id: `substep-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            message: parsed.message,
-            timestamp: Date.now(),
-          };
-
-          // 如果包含规划信息
-          if (parsed.type === 'plan' && parsed.planInfo) {
-            subStep.hasPlan = true;
-            thinkingStep.planInfo = parsed.planInfo;
-            
-            // 更新步骤名称，显示规划步骤数量
-            if (parsed.planInfo.steps && parsed.planInfo.steps.length > 0) {
-              thinkingStep.name = `思考与规划 (已规划 ${parsed.planInfo.steps.length} 个执行步骤)`;
-            }
-          }
-
-          // 如果包含步骤进度信息
-          if (parsed.type === 'step' && parsed.stepProgress) {
-            subStep.stepProgress = parsed.stepProgress;
-            
-            // 更新思考步骤的步骤进度
-            thinkingStep.stepProgress = {
-              current: parsed.stepProgress.current,
-              total: parsed.stepProgress.total,
-            };
+            currentIteration.steps.push(thinkingStep);
           }
 
           // 添加子步骤
+          const subStep = {
+            id: `substep-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            message: event.message || '思考中...',
+            timestamp: Date.now(),
+          };
+          
           if (!thinkingStep.subSteps) {
             thinkingStep.subSteps = [];
           }
@@ -340,10 +337,15 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           assistantMessage.statusText = '正在检索知识库...';
           currentStatus.value = '检索知识库中...';
 
-          const steps = assistantMessage.process!.steps;
+          if (!currentIteration) return;
 
           // 完成思考步骤
-          finishStep(steps, 'thinking', 'success');
+          const thinkingStep = currentIteration.steps.find((s: any) => s.type === 'thinking');
+          if (thinkingStep && thinkingStep.status === 'running') {
+            thinkingStep.status = 'success';
+            thinkingStep.endTime = Date.now();
+            thinkingStep.duration = thinkingStep.endTime - (thinkingStep.startTime || 0);
+          }
 
           // 保存检索结果
           let ragResults: RagResult[] = [];
@@ -352,11 +354,9 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
           if (event.data) {
             if (Array.isArray(event.data)) {
-              // 如果返回的是数组
               ragResults = event.data;
               retrieveCount = event.data.length;
             } else if (event.data.knowledgeIds) {
-              // 如果返回的是对象，包含 knowledgeIds
               retrieveCount = event.data.resultCount || 0;
               avgScore = event.data.avgScore || 0;
               ragResults.push({
@@ -375,7 +375,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             avgScore,
             ragResults,
           });
-          steps.push(step);
+          currentIteration.steps.push(step);
         },
 
         onToolCall: (event) => {
@@ -388,15 +388,14 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             : `调用工具: ${event.data?.toolName || ''}`;
           currentStatus.value = assistantMessage.statusText || '';
 
-          const steps = assistantMessage.process!.steps;
+          if (!currentIteration) return;
 
-          // 完成 RAG 检索步骤（如果有）
-          finishStep(steps, 'rag_retrieve', 'success');
-
-          // 完成思考步骤（如果还没完成）
-          const thinkingStep = findStep(steps, 'thinking');
+          // 完成思考步骤
+          const thinkingStep = currentIteration.steps.find((s: any) => s.type === 'thinking');
           if (thinkingStep && thinkingStep.status === 'running') {
-            finishStep(steps, 'thinking', 'success');
+            thinkingStep.status = 'success';
+            thinkingStep.endTime = Date.now();
+            thinkingStep.duration = thinkingStep.endTime - (thinkingStep.startTime || 0);
           }
 
           // 添加工具调用记录
@@ -415,7 +414,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
               toolParams: event.data.params || {},
               requiresConfirmation,
             });
-            steps.push(step);
+            currentIteration.steps.push(step);
 
             if (requiresConfirmation && event.data.toolExecutionId) {
               pendingToolConfirmations.value.push({
@@ -433,8 +432,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           updateConversationId(event);
           currentStatus.value = '工具执行完成';
 
-          const steps = assistantMessage.process!.steps;
-
           // 更新最后一个工具调用的结果
           if (event.data && assistantMessage.toolCalls && assistantMessage.toolCalls.length > 0) {
             const lastTool = assistantMessage.toolCalls[assistantMessage.toolCalls.length - 1];
@@ -445,17 +442,24 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
                 lastTool.error = event.data.error;
               }
 
-              // 完成工具调用步骤
-              finishStep(
-                steps,
-                'tool_call',
-                event.data.error ? 'error' : 'success',
-                {
-                  toolResult: event.data.result,
-                  toolError: event.data.error,
-                },
-                event.data.toolName
-              );
+              // 更新当前迭代中的工具调用步骤
+              if (currentIteration && currentIteration.steps.length > 0) {
+                const steps = currentIteration.steps;
+                const toolStep = steps.reverse().find(
+                  (step: any) => step.type === 'tool_call' && step.metadata?.toolName === event.data.toolName
+                );
+                steps.reverse(); // 恢复原顺序
+                
+                if (toolStep) {
+                  toolStep.status = event.data.error ? 'error' : 'success';
+                  toolStep.endTime = Date.now();
+                  toolStep.duration = toolStep.startTime ? toolStep.endTime - toolStep.startTime : undefined;
+                  if (toolStep.metadata) {
+                    toolStep.metadata.toolResult = event.data.result;
+                    toolStep.metadata.toolError = event.data.error;
+                  }
+                }
+              }
             }
           }
         },
@@ -468,10 +472,9 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           // 标记流式输出已开始
           if (!assistantMessage.process!.streamingStarted) {
             assistantMessage.process!.streamingStarted = true;
-            // 完成思考步骤（如果还在运行）
-            const thinkingStep = findStep(assistantMessage.process!.steps, 'thinking');
-            if (thinkingStep && thinkingStep.status === 'running') {
-              finishStep(assistantMessage.process!.steps, 'thinking', 'success');
+            // 完成思考阶段
+            if (currentIteration && currentIteration.thinkingPhase && !currentIteration.thinkingPhase.duration) {
+              currentIteration.thinkingPhase.duration = Date.now() - currentIteration.thinkingPhase.startTime;
             }
           }
           
@@ -482,10 +485,10 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           
           currentStatus.value = '';
 
-          const steps = assistantMessage.process!.steps;
+          if (!currentIteration) return;
 
-          // 完成所有运行中的步骤（除了生成步骤）
-          steps.forEach((step) => {
+          // 完成当前迭代的所有运行中的步骤（除了生成步骤）
+          currentIteration.steps.forEach((step: any) => {
             if (step.status === 'running' && step.type !== 'generating') {
               step.status = 'success';
               step.endTime = Date.now();
@@ -494,10 +497,45 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           });
 
           // 添加生成回答步骤（只添加一次）
-          const generatingStep = findStep(steps, 'generating');
+          const generatingStep = currentIteration.steps.find((s: any) => s.type === 'generating');
           if (!generatingStep) {
             const step = createStep('generating', '生成回答', 'running');
-            steps.push(step);
+            currentIteration.steps.push(step);
+          }
+        },
+
+        onIterationEnd: (event) => {
+          console.log('迭代结束:', event);
+          updateConversationId(event);
+
+          if (!currentIteration) return;
+
+          // 完成当前迭代的所有运行中的步骤
+          currentIteration.steps.forEach((step: any) => {
+            if (step.status === 'running') {
+              step.status = 'success';
+              step.endTime = Date.now();
+              step.duration = step.startTime ? step.endTime - step.startTime : undefined;
+            }
+          });
+
+          // 更新迭代状态
+          currentIteration.status = 'completed';
+          currentIteration.endTime = Date.now();
+          currentIteration.totalDuration = event.data?.durationMs || 
+            (currentIteration.endTime - currentIteration.startTime);
+          currentIteration.shouldContinue = event.data?.shouldContinue;
+          currentIteration.terminationReason = event.data?.terminationReason;
+          currentIteration.terminationMessage = event.data?.message;
+
+          // 自动折叠已完成的迭代
+          currentIteration.collapsed = true;
+
+          console.log(`🔁 完成第 ${currentIteration.iterationNumber} 轮迭代（自动折叠）`);
+
+          // 如果不继续迭代，清空 currentIteration
+          if (!event.data?.shouldContinue) {
+            currentIteration = null;
           }
         },
 
@@ -506,20 +544,10 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           console.log('[useAgentChat] 流式输出完成');
           updateConversationId(event);
           
-          const steps = assistantMessage.process!.steps;
-          
-          // 完成生成步骤
-          finishStep(steps, 'generating', 'success');
-          
           // 更新状态：流式输出完成，但任务还未完全结束
           assistantMessage.status = 'done';
           assistantMessage.loading = false;
           currentStatus.value = '';
-          
-          // 流式输出结束后，自动折叠执行过程
-          if (assistantMessage.process!.streamingStarted) {
-            assistantMessage.process!.collapsed = true;
-          }
         },
 
         onComplete: (event) => {
@@ -530,29 +558,12 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           assistantMessage.loading = false;
           assistantMessage.tokens = event.totalTokens;
           assistantMessage.duration = event.duration;
-          
-          const steps = assistantMessage.process!.steps;
-
-          // 完成生成步骤
-          finishStep(steps, 'generating', 'success');
-
-          // 添加完成步骤
-          const completeStep = createStep('complete', '完成', 'success');
-          completeStep.startTime = Date.now();
-          completeStep.endTime = Date.now();
-          completeStep.duration = 0;
-          steps.push(completeStep);
 
           // 更新执行过程统计
           assistantMessage.process!.totalDuration = event.duration;
-          assistantMessage.process!.completedCount = steps.filter(
-            (s) => s.status === 'success' || s.status === 'error' || s.status === 'skipped'
+          assistantMessage.process!.completedCount = assistantMessage.process!.iterations.filter(
+            (iter: any) => iter.status === 'completed'
           ).length;
-
-          // 流式输出结束后，自动折叠执行过程
-          if (assistantMessage.process!.streamingStarted) {
-            assistantMessage.process!.collapsed = true;
-          }
 
           loading.value = false;
           currentStatus.value = '';
@@ -575,17 +586,26 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           assistantMessage.error = true;
           assistantMessage.content = event.message || '处理失败，请稍后重试';
           
-          const steps = assistantMessage.process!.steps;
-
-          // 将所有运行中的步骤标记为错误
-          steps.forEach((step) => {
-            if (step.status === 'running') {
-              step.status = 'error';
-              step.endTime = Date.now();
-              step.duration = step.startTime ? step.endTime - step.startTime : undefined;
-              step.metadata = { ...step.metadata, errorMessage: event.message };
-            }
-          });
+          // 将当前迭代的所有运行中的步骤标记为错误
+          if (currentIteration && currentIteration.steps.length > 0) {
+            currentIteration.steps.forEach((step: any) => {
+              if (step.status === 'running') {
+                step.status = 'error';
+                step.endTime = Date.now();
+                step.duration = step.startTime ? step.endTime - step.startTime : undefined;
+                step.metadata = { ...step.metadata, errorMessage: event.message };
+              }
+            });
+            
+            // 标记迭代完成
+            currentIteration.status = 'completed';
+            currentIteration.endTime = Date.now();
+            currentIteration.totalDuration = currentIteration.endTime - currentIteration.startTime;
+            currentIteration.shouldContinue = false;
+            currentIteration.terminationReason = 'EXCEPTION';
+            currentIteration.terminationMessage = `执行出错: ${event.message || '未知错误'}`;
+            currentIteration.collapsed = true;
+          }
 
           loading.value = false;
           currentStatus.value = '';
@@ -646,12 +666,19 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
     const lastMessage = messages.value[messages.value.length - 1];
     if (lastMessage && lastMessage.role === 'assistant' && lastMessage.process) {
-      if (approve) {
-        updateToolStepStatus(lastMessage.process.steps, current.toolName, 'running');
-      } else {
-        updateToolStepStatus(lastMessage.process.steps, current.toolName, 'error', {
-          toolError: '用户拒绝执行',
-        });
+      // 获取当前正在进行的迭代（最后一个迭代）
+      const iterations = lastMessage.process.iterations;
+      if (iterations && iterations.length > 0) {
+        const currentIter = iterations[iterations.length - 1];
+        if (currentIter && currentIter.steps) {
+          if (approve) {
+            updateToolStepStatus(currentIter.steps, current.toolName, 'running');
+          } else {
+            updateToolStepStatus(currentIter.steps, current.toolName, 'error', {
+              toolError: '用户拒绝执行',
+            });
+          }
+        }
       }
     }
 

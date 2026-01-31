@@ -72,6 +72,8 @@ public class AgentConstants {
     public static final String EVENT_AGENT_STREAM_COMPLETE = "agent:stream_complete";
     public static final String EVENT_AGENT_COMPLETE = "agent:complete";
     public static final String EVENT_AGENT_ERROR = "agent:error";
+    public static final String EVENT_ITERATION_START = "agent:iteration_start";
+    public static final String EVENT_ITERATION_END = "agent:iteration_end";
     
     /**
      * Redis缓存前缀

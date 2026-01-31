@@ -27,12 +27,11 @@ import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
  * 思考引擎
- * 负责分析当前情况，决定下一步动作
+ * 负责分析当前情况，决定下一步Action
  * 
  * @author aiagent
  */
@@ -64,22 +63,22 @@ public class ThinkingEngine {
     
     /**
      * 输出格式提示词
-     * 统一使用 actions 数组格式，即使只有一个动作也要放在数组中
+     * 统一使用 actions 数组格式，即使只有一个Action也要放在数组中
      */
     private static final String OUTPUT_FORMAT_PROMPT = "## 输出格式\n\n" +
             "只返回JSON对象，不要包含其他文字。\n" +
-            "必须使用 actions 数组格式，即使只有一个动作也要放在数组中。\n" +
+            "必须使用 actions 数组格式，即使只有一个Action也要放在数组中。\n" +
             "actionType 只能是 TOOL_CALL / RAG_RETRIEVE / LLM_GENERATE / DIRECT_RESPONSE / COMPLETE。\n\n" +
-            "格式示例（单个动作）：\n" +
+            "格式示例（单个Action）：\n" +
             "{\"actions\":[{\"actionType\":\"TOOL_CALL\",\"actionName\":\"工具名\",\"reasoning\":\"原因\",\"toolCallParams\":{\"toolName\":\"工具名\",\"toolParams\":{}}}]}\n" +
             "{\"actions\":[{\"actionType\":\"RAG_RETRIEVE\",\"actionName\":\"rag_retrieve\",\"reasoning\":\"原因\",\"ragRetrieveParams\":{\"query\":\"检索词\",\"knowledgeIds\":[],\"maxResults\":10}}]}\n" +
             "{\"actions\":[{\"actionType\":\"LLM_GENERATE\",\"actionName\":\"llm_generate\",\"reasoning\":\"原因\",\"llmGenerateParams\":{\"prompt\":\"请根据上下文生成回复\"}}]}\n" +
             "{\"actions\":[{\"actionType\":\"DIRECT_RESPONSE\",\"actionName\":\"direct_response\",\"reasoning\":\"原因\",\"directResponseParams\":{\"content\":\"...\",\"streaming\":true}}]}\n\n" +
-            "格式示例（多个动作）：\n" +
+            "格式示例（多个Action）：\n" +
             "{\"actions\":[{\"actionType\":\"TOOL_CALL\",\"actionName\":\"工具名1\",\"reasoning\":\"原因1\",\"toolCallParams\":{\"toolName\":\"工具名1\",\"toolParams\":{}}},{\"actionType\":\"RAG_RETRIEVE\",\"actionName\":\"rag_retrieve\",\"reasoning\":\"原因2\",\"ragRetrieveParams\":{\"query\":\"检索词\",\"knowledgeIds\":[],\"maxResults\":10}}]}\n";
     
     /**
-     * 思考：分析目标、上下文和历史结果，决定下一步动作（支持返回多个动作）
+     * 思考：分析目标、上下文和历史结果，决定下一步Action（支持返回多个Action）
      */
     public List<AgentAction> think(String goal, AgentContext context, List<ActionResult> lastResults) {
         log.info("开始思考，目标: {}, 上次结果数量: {}", goal, lastResults != null ? lastResults.size() : 0);
@@ -94,21 +93,21 @@ public class ThinkingEngine {
         // 调用LLM进行思考
         String thinkingResult = callLLMForThinking(promptPair, context);
         log.info("思考结果: {}", thinkingResult);
-        // 解析思考结果，生成动作列表
+        // 解析思考结果，生成Action列表
         List<AgentAction> actions = parseThinkingResult(thinkingResult, goal, context);
         
         // 如果解析失败或为空，返回空列表
         if (actions.isEmpty()) {
-            log.warn("思考阶段未产生动作");
+            log.warn("思考阶段未产生Action");
             return new ArrayList<>();
         }
         
-        // 限制最多5个动作
+        // 限制最多5个Action
         if (actions.size() > 5) {
-            log.warn("动作数量超过限制（{}），只保留前5个", actions.size());
+            log.warn("Action数量超过限制（{}），只保留前5个", actions.size());
             actions = actions.subList(0, 5);
         }
-        log.info("思考完成，决定执行 {} 个动作: {}", actions.size(),
+        log.info("思考完成，决定执行 {} 个Action: {}", actions.size(),
             actions.stream().map(AgentAction::getName).collect(java.util.stream.Collectors.joining(", ")));
         return actions;
     }
@@ -127,7 +126,7 @@ public class ThinkingEngine {
      */
     private String buildSystemPrompt() {
 
-        return "你是一个智能Agent的思考模块，需要决定下一步动作。\n\n" +
+        return "你是一个智能Agent的思考模块，你需要理解用户对话背后想要做的事情，并决定下一步Action。\n\n" +
 
                 // 决策要求
                 DECISION_FRAMEWORK_PROMPT +
@@ -149,19 +148,33 @@ public class ThinkingEngine {
             config = com.aiagent.api.dto.ThinkingConfig.builder().build();
         }
         
-        // ========== 第一部分：当前目标 ==========
-        prompt.append("## 当前目标\n\n");
-        prompt.append(goal).append("\n\n");
 
-        // ========== 第二部分：对话历史 ==========
+        // ========== 可用工具 ==========
+        List<McpToolInfo> availableTools = toolSelector.selectTools(goal,
+                context.getEnabledMcpGroups(),
+                context.getEnabledTools());
+        if (!availableTools.isEmpty()) {
+            prompt.append("## 可用工具\n\n");
+            for (McpToolInfo tool : availableTools) {
+                prompt.append("- ").append(tool.getName());
+                if (StringUtils.isNotEmpty(tool.getDescription())) {
+                    String desc = tool.getDescription();
+                    prompt.append(" (").append(desc).append(")");
+                }
+                prompt.append("\n");
+            }
+            prompt.append("\n");
+        }
+
+        // ========== 对话历史 ==========
         if (context.getMessages() != null && !context.getMessages().isEmpty()) {
             int rounds = config.getConversationHistoryRoundsOrDefault();
             int maxLength = config.getMaxMessageLengthOrDefault();
-            
+
             List<ChatMessage> recentMessages = context.getMessages();
             // 每轮2条消息（用户+AI）
             int start = Math.max(0, recentMessages.size() - rounds * 2);
-            
+
             if (start < recentMessages.size()) {
                 prompt.append("## 对话历史（最近").append(rounds).append("轮）\n\n");
                 for (int i = start; i < recentMessages.size(); i++) {
@@ -184,40 +197,43 @@ public class ThinkingEngine {
                 prompt.append("\n");
             }
         }
-        
-        // ========== 第三部分：工具调用历史 ==========
-        if (context.getToolCallHistory() != null && !context.getToolCallHistory().isEmpty()) {
-            int count = config.getToolCallHistoryCountOrDefault();
-            int historySize = context.getToolCallHistory().size();
-            int start = Math.max(0, historySize - count);
-            
-            if (start < historySize) {
-                prompt.append("## 最近工具调用（最近").append(count).append("次）\n\n");
-                for (int i = start; i < historySize; i++) {
-                    Map<String, Object> call = context.getToolCallHistory().get(i);
-                    prompt.append("- ").append(call.get("toolName")).append("\n");
-                }
-                prompt.append("\n");
-            }
-        }
 
-        // ========== 第四部分：可用工具 ==========
-        List<McpToolInfo> availableTools = toolSelector.selectTools(goal,
-                context.getEnabledMcpGroups(),
-                context.getEnabledTools());
-        if (!availableTools.isEmpty()) {
-            prompt.append("## 可用工具\n\n");
-            for (McpToolInfo tool : availableTools) {
-                prompt.append("- ").append(tool.getName());
-                if (StringUtils.isNotEmpty(tool.getDescription())) {
-                    String desc = tool.getDescription();
-                    prompt.append(" (").append(desc).append(")");
+        // ========== Action执行历史（按迭代轮次展示）==========
+        if (context.getActionExecutionHistory() != null && !context.getActionExecutionHistory().isEmpty()) {
+            int totalIterations = context.getActionExecutionHistory().size();
+
+            Integer showIterations = config.getActionExecutionHistoryCount();
+            int start = showIterations==null?0:totalIterations-showIterations;
+
+            if (start < totalIterations) {
+                prompt.append("## 最近Action执行历史（最近").append(showIterations).append("轮迭代）\n\n");
+
+                for (int i = start; i < totalIterations; i++) {
+                    List<ActionResult> iterationResults = context.getActionExecutionHistory().get(i);
+
+                    // 迭代标题
+                    prompt.append("### 第 ").append(i + 1).append(" 轮迭代");
+                    if (iterationResults.size() == 1) {
+                        prompt.append("（1 个Action）\n\n");
+                    } else {
+                        prompt.append("（").append(iterationResults.size()).append(" 个Action）\n\n");
+                    }
+
+                    // 展示该轮的每个Action - 直接使用 ActionResult.toString()
+                    for (int j = 0; j < iterationResults.size(); j++) {
+                        ActionResult result = iterationResults.get(j);
+
+                        // 直接使用 toString() 方法获取 AI 可读的格式化字符串
+                        prompt.append("**Action ").append(j + 1).append("**:\n");
+                        prompt.append(result.toString());
+                        prompt.append("\n");
+                    }
                 }
-                prompt.append("\n");
             }
-            prompt.append("\n");
         }
-        
+        // ========== 当前目标 ==========
+        prompt.append("## 用户对话：\n\n");
+        prompt.append(goal).append("\n\n");
         return prompt.toString();
     }
     
@@ -253,7 +269,7 @@ public class ThinkingEngine {
     }
 
     /**
-     * 解析思考结果，生成动作列表
+     * 解析思考结果，生成Action列表
      * 统一使用 actions 数组格式，直接使用类反序列化
      */
     private List<AgentAction> parseThinkingResult(String thinkingResult, String goal, AgentContext context) {
@@ -297,7 +313,7 @@ public class ThinkingEngine {
      */
     private AgentAction buildAgentAction(ActionInputDTO dto, AgentContext context) {
         if (StringUtils.isEmpty(dto.getActionType())) {
-            log.warn("动作缺少actionType");
+            log.warn("Action缺少actionType");
             return null;
         }
         
@@ -305,7 +321,7 @@ public class ThinkingEngine {
         try {
             type = ActionType.valueOf(dto.getActionType());
         } catch (IllegalArgumentException e) {
-            log.warn("无效的动作类型: {}", dto.getActionType());
+            log.warn("无效的Action类型: {}", dto.getActionType());
             return null;
         }
         
@@ -327,7 +343,7 @@ public class ThinkingEngine {
                 action = buildDirectResponseAction(dto, reasoning);
                 break;
             default:
-                log.warn("不支持的动作类型: {}", type);
+                log.warn("不支持的Action类型: {}", type);
                 return null;
         }
         
@@ -377,12 +393,12 @@ public class ThinkingEngine {
     }
 
     /**
-     * 构建工具调用动作
+     * 构建工具调用Action
      */
     private AgentAction buildToolCallAction(ActionInputDTO dto, String reasoning) {
         ToolCallParams params = dto.getToolCallParams();
         if (params == null) {
-            log.warn("TOOL_CALL动作缺少toolCallParams");
+            log.warn("TOOL_CALLAction缺少toolCallParams");
             return null;
         }
         
@@ -392,7 +408,7 @@ public class ThinkingEngine {
             toolName = dto.getActionName();
         }
         if (StringUtils.isEmpty(toolName)) {
-            log.warn("TOOL_CALL动作缺少工具名称");
+            log.warn("TOOL_CALLAction缺少工具名称");
             return null;
         }
         
@@ -410,17 +426,17 @@ public class ThinkingEngine {
     }
     
     /**
-     * 构建RAG检索动作
+     * 构建RAG检索Action
      */
     private AgentAction buildRAGRetrieveAction(ActionInputDTO dto, String reasoning, AgentContext context) {
         RAGRetrieveParams params = dto.getRagRetrieveParams();
         if (params == null) {
-            log.warn("RAG_RETRIEVE动作缺少ragRetrieveParams");
+            log.warn("RAG_RETRIEVEAction缺少ragRetrieveParams");
             return null;
         }
         
         if (StringUtils.isEmpty(params.getQuery())) {
-            log.warn("RAG_RETRIEVE动作缺少query");
+            log.warn("RAG_RETRIEVEAction缺少query");
             return null;
         }
         
@@ -438,17 +454,17 @@ public class ThinkingEngine {
     }
     
     /**
-     * 构建直接返回响应动作
+     * 构建直接返回响应Action
      */
     private AgentAction buildDirectResponseAction(ActionInputDTO dto, String reasoning) {
         DirectResponseParams params = dto.getDirectResponseParams();
         if (params == null) {
-            log.warn("DIRECT_RESPONSE动作缺少directResponseParams");
+            log.warn("DIRECT_RESPONSEAction缺少directResponseParams");
             return null;
         }
         
         if (StringUtils.isEmpty(params.getContent())) {
-            log.warn("DIRECT_RESPONSE动作缺少content");
+            log.warn("DIRECT_RESPONSEAction缺少content");
             return null;
         }
         
@@ -468,17 +484,17 @@ public class ThinkingEngine {
     }
     
     /**
-     * 构建LLM生成动作
+     * 构建LLM生成Action
      */
     private AgentAction buildLLMGenerateAction(ActionInputDTO dto, String reasoning) {
         LLMGenerateParams params = dto.getLlmGenerateParams();
         if (params == null) {
-            log.warn("LLM_GENERATE动作缺少llmGenerateParams");
+            log.warn("LLM_GENERATEAction缺少llmGenerateParams");
             return null;
         }
         
         if (StringUtils.isEmpty(params.getPrompt())) {
-            log.warn("LLM_GENERATE动作缺少prompt");
+            log.warn("LLM_GENERATEAction缺少prompt");
             return null;
         }
         
@@ -498,5 +514,6 @@ public class ThinkingEngine {
             );
         }
     }
+    
 }
 

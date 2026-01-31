@@ -73,6 +73,9 @@ public class ReActEngine {
             long iterationStartNs = System.nanoTime();
             log.info("ReAct循环迭代 {}/{}", iteration, MAX_ITERATIONS);
             
+            // 发送迭代开始事件
+            sendIterationStartEvent(context, iteration);
+            
             try {
                 log.info("开始思考");
                 // 1. 思考阶段（Think）
@@ -105,9 +108,6 @@ public class ReActEngine {
                 List<ActionResult> results = act(actions, context);
                 lastResults = results;
                 log.info("act结束，耗时 {} ms", elapsedMs(actStartNs));
-                
-                // 收集AI回复消息（DIRECT_RESPONSE 或 LLM_GENERATE 成功时）
-                collectAssistantMessages(results, context);
 
                 log.info("观察开始");
 
@@ -126,10 +126,16 @@ public class ReActEngine {
                 
                 log.info("观察结束，耗时 {} ms", elapsedMs(observeStartNs));
                 
+                // 计算本轮迭代耗时
+                long iterationDurationMs = elapsedMs(iterationStartNs);
+                
                 // 根据观察结果决定是否结束
                 if (observationResult.isShouldTerminate()) {
                     log.info("观察阶段判断应该结束循环，原因: {}", 
                         observationResult.getTerminationReason());
+                        
+                    // 发送迭代结束事件（终止）
+                    sendIterationEndEvent(context, iteration, observationResult, iterationDurationMs);
                         
                     // 根据终止原因设置状态
                     if (observationResult.getTerminationReason() == 
@@ -142,7 +148,10 @@ public class ReActEngine {
                     return observationResult.getExecutionResult();
                 }
                 
-                log.info("本轮迭代耗时 {} ms", elapsedMs(iterationStartNs));
+                // 发送迭代结束事件（继续）
+                sendIterationEndEvent(context, iteration, observationResult, iterationDurationMs);
+                
+                log.info("本轮迭代耗时 {} ms", iterationDurationMs);
             } catch (Exception e) {
                 log.error("ReAct循环执行异常", e);
                 stateMachine.transition(AgentState.FAILED);
@@ -207,40 +216,86 @@ public class ReActEngine {
             );
         }
     }
-
+    
     /**
-     * 收集AI回复消息
-     * 当 DIRECT_RESPONSE 或 LLM_GENERATE 动作成功时，将回复内容添加到上下文中
+     * 发送迭代开始事件
      */
-    private void collectAssistantMessages(List<ActionResult> results, AgentContext context) {
-        if (results == null || results.isEmpty()) {
-            return;
-        }
-        
-        for (ActionResult result : results) {
-            // 只处理成功的结果
-            if (!result.isSuccess()) {
-                continue;
-            }
+    private void sendIterationStartEvent(AgentContext context, int iterationNumber) {
+        if (context != null && context.getEventPublisher() != null) {
+            java.util.Map<String, Object> data = new java.util.HashMap<>();
+            data.put("iterationNumber", iterationNumber);
+            data.put("message", "开始第 " + iterationNumber + " 轮推理");
             
-            // 处理 DIRECT_RESPONSE 或 LLM_GENERATE 类型的成功结果
-            if (result.getActionType() == ActionType.DIRECT_RESPONSE || 
-                result.getActionType() == ActionType.LLM_GENERATE) {
-                
-                Object data = result.getData();
-                if (data != null) {
-                    String content = data.toString();
-                    if (content != null && !content.trim().isEmpty()) {
-                        // 创建AI消息并添加到上下文
-                        AiMessage aiMessage = new AiMessage(content);
-                        context.addMessage(aiMessage);
-                        log.debug("收集AI回复消息，类型: {}, 长度: {}", 
-                            result.getActionType(), content.length());
-                    }
-                }
-            }
+            context.getEventPublisher().accept(
+                AgentEventData.builder()
+                    .event(AgentConstants.EVENT_ITERATION_START)
+                    .message("开始第 " + iterationNumber + " 轮推理")
+                    .data(data)
+                    .conversationId(context.getConversationId())
+                    .build()
+            );
+            
+            log.debug("发送迭代开始事件：第 {} 轮", iterationNumber);
         }
     }
+    
+    /**
+     * 发送迭代结束事件
+     */
+    private void sendIterationEndEvent(AgentContext context, int iterationNumber, 
+                                       ObservationResult observationResult, long durationMs) {
+        if (context != null && context.getEventPublisher() != null) {
+            java.util.Map<String, Object> data = new java.util.HashMap<>();
+            data.put("iterationNumber", iterationNumber);
+            data.put("shouldContinue", !observationResult.isShouldTerminate());
+            data.put("durationMs", durationMs);
+            
+            String terminationReason = null;
+            String message;
+            
+            if (observationResult.isShouldTerminate()) {
+                terminationReason = observationResult.getTerminationReason() != null 
+                    ? observationResult.getTerminationReason().name() 
+                    : null;
+                data.put("terminationReason", terminationReason);
+                
+                switch (observationResult.getTerminationReason()) {
+                    case COMPLETED:
+                        message = "任务完成，结束推理";
+                        break;
+                    case MAX_ITERATIONS:
+                        message = "达到最大迭代次数";
+                        break;
+                    case NO_ACTIONS:
+                        message = "未产生有效动作";
+                        break;
+                    case EXCEPTION:
+                        message = "发生异常";
+                        break;
+                    default:
+                        message = "推理结束";
+                }
+            } else {
+                message = "观察结果，决定继续推理";
+            }
+            
+            data.put("message", message);
+            
+            context.getEventPublisher().accept(
+                AgentEventData.builder()
+                    .event(AgentConstants.EVENT_ITERATION_END)
+                    .message(message)
+                    .data(data)
+                    .conversationId(context.getConversationId())
+                    .build()
+            );
+            
+            log.debug("发送迭代结束事件：第 {} 轮，shouldContinue={}", 
+                iterationNumber, !observationResult.isShouldTerminate());
+        }
+    }
+
+
     
     private long elapsedMs(long startNs) {
         return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs);

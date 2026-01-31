@@ -32,11 +32,11 @@ public class ThinkingConfig {
     private Integer maxMessageLength = 200;
     
     /**
-     * 工具调用历史数量（默认2次，最近的N次调用）
-     * 控制在提示词中包含多少次最近的工具调用记录
+     * 动作执行历史轮数（默认2轮，显示最近N轮迭代的执行历史）
+     * 控制在提示词中包含多少轮 ReACT 迭代的动作执行记录
+     * 每轮迭代可能包含多个动作（TOOL_CALL、RAG_RETRIEVE、LLM_GENERATE等）
      */
-    @Builder.Default
-    private Integer toolCallHistoryCount = 2;
+    private Integer actionExecutionHistoryCount = null;
     
     /**
      * 获取有效的对话历史轮数（处理null情况）
@@ -51,12 +51,6 @@ public class ThinkingConfig {
     public int getMaxMessageLengthOrDefault() {
         return maxMessageLength != null ? maxMessageLength : 200;
     }
-    
-    /**
-     * 获取有效的工具调用历史数量（处理null情况）
-     */
-    public int getToolCallHistoryCountOrDefault() {
-        return toolCallHistoryCount != null ? toolCallHistoryCount : 2;
-    }
+
 }
 
