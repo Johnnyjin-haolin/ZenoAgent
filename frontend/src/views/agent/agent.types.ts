@@ -5,6 +5,27 @@
  */
 
 /**
+ * 思考引擎配置
+ */
+export interface ThinkingConfig {
+  /** 对话历史轮数（默认3轮，最近的N轮对话） */
+  conversationHistoryRounds?: number;
+  /** 单条消息最大长度（默认200字符，超过截断） */
+  maxMessageLength?: number;
+  /** 工具调用历史数量（默认2次，最近的N次调用） */
+  toolCallHistoryCount?: number;
+}
+
+/**
+ * 思考引擎配置的默认值
+ */
+export const DEFAULT_THINKING_CONFIG: Required<ThinkingConfig> = {
+  conversationHistoryRounds: 3,
+  maxMessageLength: 200,
+  toolCallHistoryCount: 2,
+};
+
+/**
  * Agent 请求参数
  */
 export interface AgentRequest {
@@ -22,6 +43,8 @@ export interface AgentRequest {
   enabledMcpGroups?: string[];
   /** 执行模式：AUTO-自动 / MANUAL-手动 */
   mode?: 'AUTO' | 'MANUAL';
+  /** 思考引擎配置（可选，不传则使用默认值） */
+  thinkingConfig?: ThinkingConfig;
   /** 自定义上下文参数 */
   context?: Record<string, any>;
 }

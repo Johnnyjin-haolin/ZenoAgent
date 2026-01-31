@@ -58,9 +58,11 @@
       v-model:selectedKnowledgeIds="selectedKnowledgeIds"
       v-model:selectedTools="selectedTools"
       v-model:executionMode="executionMode"
+      v-model:thinkingConfig="thinkingConfig"
       @model-change="handleModelChange"
       @knowledge-change="handleKnowledgeChange"
       @tools-change="handleToolsChange"
+      @thinking-config-change="handleThinkingConfigChange"
     />
 
   </div>
@@ -82,7 +84,8 @@ import ChatInput from './components/ChatInput.vue';
 import ChatMessages from './components/ChatMessages.vue';
 import AgentSlide from './components/AgentSlide.vue';
 import { AGENT_CONFIG_STORAGE_KEY } from './agent.constants';
-import type { ModelInfo, KnowledgeInfo } from './agent.types';
+import type { ModelInfo, KnowledgeInfo, ThinkingConfig } from './agent.types';
+import { DEFAULT_THINKING_CONFIG } from './agent.types';
 import { ModelType } from '@/types/model.types';
 import type { BrandConfig } from './hooks/useBrandConfig';
 
@@ -116,6 +119,11 @@ const selectedModelId = ref('');
 const selectedKnowledgeIds = ref<string[]>([]);
 const selectedTools = ref<string[]>([]);
 const executionMode = ref<'AUTO' | 'MANUAL'>('AUTO');
+const thinkingConfig = ref<ThinkingConfig>({
+  conversationHistoryRounds: DEFAULT_THINKING_CONFIG.conversationHistoryRounds,
+  maxMessageLength: DEFAULT_THINKING_CONFIG.maxMessageLength,
+  toolCallHistoryCount: DEFAULT_THINKING_CONFIG.toolCallHistoryCount,
+});
 const isConfigInitialized = ref(false);
 
 type AgentConfigCache = {
@@ -123,6 +131,7 @@ type AgentConfigCache = {
   knowledgeIds: string[];
   enabledTools: string[];
   mode: 'AUTO' | 'MANUAL';
+  thinkingConfig?: ThinkingConfig;
   updatedAt: number;
 };
 
@@ -203,6 +212,7 @@ const readConfigCache = (): AgentConfigCache | null => {
       knowledgeIds: Array.isArray(parsed.knowledgeIds) ? parsed.knowledgeIds.filter(Boolean) : [],
       enabledTools: Array.isArray(parsed.enabledTools) ? parsed.enabledTools.filter(Boolean) : [],
       mode: parsed.mode === 'MANUAL' ? 'MANUAL' : 'AUTO',
+      thinkingConfig: parsed.thinkingConfig || { ...DEFAULT_THINKING_CONFIG },
       updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : Date.now(),
     };
   } catch (error) {
@@ -218,6 +228,7 @@ const persistConfigCache = () => {
     knowledgeIds: [...selectedKnowledgeIds.value],
     enabledTools: [...selectedTools.value],
     mode: executionMode.value,
+    thinkingConfig: { ...thinkingConfig.value },
     updatedAt: Date.now(),
   };
   localStorage.setItem(AGENT_CONFIG_STORAGE_KEY, JSON.stringify(payload));
@@ -228,6 +239,9 @@ const applyCachedConfig = (cache: AgentConfigCache) => {
   selectedKnowledgeIds.value = [...cache.knowledgeIds];
   selectedTools.value = [...cache.enabledTools];
   executionMode.value = cache.mode || 'AUTO';
+  thinkingConfig.value = cache.thinkingConfig 
+    ? { ...cache.thinkingConfig } 
+    : { ...DEFAULT_THINKING_CONFIG };
 };
 
 const validateConfigWithLatestLists = async () => {
@@ -313,6 +327,7 @@ const handleSend = async () => {
     knowledgeIds: selectedKnowledgeIds.value,
     enabledTools: selectedTools.value,
     mode: executionMode.value,
+    thinkingConfig: thinkingConfig.value,
   });
   
   // 滚动到底部
@@ -354,6 +369,10 @@ const handleToolsChange = (tools: string[]) => {
   console.log('工具变更:', tools);
 };
 
+const handleThinkingConfigChange = (config: ThinkingConfig) => {
+  console.log('思考引擎配置变更:', config);
+};
+
 // 初始化
 onMounted(() => {
   loadBrandConfig();
@@ -362,7 +381,7 @@ onMounted(() => {
 });
 
 watch(
-  [selectedModelId, selectedKnowledgeIds, selectedTools, executionMode],
+  [selectedModelId, selectedKnowledgeIds, selectedTools, executionMode, thinkingConfig],
   () => {
     persistConfigCache();
   },

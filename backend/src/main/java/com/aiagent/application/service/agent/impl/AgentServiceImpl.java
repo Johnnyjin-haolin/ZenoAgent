@@ -66,6 +66,8 @@ public class AgentServiceImpl implements IAgentService {
     private AgentStreamingService streamingService;
     
     @Override
+    //todo 前端停止生成后，后端react没有终止。
+
     public SseEmitter execute(AgentRequest request) {
         log.info("开始执行Agent任务（ReAct架构）: {}", request.getContent());
         

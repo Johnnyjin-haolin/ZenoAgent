@@ -17,6 +17,7 @@ import type {
   ProcessStepStatus,
   PlanInfo,
   ProcessSubStep,
+  ThinkingConfig,
 } from '../agent.types';
 
 export interface UseAgentChatOptions {
@@ -191,6 +192,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       knowledgeIds?: string[];
       enabledTools?: string[];
       mode?: 'AUTO' | 'MANUAL';
+      thinkingConfig?: ThinkingConfig;
       images?: string[];
     } = {}
   ) => {
@@ -252,6 +254,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       knowledgeIds: options.knowledgeIds || defaultKnowledgeIds,
       enabledTools: options.enabledTools || defaultEnabledTools,
       mode: options.mode || 'AUTO',
+      thinkingConfig: options.thinkingConfig,
     };
 
     try {
