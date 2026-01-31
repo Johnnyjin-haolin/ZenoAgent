@@ -16,6 +16,7 @@ import com.aiagent.application.model.AgentContext;
 import com.aiagent.api.dto.AgentEventData;
 import com.aiagent.api.dto.McpToolInfo;
 import com.alibaba.fastjson2.JSON;
+import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -168,30 +169,27 @@ public class ThinkingEngine {
 
         // ========== 对话历史 ==========
         if (context.getMessages() != null && !context.getMessages().isEmpty()) {
-            int rounds = config.getConversationHistoryRoundsOrDefault();
+            int historySize = config.getHistoryMessageLoadLimitOrDefault();
             int maxLength = config.getMaxMessageLengthOrDefault();
 
             List<ChatMessage> recentMessages = context.getMessages();
-            // 每轮2条消息（用户+AI）
-            int start = Math.max(0, recentMessages.size() - rounds * 2);
-
+            int start = 0;
             if (start < recentMessages.size()) {
-                prompt.append("## 对话历史（最近").append(rounds).append("轮）\n\n");
+                prompt.append("## 对话历史（最近").append(historySize).append("轮）\n\n");
                 for (int i = start; i < recentMessages.size(); i++) {
                     ChatMessage msg = recentMessages.get(i);
-                    if (msg instanceof UserMessage) {
-                        String text = ((UserMessage) msg).singleText();
+                    if (msg instanceof UserMessage userMessage) {
+                        String text = userMessage.singleText();
                         if (text.length() > maxLength) {
                             text = text.substring(0, maxLength) + "...";
                         }
-                        prompt.append("- 用户: ").append(text).append("\n");
-                    } else if (msg instanceof dev.langchain4j.data.message.AiMessage) {
-                        dev.langchain4j.data.message.AiMessage aiMsg = (dev.langchain4j.data.message.AiMessage) msg;
+                        prompt.append("[User]: ").append(text).append("\n");
+                    } else if (msg instanceof AiMessage aiMsg) {
                         String text = aiMsg.text();
                         if (text.length() > maxLength) {
                             text = text.substring(0, maxLength) + "...";
                         }
-                        prompt.append("- 助手: ").append(text).append("\n");
+                        prompt.append("[Agent]: ").append(text).append("\n");
                     }
                 }
                 prompt.append("\n");
@@ -232,7 +230,7 @@ public class ThinkingEngine {
             }
         }
         // ========== 当前目标 ==========
-        prompt.append("## 用户对话：\n\n");
+        prompt.append("## 当前目标：\n\n");
         prompt.append(goal).append("\n\n");
         return prompt.toString();
     }

@@ -209,9 +209,7 @@ public class AgentContextService {
     private void loadHistoryMessages(AgentContext context, String conversationId) {
         try {
             // 1. 获取历史消息加载数量配置（从 ThinkingConfig 中获取）
-            int limit = context.getThinkingConfig() != null 
-                ? context.getThinkingConfig().getHistoryMessageLoadLimitOrDefault() 
-                : 20;
+            int limit = context.getThinkingConfig().getHistoryMessageLoadLimitOrDefault();
             
             // 2. 从数据库查询历史消息（数据库返回倒序，即最新的消息在前）
             List<MessageEntity> historyEntities = messageMapper.selectByConversationId(

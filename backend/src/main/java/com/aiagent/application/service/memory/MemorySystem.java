@@ -171,7 +171,27 @@ public class MemorySystem {
         String key = AgentConstants.CACHE_PREFIX_AGENT_CONTEXT + context.getConversationId();
         
         try {
+            // 保存前显式清理 transient 字段，避免序列化错误
+            // 这些字段已经有 @JsonIgnore，但为了兼容性和安全性，显式设为 null
+            String requestId = context.getRequestId();
+            com.aiagent.application.service.StreamingCallback streamingCallback = context.getStreamingCallback();
+            java.util.function.Consumer<com.aiagent.api.dto.AgentEventData> eventPublisher = context.getEventPublisher();
+            com.aiagent.application.model.AgentKnowledgeResult initialRagResult = context.getInitialRagResult();
+            
+            context.setRequestId(null);
+            context.setStreamingCallback(null);
+            context.setEventPublisher(null);
+            context.setInitialRagResult(null);
+            
+            // 保存到 Redis
             redisTemplate.opsForValue().set(key, context, WORK_MEMORY_EXPIRE_HOURS, TimeUnit.HOURS);
+            
+            // 恢复 transient 字段（如果需要继续使用）
+            context.setRequestId(requestId);
+            context.setStreamingCallback(streamingCallback);
+            context.setEventPublisher(eventPublisher);
+            context.setInitialRagResult(initialRagResult);
+            
             log.debug("保存Agent上下文: conversationId={}", context.getConversationId());
         } catch (Exception e) {
             log.error("保存Agent上下文失败", e);

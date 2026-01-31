@@ -20,6 +20,7 @@ import com.alibaba.fastjson2.JSON;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.service.tool.ToolExecutionResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -176,7 +177,7 @@ public class ActionExecutor {
                 "正在执行工具: " + toolInfo.getName() + "...");
             
             // 使用McpToolExecutor执行工具
-            Object toolResult = mcpToolExecutor.execute(toolInfo, toolCallParams.getToolParams());
+            ToolExecutionResult toolResult = mcpToolExecutor.execute(toolInfo, toolCallParams.getToolParams());
 
             sendProgressEvent(context, AgentConstants.EVENT_AGENT_TOOL_EXECUTING,
                     "调用工具: " + toolInfo.getName() + " 成功");
@@ -213,26 +214,11 @@ public class ActionExecutor {
     /**
      * 解析工具执行结果为字符串
      */
-    private String parseToolResult(Object toolResult) {
+    private String parseToolResult(ToolExecutionResult toolResult) {
         if (toolResult == null) {
             return "工具执行完成，但未返回结果";
         }
-        
-        // 如果是字符串，直接返回
-        if (toolResult instanceof String) {
-            return (String) toolResult;
-        }
-        
-        // 如果是Map或List，转换为JSON
-        if (toolResult instanceof Map || toolResult instanceof List) {
-            try {
-                return JSON.toJSONString(toolResult);
-            } catch (Exception e) {
-                log.warn("工具结果JSON序列化失败", e);
-                return toolResult.toString();
-            }
-        }
-        
+
         // 其他类型，转换为字符串
         return toolResult.toString();
     }
@@ -600,7 +586,7 @@ public class ActionExecutor {
      * 格式化工具输出结果
      * 根据结果类型智能格式化
      */
-    private String formatToolOutput(Object toolResult) {
+    private String formatToolOutput(ToolExecutionResult toolResult) {
         if (toolResult == null) {
             return "执行成功（无返回值）";
         }
@@ -608,11 +594,11 @@ public class ActionExecutor {
         String resultStr = parseToolResult(toolResult); // 使用已有方法
         
         // 如果结果过长，截断到合理长度（500字符）
-        int maxLength = 500;
-        if (resultStr.length() > maxLength) {
-            return resultStr.substring(0, maxLength) + "...(已截断，完整结果" + resultStr.length() + "字符)";
-        }
-        
+//        int maxLength = 500;
+//        if (resultStr.length() > maxLength) {
+//            return resultStr.substring(0, maxLength) + "...(已截断，完整结果" + resultStr.length() + "字符)";
+//        }
+//
         return resultStr;
     }
     
@@ -654,10 +640,10 @@ public class ActionExecutor {
         }
         
         // LLM 生成的内容可能较长，截断到300字符用于提示词
-        int maxLength = 300;
-        if (llmResponse.length() > maxLength) {
-            return llmResponse.substring(0, maxLength) + "...(已截断，完整回复" + llmResponse.length() + "字符)";
-        }
+//        int maxLength = 300;
+//        if (llmResponse.length() > maxLength) {
+//            return llmResponse.substring(0, maxLength) + "...(已截断，完整回复" + llmResponse.length() + "字符)";
+//        }
         
         return llmResponse;
     }
@@ -670,10 +656,10 @@ public class ActionExecutor {
             return "响应内容为空";
         }
         
-        int maxLength = 300;
-        if (content.length() > maxLength) {
-            return content.substring(0, maxLength) + "...(已截断，完整响应" + content.length() + "字符)";
-        }
+//        int maxLength = 300;
+//        if (content.length() > maxLength) {
+//            return content.substring(0, maxLength) + "...(已截断，完整响应" + content.length() + "字符)";
+//        }
         
         return content;
     }

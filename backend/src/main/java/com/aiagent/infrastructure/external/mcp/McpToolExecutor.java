@@ -36,7 +36,7 @@ public class McpToolExecutor {
      * @param params 工具参数
      * @return 执行结果
      */
-    public Object execute(McpToolInfo toolInfo, Map<String, Object> params) {
+    public ToolExecutionResult execute(McpToolInfo toolInfo, Map<String, Object> params) {
         ConnectionTypeEnums connectionType = toolInfo.getConnectionType();
         String serverId = toolInfo.getServerId();
         String toolName = toolInfo.getName();
@@ -74,7 +74,7 @@ public class McpToolExecutor {
      * @param connectionType 连接类型
      * @return 执行结果
      */
-    private Object executeViaMcpClient(McpToolInfo toolInfo, Map<String, Object> params, 
+    private ToolExecutionResult executeViaMcpClient(McpToolInfo toolInfo, Map<String, Object> params,
                                        String serverId, String toolName, ConnectionTypeEnums connectionType) {
         try {
             McpClient client = mcpGroupManager.getMcpClient(serverId);
@@ -95,13 +95,7 @@ public class McpToolExecutor {
             ToolExecutionResult result = client.executeTool(request);
             
             log.info("MCP工具执行成功: name={}, type={}, serverId={}", toolName, connectionType, serverId);
-            
-            // 返回结果内容
-            // 注意：根据LangChain4j MCP API，结果可能是McpCallToolResult
-            // 需要根据实际API调整
-            if (result != null && result.result() != null) {
-                return result.result();
-            }
+
             return result;
             
         } catch (Exception e) {
@@ -112,21 +106,5 @@ public class McpToolExecutor {
                     e.getMessage(), serverId, connectionType), e);
         }
     }
-    
-    /**
-     * 执行MCP工具（通过工具名称）
-     * 
-     * @param toolName 工具名称（格式：serverId:toolName 或 toolName）
-     * @param params 工具参数
-     * @return 执行结果
-     */
-    public Object executeByName(String toolName, Map<String, Object> params) {
-        // 从所有工具中查找
-        McpToolInfo toolInfo = mcpGroupManager.getAllTools().stream()
-            .filter(tool -> toolName.equals(tool.getName()) || toolName.equals(tool.getId()))
-            .findFirst()
-            .orElseThrow(() -> new IllegalArgumentException("工具未找到: " + toolName));
-        
-        return execute(toolInfo, params);
-    }
+
 }
