@@ -1,5 +1,6 @@
 package com.aiagent.api.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -50,6 +51,7 @@ public class ThinkingConfig {
     /**
      * 获取有效的对话历史轮数（处理null情况）
      */
+    @JsonIgnore
     public int getConversationHistoryRoundsOrDefault() {
         return conversationHistoryRounds != null ? conversationHistoryRounds : 3;
     }
@@ -57,6 +59,7 @@ public class ThinkingConfig {
     /**
      * 获取有效的单条消息最大长度（处理null情况）
      */
+    @JsonIgnore
     public int getMaxMessageLengthOrDefault() {
         return maxMessageLength != null ? maxMessageLength : 200;
     }
@@ -64,6 +67,7 @@ public class ThinkingConfig {
     /**
      * 获取有效的历史消息加载数量（处理null情况）
      */
+    @JsonIgnore
     public int getHistoryMessageLoadLimitOrDefault() {
         return historyMessageLoadLimit != null ? historyMessageLoadLimit : 20;
     }

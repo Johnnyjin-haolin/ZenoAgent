@@ -6,7 +6,7 @@
 
 import { ref, Ref, computed, reactive, nextTick } from 'vue';
 import { message } from 'ant-design-vue';
-import { executeAgent, getConversationMessages, confirmToolExecution } from '../agent.api';
+import { executeAgent, getConversationMessages, confirmToolExecution, stopAgent } from '../agent.api';
 import type {
   AgentMessage,
   AgentRequest,
@@ -53,6 +53,9 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
   
   // 当前请求的 AbortController
   let currentController: AbortController | null = null;
+  
+  // 当前请求 ID（用于停止功能）
+  let currentRequestId: string | null = null;
 
   /**
    * 工具确认队列
@@ -265,6 +268,8 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         onStart: (event) => {
           console.log('任务开始:', event);
           updateConversationId(event);
+          // 【新增】保存 requestId 用于停止功能
+          currentRequestId = event.requestId || null;
           assistantMessage.status = 'thinking';
           assistantMessage.statusText = '开始处理...';
           currentStatus.value = '任务已启动';
@@ -632,22 +637,39 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
   /**
    * 停止生成
    */
-  const stopGeneration = () => {
+  const stopGeneration = async () => {
     if (currentController) {
-      currentController.abort();
-      currentController = null;
-      loading.value = false;
-      currentStatus.value = '';
-      
-      // 更新最后一条助手消息状态
-      const lastMessage = messages.value[messages.value.length - 1];
-      if (lastMessage && lastMessage.role === 'assistant') {
-        lastMessage.status = 'done';
-        lastMessage.loading = false;
-        lastMessage.statusText = '';
+      try {
+        // 1. 先调用后端停止接口（重要：先告诉后端停止）
+        if (currentRequestId) {
+          console.log('调用后端停止接口:', currentRequestId);
+          const success = await stopAgent(currentRequestId);
+          console.log('后端停止结果:', success);
+        }
+        
+        // 2. 等待一小段时间让后端处理
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // 3. 再中止前端 SSE 连接
+        currentController.abort();
+      } catch (error) {
+        console.error('停止失败:', error);
+      } finally {
+        currentController = null;
+        currentRequestId = null;
+        loading.value = false;
+        currentStatus.value = '';
+        
+        // 更新最后一条助手消息状态
+        const lastMessage = messages.value[messages.value.length - 1];
+        if (lastMessage && lastMessage.role === 'assistant') {
+          lastMessage.status = 'done';
+          lastMessage.loading = false;
+          lastMessage.statusText = '';
+        }
+        
+        message.info('已停止生成');
       }
-      
-      message.info('已停止生成');
     }
   };
 

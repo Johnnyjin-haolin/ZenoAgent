@@ -127,7 +127,9 @@ public class AgentContext implements Serializable {
     
     /**
      * 从 ChatMessage 列表设置消息（自动转换为DTO）
+     * 注意：添加 @JsonIgnore 避免 Jackson 序列化此方法，防止与 messageDTOs 字段冲突
      */
+    @JsonIgnore
     public void setMessages(List<ChatMessage> messages) {
         if (messages == null) {
             this.messageDTOs = new ArrayList<>();
@@ -140,7 +142,9 @@ public class AgentContext implements Serializable {
     
     /**
      * 获取 ChatMessage 列表（从DTO转换）
+     * 注意：添加 @JsonIgnore 避免 Jackson 序列化此方法，防止与 messageDTOs 字段冲突
      */
+    @JsonIgnore
     public List<ChatMessage> getMessages() {
         if (messageDTOs == null) {
             return new ArrayList<>();

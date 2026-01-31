@@ -21,6 +21,8 @@ import { ModelType } from '@/types/model.types';
 export enum AgentApi {
   /** 执行 Agent 任务（SSE 流式） */
   execute = '/aiagent/execute',
+  /** 停止 Agent 执行 */
+  stop = '/aiagent/stop',
   /** 获取可用模型列表 */
   availableModels = '/aiagent/models/available',
   /** 健康检查 */
@@ -160,6 +162,22 @@ export async function executeAgent(
 }
 
 /**
+ * 停止 Agent 执行
+ */
+export async function stopAgent(requestId: string): Promise<boolean> {
+  try {
+    const response = await defHttp.post(
+      { url: `${AgentApi.stop}/${requestId}` },
+      { isTransformResponse: false }
+    );
+    return response.success === true;
+  } catch (error) {
+    console.error('停止 Agent 失败:', error);
+    return false;
+  }
+}
+
+/**
  * 确认/拒绝工具执行（手动模式）
  */
 export async function confirmToolExecution(
@@ -274,6 +292,11 @@ function dispatchEvent(event: AgentEvent, callbacks: AgentEventCallbacks) {
       callbacks.onStart?.(event);
       break;
 
+    case 'agent:iteration_start':
+      console.log('[Agent] 迭代开始:', event.data?.iterationNumber);
+      callbacks.onIterationStart?.(event);
+      break;
+
     case 'agent:thinking':
       console.log('[Agent] AI 思考中:', event.message);
       callbacks.onThinking?.(event);
@@ -337,6 +360,11 @@ function dispatchEvent(event: AgentEvent, callbacks: AgentEventCallbacks) {
     case 'agent:stream_complete':
       console.log('[Agent] 流式输出完成');
       callbacks.onStreamComplete?.(event);
+      break;
+
+    case 'agent:iteration_end':
+      console.log('[Agent] 迭代结束:', event.data?.iterationNumber);
+      callbacks.onIterationEnd?.(event);
       break;
 
     case 'agent:complete':

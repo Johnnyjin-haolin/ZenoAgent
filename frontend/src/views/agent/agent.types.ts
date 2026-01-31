@@ -544,6 +544,7 @@ export interface McpToolInfo {
  */
 export interface AgentEventCallbacks {
   onStart?: (event: AgentEvent) => void;
+  onIterationStart?: (event: AgentEvent) => void;
   onThinking?: (event: AgentEvent) => void;
   onModelSelected?: (event: AgentEvent) => void;
   onRagRetrieve?: (event: AgentEvent) => void;
@@ -551,6 +552,7 @@ export interface AgentEventCallbacks {
   onToolResult?: (event: AgentEvent) => void;
   onMessage?: (event: AgentEvent) => void;
   onStreamComplete?: (event: AgentEvent) => void;
+  onIterationEnd?: (event: AgentEvent) => void;
   onComplete?: (event: AgentEvent) => void;
   onError?: (event: AgentEvent) => void;
 }

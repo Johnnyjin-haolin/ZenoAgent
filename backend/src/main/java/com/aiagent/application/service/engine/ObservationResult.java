@@ -55,7 +55,12 @@ public class ObservationResult {
         /**
          * 发生异常
          */
-        EXCEPTION
+        EXCEPTION,
+        
+        /**
+         * 用户停止
+         */
+        USER_STOPPED
     }
     
     /**

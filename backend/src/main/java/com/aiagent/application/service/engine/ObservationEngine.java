@@ -1,10 +1,12 @@
 package com.aiagent.application.service.engine;
 
+import com.aiagent.api.dto.AgentEventData;
 import com.aiagent.application.service.action.ActionResult;
 import com.aiagent.application.service.memory.MemorySystem;
 import com.aiagent.application.model.AgentContext;
 import com.aiagent.domain.enums.ActionType;
 import com.aiagent.domain.enums.AgentState;
+import com.aiagent.shared.constant.AgentConstants;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +31,9 @@ public class ObservationEngine {
     @Autowired
     private MemorySystem memorySystem;
     
+    @Autowired
+    private com.aiagent.application.service.agent.StopRequestManager stopRequestManager;
+    
     /**
      * 观察动作结果，更新上下文，判断是否结束
      * 
@@ -46,6 +51,39 @@ public class ObservationEngine {
             int maxIterations,
             long totalStartNs
     ) {
+        log.info("开始观察阶段，当前迭代: {}/{}", currentIteration, maxIterations);
+        
+        // 【最优先】检查 Redis 中的停止标志（支持多实例）
+        String requestId = context.getRequestId();
+        if (requestId != null && stopRequestManager.isStopRequested(requestId)) {
+            log.info("检测到停止请求（Redis），终止任务: requestId={}", requestId);
+            
+            // 清除停止标志
+            stopRequestManager.clearStopFlag(requestId);
+            
+            // 发送停止事件
+            sendProgressEvent(context, AgentConstants.EVENT_AGENT_COMPLETE, "用户已停止生成");
+            
+            // 构建停止结果
+            long totalDurationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - totalStartNs);
+            List<ChatMessage> allMessages = context.getMessages();
+            
+            ReActExecutionResult executionResult = ReActExecutionResult.builder()
+                .success(true) // 停止也算成功
+                .messages(allMessages != null ? allMessages : new ArrayList<>())
+                .iterations(currentIteration)
+                .totalDurationMs(totalDurationMs)
+                .finalState(AgentState.COMPLETED)
+                .metadata(new HashMap<>())
+                .build();
+            
+            return ObservationResult.builder()
+                .shouldTerminate(true)
+                .terminationReason(ObservationResult.TerminationReason.USER_STOPPED)
+                .executionResult(executionResult)
+                .build();
+        }
+        
         log.debug("观察动作结果，数量: {}, 当前迭代: {}/{}", 
             results.size(), currentIteration, maxIterations);
         
@@ -230,6 +268,21 @@ public class ObservationEngine {
         }
         
         return metadata;
+    }
+    
+    /**
+     * 发送进度事件到前端
+     */
+    private void sendProgressEvent(AgentContext context, String event, String message) {
+        if (context != null && context.getEventPublisher() != null) {
+            context.getEventPublisher().accept(
+                AgentEventData.builder()
+                    .event(event)
+                    .message(message)
+                    .conversationId(context.getConversationId())
+                    .build()
+            );
+        }
     }
 }
 
