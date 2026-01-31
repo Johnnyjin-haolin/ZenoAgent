@@ -2,13 +2,13 @@ package com.aiagent.application.service.agent.impl;
 
 import com.aiagent.infrastructure.config.AgentConfig;
 import com.aiagent.shared.constant.AgentConstants;
-import com.aiagent.application.service.action.ActionResult;
 import com.aiagent.application.service.agent.AgentContextService;
 import com.aiagent.application.service.agent.AgentStateMachine;
 import com.aiagent.application.service.agent.AgentStreamingService;
 import com.aiagent.application.service.conversation.ConversationService;
 import com.aiagent.application.service.agent.IAgentService;
 import com.aiagent.application.service.engine.ReActEngine;
+import com.aiagent.application.service.engine.ReActExecutionResult;
 import com.aiagent.application.service.StreamingCallback;
 import com.aiagent.application.service.memory.MemorySystem;
 import com.aiagent.api.dto.AgentEventData;
@@ -16,12 +16,15 @@ import com.aiagent.api.dto.AgentRequest;
 import com.aiagent.application.model.AgentContext;
 import com.aiagent.infrastructure.storage.ConversationStorage;
 import com.aiagent.shared.util.UUIDGenerator;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -248,29 +251,41 @@ public class AgentServiceImpl implements IAgentService {
         long reactStartNs = System.nanoTime();
         //todo 简单咨询模式
         //todo react 复杂任务模式
-        ActionResult finalResult = reActEngine.execute(request.getContent(), context);
+        ReActExecutionResult executionResult = reActEngine.execute(request.getContent(), context);
         stepStartNs = logStep("react_execute", reactStartNs, requestId, conversationId,
-            "modelId=" + modelId, emitter);
+            "modelId=" + modelId + ", iterations=" + executionResult.getIterations(), emitter);
         
         // 6. 处理最终结果
-        // 保存AI回复到记忆和MySQL（统一通过MemorySystem处理）
-        dev.langchain4j.data.message.AiMessage aiMessage =
-            new dev.langchain4j.data.message.AiMessage(finalResult.getData().toString());
-        context.getMessages().add(aiMessage);
-
-        // 提取元数据
-        Map<String, Object> metadata = finalResult.getMetadata();
-
-        // 保存到Redis和MySQL（包含模型ID和元数据）
-        memorySystem.saveShortTermMemory(
-            context.getConversationId(),
-            aiMessage,
-            context.getModelId(),
-            null, // tokens - 可以从finalResult中获取
-            null, // duration - 可以从finalResult中获取
-            metadata
-        );
-        stepStartNs = logStep("save_ai_message", stepStartNs, requestId, conversationId, null, emitter);
+        // 从执行结果中获取所有对话消息（包括用户消息和AI回复消息）
+        List<ChatMessage> allMessages = executionResult.getMessages();
+        
+        if (allMessages != null && !allMessages.isEmpty()) {
+            // 保存所有AI回复消息到记忆和MySQL
+            for (ChatMessage message : allMessages) {
+                // 只保存AI消息（用户消息已经在步骤2中保存）
+                if (message instanceof AiMessage) {
+                    AiMessage aiMessage = (AiMessage) message;
+                    
+                    // 提取元数据（如果有）
+                    Map<String, Object> metadata = executionResult.getMetadata();
+                    
+                    // 保存到Redis和MySQL（包含模型ID和元数据）
+                    memorySystem.saveShortTermMemory(
+                        context.getConversationId(),
+                        aiMessage,
+                        context.getModelId(),
+                        null, // tokens - 可以从metadata中获取
+                        null, // duration - 可以从executionResult中获取
+                        metadata
+                    );
+                    log.debug("保存AI消息到记忆系统，内容长度: {}", aiMessage.text().length());
+                }
+            }
+            stepStartNs = logStep("save_ai_messages", stepStartNs, requestId, conversationId, 
+                "messageCount=" + allMessages.size(), emitter);
+        } else {
+            log.warn("执行结果中没有对话消息");
+        }
 
         // 更新对话消息数量（Redis和MySQL都要更新）
         conversationStorage.incrementMessageCount(context.getConversationId());

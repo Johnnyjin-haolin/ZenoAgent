@@ -428,59 +428,47 @@ public class ActionExecutor {
             "正在并行执行 " + actions.size() + " 个操作...");
 
         Map<String,CompletableFuture<ActionResult>> actionResultMap=new HashMap<>();
-        try {
-            for (AgentAction action:actions){
-                actionResultMap.put(action.getId(),CompletableFuture.supplyAsync(() -> {
-                    try {
-                        log.debug("并行执行动作: {}", action.getName());
-                        return execute(action, context);
-                    } catch (Exception e) {
-                        log.error("并行执行动作失败: {}", action.getName(), e);
-                        return ActionResult.failure(
-                                action.getType(),
-                                action.getName(),
-                                e.getMessage(),
-                                "EXCEPTION"
-                        );
-                    }
-                }, PARALLEL_EXECUTOR));
-            }
-            List<ActionResult> results=new ArrayList<>();
-            for (AgentAction action:actions){
-                CompletableFuture<ActionResult> future = actionResultMap.get(action.getId());
+        for (AgentAction action:actions){
+            actionResultMap.put(action.getId(),CompletableFuture.supplyAsync(() -> {
                 try {
-                    future.join();
-                    results.add(future.get());
+                    log.debug("并行执行动作: {}", action.getName());
+                    return execute(action, context);
                 } catch (Exception e) {
-                    log.error("等待动作执行完成时出错", e);
-                    results.add(ActionResult.failure(action.getType(), action.getName(),
-                            "执行异常: " + e.getMessage(), "EXCEPTION"));
+                    log.error("并行执行动作失败: {}", action.getName(), e);
+                    return ActionResult.failure(
+                            action.getType(),
+                            action.getName(),
+                            e.getMessage(),
+                            "EXCEPTION"
+                    );
                 }
-            }
-
-            
-            long duration = System.currentTimeMillis() - startTime;
-            
-            // 统计成功和失败数量
-            long successCount = results.stream().filter(ActionResult::isSuccess).count();
-            long failureCount = results.size() - successCount;
-            
-            log.info("并行执行完成: 总数={}, 成功={}, 失败={}, 耗时={}ms", 
-                results.size(), successCount, failureCount, duration);
-            
-            return results;
-            
-        } catch (Exception e) {
-            log.error("并行执行失败", e);
-            // 返回一个失败的结果
-            List<ActionResult> errorResults = new ArrayList<>();
-            long duration = System.currentTimeMillis() - startTime;
-            ActionResult errorResult = ActionResult.failure("parallel_execution", "parallel_execution",
-                e.getMessage(), "EXCEPTION");
-            errorResult.setDuration(duration);
-            errorResults.add(errorResult);
-            return errorResults;
+            }, PARALLEL_EXECUTOR));
         }
+        List<ActionResult> results=new ArrayList<>();
+        for (AgentAction action:actions){
+            CompletableFuture<ActionResult> future = actionResultMap.get(action.getId());
+            try {
+                future.join();
+                results.add(future.get());
+            } catch (Exception e) {
+                log.error("等待动作执行完成时出错", e);
+                results.add(ActionResult.failure(action.getType(), action.getName(),
+                        "执行异常: " + e.getMessage(), "EXCEPTION"));
+            }
+        }
+
+
+        long duration = System.currentTimeMillis() - startTime;
+
+        // 统计成功和失败数量
+        long successCount = results.stream().filter(ActionResult::isSuccess).count();
+        long failureCount = results.size() - successCount;
+
+        log.info("并行执行完成: 总数={}, 成功={}, 失败={}, 耗时={}ms",
+            results.size(), successCount, failureCount, duration);
+
+        return results;
+
     }
     
     /**
@@ -488,78 +476,49 @@ public class ActionExecutor {
      * 用于简单场景，直接返回预设的回复内容，无需调用LLM
      */
     private ActionResult executeDirectResponse(AgentAction action, AgentContext context, long startTime) {
-        try {
-            DirectResponseParams params = action.getDirectResponseParams();
-            if (params == null || StringUtils.isEmpty(params.getContent())) {
-                throw new IllegalArgumentException("DirectResponseParams.content 不能为空");
-            }
-            
-            String content = params.getContent();
-            
-            // 发送进度事件
-            sendProgressEvent(context, AgentConstants.EVENT_AGENT_GENERATING, "正在生成回复...");
-            
-            // 如果需要流式输出（模拟打字效果）
-            if (params.isStreaming() && context != null && context.getStreamingCallback() != null) {
-                StreamingCallback callback = context.getStreamingCallback();
-                callback.onStart();
-                
-                // 模拟流式输出：按词或字符发送
-                // 使用较小的延迟，模拟自然的打字速度（约每20ms发送一次）
-                String[] words = content.split("(?<=[\\s\\n])"); // 按空格和换行分割，保留分隔符
-                for (String word : words) {
-                    if (word.isEmpty()) continue;
-                    callback.onToken(word);
-                    try {
-                        // 控制速度：每个词之间延迟15-25ms（随机变化，更自然）
-                        int delay = 15 + (int)(Math.random() * 10);
-                        Thread.sleep(delay);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        log.warn("流式输出被中断");
-                        break;
-                    }
-                }
-                
-                callback.onComplete(content);
-                
-                // 标记为流式输出
-                long duration = System.currentTimeMillis() - startTime;
-                ActionResult result = ActionResult.success("direct_response", "direct_response", content);
-                result.setDuration(duration);
-                result.setMetadata(Map.of("streaming", true));
-                log.info("直接返回响应成功（流式）: duration={}ms", duration);
-                return result;
-            } else {
-                // 非流式输出：直接返回
-                if (context != null && context.getStreamingCallback() != null) {
-                    StreamingCallback callback = context.getStreamingCallback();
-                    try {
-                        callback.onStart();
-                        callback.onToken(content);
-                        callback.onComplete(content);
-                    } catch (Exception e) {
-                        log.warn("非流式直接返回回调失败", e);
-                    }
-                }
-                long duration = System.currentTimeMillis() - startTime;
-                ActionResult result = ActionResult.success("direct_response", "direct_response", content);
-                result.setDuration(duration);
-                // 已通过callback输出，标记为streaming避免上层重复发送
-                result.setMetadata(Map.of("streaming", true));
-                log.info("直接返回响应成功（非流式）: duration={}ms", duration);
-                return result;
-            }
-            
-        } catch (Exception e) {
-            log.error("直接返回响应失败", e);
-            long duration = System.currentTimeMillis() - startTime;
-            ActionResult result = ActionResult.failure("direct_response", "direct_response",
-                e.getMessage(), "DIRECT_RESPONSE_ERROR");
-            result.setDuration(duration);
-            return result;
+        DirectResponseParams params = action.getDirectResponseParams();
+        if (params == null || StringUtils.isEmpty(params.getContent())) {
+            throw new IllegalArgumentException("DirectResponseParams.content 不能为空");
         }
-    }
+
+        String content = params.getContent();
+
+        // 发送进度事件
+        sendProgressEvent(context, AgentConstants.EVENT_AGENT_GENERATING, "正在生成回复...");
+
+        StreamingCallback callback = context.getStreamingCallback();
+        callback.onStart();
+
+        // 模拟流式输出：按词或字符发送
+        // 使用较小的延迟，模拟自然的打字速度（约每20ms发送一次）
+        // 按空格和换行分割，保留分隔符
+        String[] words = content.split("(?<=[\\s\\n])");
+        for (String word : words) {
+            if (word.isEmpty()) {
+                continue;
+            }
+            callback.onToken(word);
+            try {
+                // 控制速度：每个词之间延迟15-25ms（随机变化，更自然）
+                int delay = 15 + (int)(Math.random() * 10);
+                Thread.sleep(delay);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("流式输出被中断");
+                break;
+            }
+        }
+
+        callback.onComplete(content);
+
+        // 标记为流式输出
+        long duration = System.currentTimeMillis() - startTime;
+        ActionResult result = ActionResult.success(ActionType.DIRECT_RESPONSE, "direct_response", content);
+        result.setDuration(duration);
+        result.setMetadata(Map.of("streaming", true));
+        log.info("直接返回响应成功（流式）: duration={}ms", duration);
+        return result;
+}
     
     /**
      * 发送进度事件到前端

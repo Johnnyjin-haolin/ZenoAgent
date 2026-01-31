@@ -9,10 +9,13 @@ import com.aiagent.shared.constant.AgentConstants;
 import com.aiagent.domain.enums.AgentState;
 import com.aiagent.application.model.AgentContext;
 import com.aiagent.api.dto.AgentEventData;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -53,10 +56,9 @@ public class ReActEngine {
      * 
      * @param goal 目标（用户请求）
      * @param context Agent上下文
-     * @return 最终结果
+     * @return 最终结果，包含所有对话消息
      */
-    //todo 最终结果不应该复用ActionResult，最终结果应该包含所有发给用户的对话，这样在外层就可以存储持久化下来
-    public ActionResult execute(String goal, AgentContext context) {
+    public ReActExecutionResult execute(String goal, AgentContext context) {
         log.info("开始ReAct循环执行，目标: {}", goal);
         long totalStartNs = System.nanoTime();
         
@@ -98,6 +100,9 @@ public class ReActEngine {
                 List<ActionResult> results = act(actions, context);
                 lastResults = results;
                 log.info("act结束，耗时 {} ms", elapsedMs(actStartNs));
+                
+                // 收集AI回复消息（DIRECT_RESPONSE 或 LLM_GENERATE 成功时）
+                collectAssistantMessages(results, context);
 
                 log.info("观察开始");
                 //todo 这里看下是否能合并到观察阶段
@@ -121,23 +126,70 @@ public class ReActEngine {
             } catch (Exception e) {
                 log.error("ReAct循环执行异常", e);
                 stateMachine.transition(AgentState.FAILED);
-                return ActionResult.failure("react_loop", "react_loop", 
-                    e.getMessage(), "EXCEPTION");
+                long totalDurationMs = elapsedMs(totalStartNs);
+                AgentState finalState = stateMachine.getCurrentState();
+                // 即使失败，也返回已有的消息
+                List<ChatMessage> allMessages = context.getMessages();
+                return ReActExecutionResult.builder()
+                    .success(false)
+                    .error(e.getMessage())
+                    .errorType("EXCEPTION")
+                    .messages(allMessages != null ? allMessages : new ArrayList<>())
+                    .iterations(iteration)
+                    .totalDurationMs(totalDurationMs)
+                    .finalState(finalState != null ? finalState : AgentState.FAILED)
+                    .metadata(new java.util.HashMap<>())
+                    .build();
             }
         }
 
         //todo 这里的逻辑需要放到观察阶段
         // 检查是否因为达到最大迭代次数而结束
+        long totalDurationMs = elapsedMs(totalStartNs);
+        AgentState finalState = stateMachine.getCurrentState();
+        
         if (iteration >= MAX_ITERATIONS) {
             log.warn("达到最大迭代次数，结束循环");
             stateMachine.transition(AgentState.FAILED);
-            return ActionResult.failure("react_loop", "react_loop", 
-                "达到最大迭代次数", "MAX_ITERATIONS");
+            // 即使失败，也返回已有的消息
+            List<ChatMessage> allMessages = context.getMessages();
+            return ReActExecutionResult.builder()
+                .success(false)
+                .error("达到最大迭代次数")
+                .errorType("MAX_ITERATIONS")
+                .messages(allMessages != null ? allMessages : new ArrayList<>())
+                .iterations(iteration)
+                .totalDurationMs(totalDurationMs)
+                .finalState(AgentState.FAILED)
+                .metadata(new java.util.HashMap<>())
+                .build();
         }
 
-        log.info("ReAct循环执行完成，总耗时 {} ms", elapsedMs(totalStartNs));
-        return ActionResult.failure("react_loop", "react_loop", 
-            "未产生有效结果", "NO_RESULT");
+        // 获取所有对话消息（包括用户消息和AI回复消息）
+        List<ChatMessage> allMessages = context.getMessages();
+        
+        log.info("ReAct循环执行完成，总耗时 {} ms，迭代次数: {}，消息数量: {}", 
+            totalDurationMs, iteration, allMessages.size());
+        
+        // 判断是否成功：如果最终状态是COMPLETED且有消息，则认为成功
+        boolean success = (finalState == AgentState.COMPLETED) && !allMessages.isEmpty();
+        
+        if (success) {
+            return ReActExecutionResult.success(
+                allMessages,
+                iteration,
+                totalDurationMs,
+                finalState != null ? finalState : AgentState.COMPLETED
+            );
+        } else {
+            return ReActExecutionResult.failure(
+                "未产生有效结果",
+                "NO_RESULT",
+                iteration,
+                totalDurationMs,
+                finalState != null ? finalState : AgentState.FAILED
+            );
+        }
     }
     
     /**
@@ -242,6 +294,40 @@ public class ReActEngine {
     }
 
 
+    /**
+     * 收集AI回复消息
+     * 当 DIRECT_RESPONSE 或 LLM_GENERATE 动作成功时，将回复内容添加到上下文中
+     */
+    private void collectAssistantMessages(List<ActionResult> results, AgentContext context) {
+        if (results == null || results.isEmpty()) {
+            return;
+        }
+        
+        for (ActionResult result : results) {
+            // 只处理成功的结果
+            if (!result.isSuccess()) {
+                continue;
+            }
+            
+            // 处理 DIRECT_RESPONSE 或 LLM_GENERATE 类型的成功结果
+            if (result.getActionType() == ActionType.DIRECT_RESPONSE || 
+                result.getActionType() == ActionType.LLM_GENERATE) {
+                
+                Object data = result.getData();
+                if (data != null) {
+                    String content = data.toString();
+                    if (content != null && !content.trim().isEmpty()) {
+                        // 创建AI消息并添加到上下文
+                        AiMessage aiMessage = new AiMessage(content);
+                        context.addMessage(aiMessage);
+                        log.debug("收集AI回复消息，类型: {}, 长度: {}", 
+                            result.getActionType(), content.length());
+                    }
+                }
+            }
+        }
+    }
+    
     private long elapsedMs(long startNs) {
         return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs);
     }
