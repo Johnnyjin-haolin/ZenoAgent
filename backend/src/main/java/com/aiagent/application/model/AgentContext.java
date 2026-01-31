@@ -87,6 +87,12 @@ public class AgentContext implements Serializable {
     private List<String> knowledgeIds;
     
     /**
+     * 思考引擎配置
+     * 用于控制提示词构建时的历史长度、截断等行为
+     */
+    private com.aiagent.api.dto.ThinkingConfig thinkingConfig;
+    
+    /**
      * 最后一次动作结果
      */
     private com.aiagent.application.service.action.ActionResult lastActionResult;

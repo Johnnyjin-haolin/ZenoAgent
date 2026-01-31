@@ -21,18 +21,7 @@ public class IntelligentToolSelector {
     
     @Autowired
     private McpGroupManager mcpGroupManager;
-    
-    /**
-     * 获取可用工具名称列表
-     */
-    public List<String> getAvailableToolNames() {
-        List<McpToolInfo> tools = mcpGroupManager.getAllTools();
-        return tools.stream()
-            .filter(McpToolInfo::isEnabled)
-            .map(McpToolInfo::getName)
-            .collect(Collectors.toList());
-    }
-    
+
     /**
      * 根据任务需求选择工具
      * 

@@ -76,6 +76,13 @@ public class AgentContextService {
         if (request.getMode() != null) {
             context.setMode(request.getMode());
         }
+        // 设置思考引擎配置（如果前端传入）
+        if (request.getThinkingConfig() != null) {
+            context.setThinkingConfig(request.getThinkingConfig());
+        } else {
+            // 如果前端未传入，使用默认配置
+            context.setThinkingConfig(com.aiagent.api.dto.ThinkingConfig.builder().build());
+        }
 
         return context;
     }

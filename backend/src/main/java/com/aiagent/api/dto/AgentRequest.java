@@ -58,6 +58,12 @@ public class AgentRequest {
      * 指定的模型ID（可选）
      */
     private String modelId;
+    
+    /**
+     * 思考引擎配置（可选，不传则使用默认值）
+     * 用于控制提示词构建时的历史长度、截断等行为
+     */
+    private ThinkingConfig thinkingConfig;
 }
 
 

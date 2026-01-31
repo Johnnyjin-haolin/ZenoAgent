@@ -5,6 +5,7 @@ import com.aiagent.application.service.action.ActionResult;
 import com.aiagent.application.service.action.ActionsResponseDTO;
 import com.aiagent.application.service.action.AgentAction;
 import com.aiagent.domain.enums.ActionType;
+import com.aiagent.infrastructure.config.AgentConfig;
 import com.aiagent.shared.constant.AgentConstants;
 import com.aiagent.application.service.action.DirectResponseParams;
 import com.aiagent.application.service.action.LLMGenerateParams;
@@ -22,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -43,6 +45,9 @@ public class ThinkingEngine {
     
     @Autowired
     private IntelligentToolSelector toolSelector;
+
+    @Resource
+    private AgentConfig agentConfig;
     
     
     
@@ -82,17 +87,18 @@ public class ThinkingEngine {
         // 发送思考进度事件
         sendProgressEvent(context, AgentConstants.EVENT_AGENT_THINKING, "正在分析任务和用户意图...");
         
-        // 构建思考提示词
-        String thinkingPrompt = buildThinkingPrompt(goal, context, lastResults);
-        log.info("思考提示词长度: {}", thinkingPrompt.length());
+        // 构建思考提示词（分离系统提示词和用户提示词）
+        PromptPair promptPair = buildThinkingPrompt(goal, context, lastResults);
+        log.info("系统提示词长度: {}, 用户提示词长度: {}", 
+            promptPair.getSystemPrompt().length(), promptPair.getUserPrompt().length());
         // 调用LLM进行思考
-        String thinkingResult = callLLMForThinking(thinkingPrompt, context);
+        String thinkingResult = callLLMForThinking(promptPair, context);
         log.info("思考结果: {}", thinkingResult);
         // 解析思考结果，生成动作列表
         List<AgentAction> actions = parseThinkingResult(thinkingResult, goal, context);
         
         // 如果解析失败或为空，返回空列表
-        if (actions == null || actions.isEmpty()) {
+        if (actions.isEmpty()) {
             log.warn("思考阶段未产生动作");
             return new ArrayList<>();
         }
@@ -102,96 +108,103 @@ public class ThinkingEngine {
             log.warn("动作数量超过限制（{}），只保留前5个", actions.size());
             actions = actions.subList(0, 5);
         }
-        
-//        // 循环检测：如果检测到异常循环，强制使用LLM_GENERATE
-//        if (actions.size() == 1 && lastResults != null && !lastResults.isEmpty()) {
-//            AgentAction action = actions.get(0);
-//            ActionResult lastResult = lastResults.get(lastResults.size() - 1);
-//            if (detectLoopAnomaly(context, action, lastResult)) {
-//                log.warn("检测到循环调用异常，强制切换为LLM_GENERATE");
-//                String prompt = "用户问: " + goal + "\n\n";
-//                if (lastResult != null && lastResult.isSuccess()) {
-//                    prompt += "我已经获取到以下信息: " + lastResult.getData() + "\n\n";
-//                }
-//                prompt += "请根据已有信息，直接回答用户的问题。如果信息不足，也要友好地告知用户。";
-//
-//                actions = java.util.Collections.singletonList(
-//                    AgentAction.llmGenerate(
-//                        com.aiagent.application.service.action.LLMGenerateParams.builder()
-//                            .prompt(prompt)
-//                            .build(),
-//                        "检测到重复调用，使用已有信息直接回答"
-//                    )
-//                );
-//            }
-//        }
-        
-        log.info("思考完成，决定执行 {} 个动作: {}", actions.size(), 
+        log.info("思考完成，决定执行 {} 个动作: {}", actions.size(),
             actions.stream().map(AgentAction::getName).collect(java.util.stream.Collectors.joining(", ")));
         return actions;
     }
     
     /**
-     * 构建思考提示词（使用决策框架）
-     * todo 这里应该区分系统提示词和用户提示词，系统提示词中是规则，用户提示词包含的是对话历史本轮对话等动态信息
+     * 构建思考提示词（分离系统提示词和用户提示词）
      */
-    private String buildThinkingPrompt(String goal, AgentContext context, List<ActionResult> lastResults) {
+    private PromptPair buildThinkingPrompt(String goal, AgentContext context, List<ActionResult> lastResults) {
+        String systemPrompt = buildSystemPrompt();
+        String userPrompt = buildUserPrompt(goal, context);
+        return new PromptPair(systemPrompt, userPrompt);
+    }
+    
+    /**
+     * 构建系统提示词（静态规则和约束）
+     */
+    private String buildSystemPrompt() {
+
+        return "你是一个智能Agent的思考模块，需要决定下一步动作。\n\n" +
+
+                // 决策要求
+                DECISION_FRAMEWORK_PROMPT +
+
+                // 输出格式
+                OUTPUT_FORMAT_PROMPT;
+    }
+    
+    /**
+     * 构建用户提示词（动态上下文信息）
+     * 使用配置参数控制历史长度和截断
+     */
+    private String buildUserPrompt(String goal, AgentContext context) {
         StringBuilder prompt = new StringBuilder();
         
-        prompt.append("你是一个智能Agent的思考模块，需要决定下一步动作。\n\n");
-        
-        // ========== 第一部分：当前状态 ==========
-        prompt.append("## 当前状态\n\n");
-        prompt.append("**用户需求**: ").append(goal).append("\n\n");
-
-        //todo 对话历史需要区分react的轮数，每一轮将将对应action的信息和执行结果记录下来，拼接成提示词
-        // 对话历史（最近3轮，截断）
-        //todo 对话轮数、历史长度截断需要可配置
-        if (context != null && context.getMessages() != null && !context.getMessages().isEmpty()) {
-            prompt.append("**对话历史**（最近3轮）:\n");
-            List<ChatMessage> recentMessages = context.getMessages();
-            int start = Math.max(0, recentMessages.size() - 3);
-            for (int i = start; i < recentMessages.size(); i++) {
-                ChatMessage msg = recentMessages.get(i);
-                if (msg instanceof UserMessage) {
-                    String text = ((UserMessage) msg).singleText();
-                    if (text.length() > 200) {
-                        text = text.substring(0, 200) + "...";
-                    }
-                    prompt.append("- 用户: ").append(text).append("\n");
-                } else if (msg instanceof dev.langchain4j.data.message.AiMessage) {
-                    dev.langchain4j.data.message.AiMessage aiMsg = (dev.langchain4j.data.message.AiMessage) msg;
-                    String text = aiMsg.text();
-                    if (text.length() > 200) {
-                        text = text.substring(0, 200) + "...";
-                    }
-                    prompt.append("- 助手: ").append(text).append("\n");
-                }
-            }
-            prompt.append("\n");
+        // 获取配置
+        com.aiagent.api.dto.ThinkingConfig config = context.getThinkingConfig();
+        if (config == null) {
+            config = com.aiagent.api.dto.ThinkingConfig.builder().build();
         }
         
-        // 工具调用历史（最近2次）
-        // todo：工具调用历史存储需要在mysql中，这里需要拼接工具调用的出参和入参
-        if (context != null && context.getToolCallHistory() != null && !context.getToolCallHistory().isEmpty()) {
-            prompt.append("**工具调用历史**（最近2次）:\n");
-            int historySize = context.getToolCallHistory().size();
-            int start = Math.max(0, historySize - 2);
-            for (int i = start; i < historySize; i++) {
-                Map<String, Object> call = context.getToolCallHistory().get(i);
-                prompt.append("- ").append(call.get("toolName"));
+        // ========== 第一部分：当前目标 ==========
+        prompt.append("## 当前目标\n\n");
+        prompt.append(goal).append("\n\n");
+
+        // ========== 第二部分：对话历史 ==========
+        if (context.getMessages() != null && !context.getMessages().isEmpty()) {
+            int rounds = config.getConversationHistoryRoundsOrDefault();
+            int maxLength = config.getMaxMessageLengthOrDefault();
+            
+            List<ChatMessage> recentMessages = context.getMessages();
+            // 每轮2条消息（用户+AI）
+            int start = Math.max(0, recentMessages.size() - rounds * 2);
+            
+            if (start < recentMessages.size()) {
+                prompt.append("## 对话历史（最近").append(rounds).append("轮）\n\n");
+                for (int i = start; i < recentMessages.size(); i++) {
+                    ChatMessage msg = recentMessages.get(i);
+                    if (msg instanceof UserMessage) {
+                        String text = ((UserMessage) msg).singleText();
+                        if (text.length() > maxLength) {
+                            text = text.substring(0, maxLength) + "...";
+                        }
+                        prompt.append("- 用户: ").append(text).append("\n");
+                    } else if (msg instanceof dev.langchain4j.data.message.AiMessage) {
+                        dev.langchain4j.data.message.AiMessage aiMsg = (dev.langchain4j.data.message.AiMessage) msg;
+                        String text = aiMsg.text();
+                        if (text.length() > maxLength) {
+                            text = text.substring(0, maxLength) + "...";
+                        }
+                        prompt.append("- 助手: ").append(text).append("\n");
+                    }
+                }
                 prompt.append("\n");
             }
-            prompt.append("\n");
+        }
+        
+        // ========== 第三部分：工具调用历史 ==========
+        if (context.getToolCallHistory() != null && !context.getToolCallHistory().isEmpty()) {
+            int count = config.getToolCallHistoryCountOrDefault();
+            int historySize = context.getToolCallHistory().size();
+            int start = Math.max(0, historySize - count);
+            
+            if (start < historySize) {
+                prompt.append("## 最近工具调用（最近").append(count).append("次）\n\n");
+                for (int i = start; i < historySize; i++) {
+                    Map<String, Object> call = context.getToolCallHistory().get(i);
+                    prompt.append("- ").append(call.get("toolName")).append("\n");
+                }
+                prompt.append("\n");
+            }
         }
 
-        // ========== 第二部分：决策要求 ==========
-        prompt.append(DECISION_FRAMEWORK_PROMPT);
-        
-        // ========== 第三部分：可用工具 ==========
+        // ========== 第四部分：可用工具 ==========
         List<McpToolInfo> availableTools = toolSelector.selectTools(goal,
-            context != null ? context.getEnabledMcpGroups() : null,
-            context != null ? context.getEnabledTools() : null);
+                context.getEnabledMcpGroups(),
+                context.getEnabledTools());
         if (!availableTools.isEmpty()) {
             prompt.append("## 可用工具\n\n");
             for (McpToolInfo tool : availableTools) {
@@ -205,30 +218,31 @@ public class ThinkingEngine {
             prompt.append("\n");
         }
         
-        // ========== 第四部分：输出格式 ==========
-        prompt.append(OUTPUT_FORMAT_PROMPT);
-        
         return prompt.toString();
     }
     
     /**
      * 调用LLM进行思考
+     * 使用系统提示词和用户提示词分离的方式
      */
-    private String callLLMForThinking(String prompt, AgentContext context) {
+    private String callLLMForThinking(PromptPair promptPair, AgentContext context) {
             // 准备消息列表
             List<ChatMessage> messages = new ArrayList<>();
-            messages.add(new SystemMessage("你是一个智能Agent的思考模块，需要分析情况并做出决策。请严格按照JSON格式返回结果。"));
-            //todo 这里应该放到userMessage中吗
-            // todo 我需要对代码整体做一遍走查，看下有哪些不合理的地方
-            messages.add(new UserMessage(prompt));
+            // 使用构建好的系统提示词
+            messages.add(new SystemMessage(promptPair.getSystemPrompt()));
+            // 使用构建好的用户提示词
+            messages.add(new UserMessage(promptPair.getUserPrompt()));
             
             // 获取模型ID（从上下文或使用默认值）
             String modelId = context != null ? context.getModelId() : null;
             if (StringUtils.isEmpty(modelId)) {
-                modelId = "gpt-4o-mini";
+                modelId = agentConfig.getLlm().getDefaultModel();
             }
             long startNs = System.nanoTime();
-            log.info("思考LLM请求开始，modelId={}, promptChars={}", modelId, prompt != null ? prompt.length() : 0);
+            log.info("思考LLM请求开始，modelId={}, systemPromptChars={}, userPromptChars={}", 
+                modelId, 
+                promptPair.getSystemPrompt(),
+                promptPair.getUserPrompt());
             
             // 调用非流式LLM获取完整响应
             String response = llmChatHandler.chatNonStreaming(modelId, messages);
