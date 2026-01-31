@@ -77,16 +77,26 @@ public class ReActExecutionResult {
     }
     
     /**
-     * 创建失败结果
+     * 创建失败结果（不包含消息）
      */
     public static ReActExecutionResult failure(String error, String errorType, 
+                                                int iterations, long totalDurationMs, 
+                                                AgentState finalState) {
+        return failure(error, errorType, new ArrayList<>(), iterations, totalDurationMs, finalState);
+    }
+    
+    /**
+     * 创建失败结果（包含已有消息）
+     */
+    public static ReActExecutionResult failure(String error, String errorType,
+                                                List<ChatMessage> messages,
                                                 int iterations, long totalDurationMs, 
                                                 AgentState finalState) {
         return ReActExecutionResult.builder()
             .success(false)
             .error(error)
             .errorType(errorType)
-            .messages(new ArrayList<>())
+            .messages(messages != null ? new ArrayList<>(messages) : new ArrayList<>())
             .iterations(iterations)
             .totalDurationMs(totalDurationMs)
             .finalState(finalState)

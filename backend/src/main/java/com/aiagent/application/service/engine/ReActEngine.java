@@ -47,11 +47,6 @@ public class ReActEngine {
     private static final int MAX_ITERATIONS = AgentConstants.DEFAULT_MAX_ITERATIONS;
 
     /**
-     * 快速响应时用于截断工具结果的最大长度
-     */
-    private static final int MAX_FAST_RESULT_CHARS = 1500;
-    
-    /**
      * 执行ReAct循环
      * 
      * @param goal 目标（用户请求）
@@ -86,10 +81,20 @@ public class ReActEngine {
                 List<AgentAction> actions = think(goal, context, lastResults);
                 int actionCount = actions == null ? 0 : actions.size();
                 log.info("思考结束，返回 {} 个动作，耗时 {} ms", actionCount, elapsedMs(thinkStartNs));
+                
                 if (actions == null || actions.isEmpty()) {
                     log.warn("思考阶段未产生动作，结束循环");
                     stateMachine.transition(AgentState.FAILED);
-                    break;
+                    long totalDurationMs = elapsedMs(totalStartNs);
+                    List<ChatMessage> allMessages = context.getMessages();
+                    return ReActExecutionResult.failure(
+                        "思考阶段未产生动作",
+                        "NO_ACTIONS",
+                        allMessages,
+                        iteration,
+                        totalDurationMs,
+                        AgentState.FAILED
+                    );
                 }
 
                 log.info("act开始");
@@ -111,12 +116,32 @@ public class ReActEngine {
                 sendProgressEvent(context, AgentConstants.EVENT_AGENT_OBSERVING, "正在观察执行结果...");
                 long observeStartNs = System.nanoTime();
 
+                ObservationResult observationResult = observationEngine.observe(
+                    results, 
+                    context, 
+                    iteration, 
+                    MAX_ITERATIONS, 
+                    totalStartNs
+                );
+                
                 log.info("观察结束，耗时 {} ms", elapsedMs(observeStartNs));
-                boolean isEnd = observe(results, context);
-                if (isEnd){
-                    stateMachine.transition(AgentState.COMPLETED);
-                    break;
+                
+                // 根据观察结果决定是否结束
+                if (observationResult.isShouldTerminate()) {
+                    log.info("观察阶段判断应该结束循环，原因: {}", 
+                        observationResult.getTerminationReason());
+                        
+                    // 根据终止原因设置状态
+                    if (observationResult.getTerminationReason() == 
+                        ObservationResult.TerminationReason.COMPLETED) {
+                        stateMachine.transition(AgentState.COMPLETED);
+                    } else {
+                        stateMachine.transition(AgentState.FAILED);
+                    }
+                    
+                    return observationResult.getExecutionResult();
                 }
+                
                 log.info("本轮迭代耗时 {} ms", elapsedMs(iterationStartNs));
             } catch (Exception e) {
                 log.error("ReAct循环执行异常", e);
@@ -137,54 +162,20 @@ public class ReActEngine {
                     .build();
             }
         }
-
-        //todo 这里的逻辑需要放到观察阶段
-        // 检查是否因为达到最大迭代次数而结束
+        
+        // 如果循环正常退出但没有在观察阶段返回结果，构建默认结果
+        // （这种情况理论上不应该发生，因为观察阶段会判断最大迭代次数）
+        log.warn("循环异常退出，构建默认失败结果");
         long totalDurationMs = elapsedMs(totalStartNs);
-        AgentState finalState = stateMachine.getCurrentState();
-        
-        if (iteration >= MAX_ITERATIONS) {
-            log.warn("达到最大迭代次数，结束循环");
-            stateMachine.transition(AgentState.FAILED);
-            // 即使失败，也返回已有的消息
-            List<ChatMessage> allMessages = context.getMessages();
-            return ReActExecutionResult.builder()
-                .success(false)
-                .error("达到最大迭代次数")
-                .errorType("MAX_ITERATIONS")
-                .messages(allMessages != null ? allMessages : new ArrayList<>())
-                .iterations(iteration)
-                .totalDurationMs(totalDurationMs)
-                .finalState(AgentState.FAILED)
-                .metadata(new java.util.HashMap<>())
-                .build();
-        }
-
-        // 获取所有对话消息（包括用户消息和AI回复消息）
         List<ChatMessage> allMessages = context.getMessages();
-        
-        log.info("ReAct循环执行完成，总耗时 {} ms，迭代次数: {}，消息数量: {}", 
-            totalDurationMs, iteration, allMessages.size());
-        
-        // 判断是否成功：如果最终状态是COMPLETED且有消息，则认为成功
-        boolean success = (finalState == AgentState.COMPLETED) && !allMessages.isEmpty();
-        
-        if (success) {
-            return ReActExecutionResult.success(
-                allMessages,
-                iteration,
-                totalDurationMs,
-                finalState != null ? finalState : AgentState.COMPLETED
-            );
-        } else {
-            return ReActExecutionResult.failure(
-                "未产生有效结果",
-                "NO_RESULT",
-                iteration,
-                totalDurationMs,
-                finalState != null ? finalState : AgentState.FAILED
-            );
-        }
+        return ReActExecutionResult.failure(
+            "循环异常退出",
+            "UNEXPECTED_EXIT",
+            allMessages,
+            iteration,
+            totalDurationMs,
+            stateMachine.getCurrentState()
+        );
     }
     
     /**
@@ -204,15 +195,6 @@ public class ReActEngine {
     }
     
     /**
-     * 观察阶段：观察行动结果，更新上下文
-     */
-    private boolean observe(List<ActionResult> results, AgentContext context) {
-        log.debug("进入观察阶段，结果数量: {}", results.size());
-        return observationEngine.observe(results, context);
-    }
-
-
-    /**
      * 发送进度事件到前端
      */
     private void sendProgressEvent(AgentContext context, String event, String message) {
@@ -225,69 +207,6 @@ public class ReActEngine {
             );
         }
     }
-
-    private ActionResult tryFastResponse(String goal, AgentContext context, List<AgentAction> actions,
-                                         List<ActionResult> results) {
-        if (!isFastResponseCandidate(actions, results)) {
-            return null;
-        }
-
-        ActionResult toolResult = results.get(0);
-        String resultText = extractResultText(toolResult);
-        String prompt = buildFastResponsePrompt(goal, resultText);
-
-        AgentAction fastAction = AgentAction.llmGenerate(
-            com.aiagent.application.service.action.LLMGenerateParams.builder()
-                .prompt(prompt)
-                .systemPrompt("你是一个智能助手，请用简洁、友好的中文直接回答用户问题。不要提及工具调用或技术细节。")
-                .build(),
-            "单次工具查询结果快速生成回复"
-        );
-
-        stateMachine.transition(AgentState.EXECUTING);
-        sendProgressEvent(context, AgentConstants.EVENT_AGENT_GENERATING, "正在生成回复...");
-        ActionResult fastResult = actionExecutor.execute(fastAction, context);
-        // 快速回复执行完成后回到OBSERVING，确保后续可转换到COMPLETED
-        stateMachine.transition(AgentState.OBSERVING);
-        return fastResult;
-    }
-
-    private boolean isFastResponseCandidate(List<AgentAction> actions, List<ActionResult> results) {
-        if (actions == null || results == null) {
-            return false;
-        }
-        if (actions.size() != 1 || results.size() != 1) {
-            return false;
-        }
-        AgentAction action = actions.get(0);
-        ActionResult result = results.get(0);
-        return action.getType() == ActionType.TOOL_CALL && result.isSuccess();
-    }
-
-    private String extractResultText(ActionResult result) {
-        String resultText = "";
-        if (result.getMetadata() != null) {
-            Object metadataResult = result.getMetadata().get("resultStr");
-            if (metadataResult instanceof String) {
-                resultText = (String) metadataResult;
-            }
-        }
-        if (resultText == null || resultText.isEmpty()) {
-            resultText = result.getData() != null ? result.getData().toString() : "";
-        }
-        if (resultText.length() > MAX_FAST_RESULT_CHARS) {
-            resultText = resultText.substring(0, MAX_FAST_RESULT_CHARS) + "...";
-        }
-        return resultText;
-    }
-
-    private String buildFastResponsePrompt(String goal, String resultText) {
-        String safeResult = (resultText == null || resultText.isEmpty()) ? "（无数据）" : resultText;
-        return "用户问题: " + goal + "\n\n" +
-            "工具返回结果:\n" + safeResult + "\n\n" +
-            "请直接回答用户问题。如果结果为空/无资源，请直接说明。";
-    }
-
 
     /**
      * 收集AI回复消息
