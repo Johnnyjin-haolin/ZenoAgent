@@ -32,11 +32,20 @@ public class ThinkingConfig {
     private Integer maxMessageLength = 200;
     
     /**
-     * 动作执行历史轮数（默认2轮，显示最近N轮迭代的执行历史）
+     * 动作执行历史轮数（默认null，显示所有历史）
      * 控制在提示词中包含多少轮 ReACT 迭代的动作执行记录
      * 每轮迭代可能包含多个动作（TOOL_CALL、RAG_RETRIEVE、LLM_GENERATE等）
+     * null 表示显示所有历史
      */
+    @Builder.Default
     private Integer actionExecutionHistoryCount = null;
+    
+    /**
+     * 历史消息加载数量（默认20条，从数据库加载最近N条消息到上下文）
+     * 用于初始化会话时加载历史对话
+     */
+    @Builder.Default
+    private Integer historyMessageLoadLimit = 20;
     
     /**
      * 获取有效的对话历史轮数（处理null情况）
@@ -50,6 +59,13 @@ public class ThinkingConfig {
      */
     public int getMaxMessageLengthOrDefault() {
         return maxMessageLength != null ? maxMessageLength : 200;
+    }
+    
+    /**
+     * 获取有效的历史消息加载数量（处理null情况）
+     */
+    public int getHistoryMessageLoadLimitOrDefault() {
+        return historyMessageLoadLimit != null ? historyMessageLoadLimit : 20;
     }
 
 }

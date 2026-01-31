@@ -11,10 +11,18 @@ import com.aiagent.application.model.AgentKnowledgeResult;
 import com.aiagent.api.dto.AgentRequest;
 import com.aiagent.api.dto.ConversationInfo;
 import com.aiagent.application.service.conversation.ConversationService;
+import com.aiagent.domain.entity.MessageEntity;
+import com.aiagent.infrastructure.mapper.MessageMapper;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.UserMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -37,6 +45,9 @@ public class AgentContextService {
 
     @Autowired
     private com.aiagent.application.service.rag.RAGEnhancer ragEnhancer;
+    
+    @Autowired
+    private MessageMapper messageMapper;
 
     public String normalizeConversationId(String conversationId) {
         if (StringUtils.isEmpty(conversationId) || conversationId.startsWith("temp-")) {
@@ -54,9 +65,9 @@ public class AgentContextService {
             context = AgentContext.builder()
                 .conversationId(conversationId)
                 .agentId(StringUtils.getString(request.getAgentId(), AgentConstants.DEFAULT_AGENT_ID))
-                .messageDTOs(new java.util.ArrayList<>())
-                .actionExecutionHistory(new java.util.ArrayList<>())
-                .ragRetrieveHistory(new java.util.ArrayList<>())
+                .messageDTOs(new ArrayList<>())
+                .actionExecutionHistory(new ArrayList<>())
+                .ragRetrieveHistory(new ArrayList<>())
                 .iterations(0)
                 .build();
         }
@@ -82,6 +93,11 @@ public class AgentContextService {
         } else {
             // 如果前端未传入，使用默认配置
             context.setThinkingConfig(com.aiagent.api.dto.ThinkingConfig.builder().build());
+        }
+        
+        // 加载历史对话消息（如果 messages 为空）
+        if (context.getMessages() == null || context.getMessages().isEmpty()) {
+            loadHistoryMessages(context, conversationId);
         }
 
         return context;
@@ -182,6 +198,82 @@ public class AgentContextService {
 
         String title = content.length() > 30 ? content.substring(0, 30) : content;
         return title.trim();
+    }
+    
+    /**
+     * 从数据库加载历史对话消息
+     * 
+     * @param context Agent上下文
+     * @param conversationId 会话ID
+     */
+    private void loadHistoryMessages(AgentContext context, String conversationId) {
+        try {
+            // 1. 获取历史消息加载数量配置（从 ThinkingConfig 中获取）
+            int limit = context.getThinkingConfig() != null 
+                ? context.getThinkingConfig().getHistoryMessageLoadLimitOrDefault() 
+                : 20;
+            
+            // 2. 从数据库查询历史消息（数据库返回倒序，即最新的消息在前）
+            List<MessageEntity> historyEntities = messageMapper.selectByConversationId(
+                conversationId, 
+                limit
+            );
+            
+            if (historyEntities == null || historyEntities.isEmpty()) {
+                log.debug("会话 {} 没有历史消息", conversationId);
+                return;
+            }
+            
+            // 3. 转换为 ChatMessage 列表
+            List<ChatMessage> historyMessages = new ArrayList<>();
+            for (MessageEntity entity : historyEntities) {
+                ChatMessage message = convertToChatMessage(entity);
+                if (message != null) {
+                    historyMessages.add(message);
+                }
+            }
+            
+            // 4. 反转列表（因为数据库返回的是倒序，需要转为正序）
+            Collections.reverse(historyMessages);
+            
+            // 5. 设置到 context
+            context.setMessages(historyMessages);
+            
+            log.info("加载历史对话消息成功，会话: {}, 消息数: {}", 
+                conversationId, historyMessages.size());
+                
+        } catch (Exception e) {
+            log.error("加载历史对话消息失败，会话: {}", conversationId, e);
+            // 失败不影响主流程，使用空消息列表
+            if (context.getMessages() == null) {
+                context.setMessages(new ArrayList<>());
+            }
+        }
+    }
+    
+    /**
+     * 将 MessageEntity 转换为 ChatMessage
+     * 
+     * @param entity 消息实体
+     * @return ChatMessage
+     */
+    private ChatMessage convertToChatMessage(MessageEntity entity) {
+        if (entity == null || entity.getContent() == null) {
+            return null;
+        }
+        
+        // 根据角色类型转换
+        String role = entity.getRole();
+        if ("user".equalsIgnoreCase(role)) {
+            return new UserMessage(entity.getContent());
+        } else if ("assistant".equalsIgnoreCase(role) || "ai".equalsIgnoreCase(role)) {
+            return new AiMessage(entity.getContent());
+        } else if ("system".equalsIgnoreCase(role)) {
+            return new SystemMessage(entity.getContent());
+        } else {
+            log.warn("未知的消息角色类型: {}", role);
+            return null;
+        }
     }
 }
 

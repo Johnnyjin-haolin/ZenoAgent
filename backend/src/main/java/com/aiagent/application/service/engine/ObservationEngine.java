@@ -139,8 +139,8 @@ public class ObservationEngine {
     }
 
     /**
-     * 收集AI回复消息
-     * 当 DIRECT_RESPONSE 或 LLM_GENERATE 动作成功时，将回复内容添加到上下文中
+     * 收集AI回复消息并立即持久化
+     * 当 DIRECT_RESPONSE 或 LLM_GENERATE 动作成功时，将回复内容添加到上下文并保存到数据库
      */
     private void collectAssistantMessages(List<ActionResult> results, AgentContext context) {
         if (results == null || results.isEmpty()) {
@@ -149,7 +149,7 @@ public class ObservationEngine {
 
         for (ActionResult result : results) {
             // 只处理成功的结果
-            if (!result.isSuccess()||result.getAction()==null) {
+            if (!result.isSuccess() || result.getAction() == null) {
                 continue;
             }
 
@@ -158,16 +158,78 @@ public class ObservationEngine {
                     result.getAction().getType() == ActionType.LLM_GENERATE) {
 
                 String content = result.getRes();
-                if (content != null) {
-                    if (!content.trim().isEmpty()) {
-                        AiMessage aiMessage = new AiMessage(content);
-                        context.addMessage(aiMessage);
-                        log.debug("收集AI回复消息，类型: {}, 长度: {}",
-                                result.getAction().getType(), content.length());
-                    }
+                if (content != null && !content.trim().isEmpty()) {
+                    AiMessage aiMessage = new AiMessage(content);
+                    
+                    // 1. 添加到上下文
+                    context.addMessage(aiMessage);
+                    
+                    // 2. 立即持久化到数据库
+                    persistAiMessage(aiMessage, result, context);
+                    
+                    log.debug("收集并持久化AI回复消息，类型: {}, 长度: {}",
+                            result.getAction().getType(), content.length());
                 }
             }
         }
+    }
+    
+    /**
+     * 持久化 AI 消息到数据库
+     * 
+     * @param aiMessage AI消息
+     * @param result 动作执行结果
+     * @param context Agent上下文
+     */
+    private void persistAiMessage(AiMessage aiMessage, ActionResult result, AgentContext context) {
+        try {
+            // 构造元数据
+            HashMap<String, Object> metadata = buildMetadata(result);
+            
+            // 保存到 Redis + MySQL
+            memorySystem.saveShortTermMemory(
+                context.getConversationId(),
+                aiMessage,
+                context.getModelId(),
+                null,
+                (int) result.getDuration(),
+                metadata
+            );
+            
+            log.debug("AI消息持久化成功，会话: {}, 内容长度: {}", 
+                context.getConversationId(), aiMessage.text().length());
+                
+        } catch (Exception e) {
+            log.error("持久化AI消息失败，会话: {}", context.getConversationId(), e);
+            // 失败不影响主流程
+        }
+    }
+    
+    /**
+     * 从 ActionResult 构造元数据
+     * 
+     * @param result 动作执行结果
+     * @return 元数据Map
+     */
+    private HashMap<String, Object> buildMetadata(ActionResult result) {
+        HashMap<String, Object> metadata = new HashMap<>();
+        
+        if (result.getAction() != null) {
+            metadata.put("actionType", result.getAction().getType().name());
+            metadata.put("actionName", result.getAction().getName());
+            
+            // 添加推理信息
+            if (result.getAction().getReasoning() != null) {
+                metadata.put("reasoning", result.getAction().getReasoning());
+            }
+        }
+        
+        // 添加执行耗时
+        if (result.getDuration() > 0) {
+            metadata.put("duration", result.getDuration());
+        }
+        
+        return metadata;
     }
 }
 
