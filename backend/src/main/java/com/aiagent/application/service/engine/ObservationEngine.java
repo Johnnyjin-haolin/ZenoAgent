@@ -23,14 +23,14 @@ public class ObservationEngine {
     private MemorySystem memorySystem;
     
     /**
-     * 观察动作结果，更新上下文
+     * 观察动作结果，更新上下文，返回是否结束
      */
-    public void observe(List<ActionResult> results, AgentContext context) {
+    public boolean observe(List<ActionResult> results, AgentContext context) {
         log.debug("观察动作结果，数量: {}", results.size());
         
         if (results == null || results.isEmpty()) {
             log.warn("没有动作结果需要观察");
-            return;
+            return true;
         }
         
         // 处理每个结果，更新上下文
@@ -65,9 +65,12 @@ public class ObservationEngine {
             context.setIterations(0);
         }
         context.setIterations(context.getIterations() + 1);
+
+        //todo :可选功能，如果执行长度超过，需要精简历史对话
         
         // 保存上下文
         memorySystem.saveContext(context);
+        return false;
     }
 }
 

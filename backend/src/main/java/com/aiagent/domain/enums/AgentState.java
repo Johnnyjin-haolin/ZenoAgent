@@ -26,7 +26,7 @@ public enum AgentState {
     /**
      * 执行：执行具体动作
      */
-    EXECUTING("执行中", "正在执行动作"),
+    EXECUTING("执行中", "正在执行中"),
     
     /**
      * 观察：观察执行结果
@@ -41,7 +41,7 @@ public enum AgentState {
     /**
      * 完成：任务成功完成
      */
-    COMPLETED("已完成", "任务已成功完成"),
+    COMPLETED("已完成", "嘿嘿，大功告成"),
     
     /**
      * 失败：任务执行失败

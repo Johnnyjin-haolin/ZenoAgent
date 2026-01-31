@@ -246,6 +246,8 @@ public class AgentServiceImpl implements IAgentService {
             .build());
         
         long reactStartNs = System.nanoTime();
+        //todo 简单咨询模式
+        //todo react 复杂任务模式
         ActionResult finalResult = reActEngine.execute(request.getContent(), context);
         stepStartNs = logStep("react_execute", reactStartNs, requestId, conversationId,
             "modelId=" + modelId, emitter);

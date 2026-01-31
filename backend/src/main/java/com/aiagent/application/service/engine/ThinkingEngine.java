@@ -48,21 +48,23 @@ public class ThinkingEngine {
      */
     private static final String DECISION_FRAMEWORK_PROMPT = "## 决策要求\n\n" +
             "1. 先判断已有信息是否足够回答用户问题\n" +
-            "2. 仅在需要实时/外部数据时才选 TOOL_CALL\n" +
+            "2. 如果你觉得解决该问题需要调用工具才需要 TOOL_CALL\n" +
             "3. 需要知识库资料时选 RAG_RETRIEVE\n" +
-            "4. 内容可直接回复时选 DIRECT_RESPONSE 或 LLM_GENERATE\n" +
-            "5. 避免重复调用同一工具\n\n";
+            "4. 如果你已经可以直接给出完整答案，必须使用 DIRECT_RESPONSE，把最终回复放在 content\n" +
+            "5. 只有在需要让模型二次生成或改写时才用 LLM_GENERATE（prompt 应是指令，不是答案）\n" +
+            "6. 避免重复调用同一工具\n\n";
     
     /**
      * 输出格式提示词
      */
+    //todo:输出的都是统一格式，多个工具
     private static final String OUTPUT_FORMAT_PROMPT = "## 输出格式\n\n" +
             "只返回JSON对象，不要包含其他文字。\n" +
             "actionType 只能是 TOOL_CALL / RAG_RETRIEVE / LLM_GENERATE / DIRECT_RESPONSE / COMPLETE。\n\n" +
             "单个动作示例：\n" +
             "{\"actionType\":\"TOOL_CALL\",\"actionName\":\"工具名\",\"reasoning\":\"原因\",\"toolCallParams\":{\"toolName\":\"工具名\",\"toolParams\":{}}}\n" +
             "{\"actionType\":\"RAG_RETRIEVE\",\"actionName\":\"rag_retrieve\",\"reasoning\":\"原因\",\"ragRetrieveParams\":{\"query\":\"检索词\",\"knowledgeIds\":[],\"maxResults\":10}}\n" +
-            "{\"actionType\":\"LLM_GENERATE\",\"actionName\":\"llm_generate\",\"reasoning\":\"原因\",\"llmGenerateParams\":{\"prompt\":\"...\"}}\n" +
+            "{\"actionType\":\"LLM_GENERATE\",\"actionName\":\"llm_generate\",\"reasoning\":\"原因\",\"llmGenerateParams\":{\"prompt\":\"请根据上下文生成回复\"}}\n" +
             "{\"actionType\":\"DIRECT_RESPONSE\",\"actionName\":\"direct_response\",\"reasoning\":\"原因\",\"directResponseParams\":{\"content\":\"...\",\"streaming\":true}}\n" +
             "{\"actionType\":\"COMPLETE\",\"actionName\":\"complete\",\"reasoning\":\"原因\"}\n\n" +
             "多个动作示例：\n" +
@@ -98,28 +100,28 @@ public class ThinkingEngine {
             actions = actions.subList(0, 5);
         }
         
-        // 循环检测：如果检测到异常循环，强制使用LLM_GENERATE
-        if (actions.size() == 1 && lastResults != null && !lastResults.isEmpty()) {
-            AgentAction action = actions.get(0);
-            ActionResult lastResult = lastResults.get(lastResults.size() - 1);
-            if (detectLoopAnomaly(context, action, lastResult)) {
-                log.warn("检测到循环调用异常，强制切换为LLM_GENERATE");
-                String prompt = "用户问: " + goal + "\n\n";
-                if (lastResult != null && lastResult.isSuccess()) {
-                    prompt += "我已经获取到以下信息: " + lastResult.getData() + "\n\n";
-                }
-                prompt += "请根据已有信息，直接回答用户的问题。如果信息不足，也要友好地告知用户。";
-                
-                actions = java.util.Collections.singletonList(
-                    AgentAction.llmGenerate(
-                        com.aiagent.application.service.action.LLMGenerateParams.builder()
-                            .prompt(prompt)
-                            .build(),
-                        "检测到重复调用，使用已有信息直接回答"
-                    )
-                );
-            }
-        }
+//        // 循环检测：如果检测到异常循环，强制使用LLM_GENERATE
+//        if (actions.size() == 1 && lastResults != null && !lastResults.isEmpty()) {
+//            AgentAction action = actions.get(0);
+//            ActionResult lastResult = lastResults.get(lastResults.size() - 1);
+//            if (detectLoopAnomaly(context, action, lastResult)) {
+//                log.warn("检测到循环调用异常，强制切换为LLM_GENERATE");
+//                String prompt = "用户问: " + goal + "\n\n";
+//                if (lastResult != null && lastResult.isSuccess()) {
+//                    prompt += "我已经获取到以下信息: " + lastResult.getData() + "\n\n";
+//                }
+//                prompt += "请根据已有信息，直接回答用户的问题。如果信息不足，也要友好地告知用户。";
+//
+//                actions = java.util.Collections.singletonList(
+//                    AgentAction.llmGenerate(
+//                        com.aiagent.application.service.action.LLMGenerateParams.builder()
+//                            .prompt(prompt)
+//                            .build(),
+//                        "检测到重复调用，使用已有信息直接回答"
+//                    )
+//                );
+//            }
+//        }
         
         log.info("思考完成，决定执行 {} 个动作: {}", actions.size(), 
             actions.stream().map(AgentAction::getName).collect(java.util.stream.Collectors.joining(", ")));
@@ -128,6 +130,7 @@ public class ThinkingEngine {
     
     /**
      * 构建思考提示词（使用决策框架）
+     * todo 这里应该区分系统提示词和用户提示词，系统提示词中是规则，用户提示词包含的是对话历史本轮对话等动态信息
      */
     private String buildThinkingPrompt(String goal, AgentContext context, List<ActionResult> lastResults) {
         StringBuilder prompt = new StringBuilder();
@@ -137,8 +140,10 @@ public class ThinkingEngine {
         // ========== 第一部分：当前状态 ==========
         prompt.append("## 当前状态\n\n");
         prompt.append("**用户需求**: ").append(goal).append("\n\n");
-        
+
+        //todo 对话历史需要区分react的轮数，每一轮将将对应action的信息和执行结果记录下来，拼接成提示词
         // 对话历史（最近3轮，截断）
+        //todo 对话轮数、历史长度截断需要可配置
         if (context != null && context.getMessages() != null && !context.getMessages().isEmpty()) {
             prompt.append("**对话历史**（最近3轮）:\n");
             List<ChatMessage> recentMessages = context.getMessages();
@@ -164,6 +169,7 @@ public class ThinkingEngine {
         }
         
         // 工具调用历史（最近2次）
+        // todo：工具调用历史存储需要在mysql中，这里需要拼接工具调用的出参和入参
         if (context != null && context.getToolCallHistory() != null && !context.getToolCallHistory().isEmpty()) {
             prompt.append("**工具调用历史**（最近2次）:\n");
             int historySize = context.getToolCallHistory().size();
@@ -175,27 +181,7 @@ public class ThinkingEngine {
             }
             prompt.append("\n");
         }
-        
-        // 上次执行结果（简要）
-        if (lastResults != null && !lastResults.isEmpty()) {
-            prompt.append("**上次执行结果**（共 ").append(lastResults.size()).append(" 个动作）:\n");
-            for (int i = 0; i < lastResults.size(); i++) {
-                ActionResult result = lastResults.get(i);
-                prompt.append("动作 ").append(i + 1).append(" (").append(result.getActionName()).append("): ");
-                if (result.isSuccess()) {
-                    String resultData = result.getData() != null ? result.getData().toString() : "";
-                    if (resultData.length() > 300) {
-                        resultData = resultData.substring(0, 300) + "...";
-                    }
-                    prompt.append("成功: ").append(resultData);
-                } else {
-                    prompt.append("失败: ").append(result.getError());
-                }
-                prompt.append("\n");
-            }
-            prompt.append("\n");
-        }
-        
+
         // ========== 第二部分：决策要求 ==========
         prompt.append(DECISION_FRAMEWORK_PROMPT);
         
@@ -209,9 +195,6 @@ public class ThinkingEngine {
                 prompt.append("- ").append(tool.getName());
                 if (StringUtils.isNotEmpty(tool.getDescription())) {
                     String desc = tool.getDescription();
-                    if (desc.length() > 120) {
-                        desc = desc.substring(0, 120) + "...";
-                    }
                     prompt.append(" (").append(desc).append(")");
                 }
                 prompt.append("\n");
@@ -233,6 +216,8 @@ public class ThinkingEngine {
             // 准备消息列表
             List<ChatMessage> messages = new ArrayList<>();
             messages.add(new SystemMessage("你是一个智能Agent的思考模块，需要分析情况并做出决策。请严格按照JSON格式返回结果。"));
+            //todo 这里应该放到userMessage中吗
+            // todo 我需要对代码整体做一遍走查，看下有哪些不合理的地方
             messages.add(new UserMessage(prompt));
             
             // 获取模型ID（从上下文或使用默认值）
@@ -554,7 +539,8 @@ public class ThinkingEngine {
             log.debug("清理后的思考结果: {}", cleanedResult);
             
             JSONObject json = JSON.parseObject(cleanedResult);
-            
+            //todo 这里有bug {"actionType":"TOOL_CALL","actionName":"ResourceCenter-20221201-ListResourceTypes","reasoning":"用户询问阿里云有哪些资源，需要查询支持的云服务及资源类型，该工具可列出资源类型元数据，符合需求。"}
+            //2026-01-25 22:57:28.331  WARN 53205 --- [onPool-worker-1] c.a.a.service.engine.ThinkingEngine      : TOOL_CALL动作缺少toolCallParams
             // 检查是否有actions数组（多个动作）
             if (json.containsKey("actions")) {
                 List<Object> actionsList = json.getList("actions", Object.class);

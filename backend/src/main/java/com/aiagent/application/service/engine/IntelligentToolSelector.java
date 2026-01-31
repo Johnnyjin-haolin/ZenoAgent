@@ -62,10 +62,8 @@ public class IntelligentToolSelector {
         } else {
             log.info("未指定启用工具列表，允许所有分组内的工具");
         }
-        
-        // TODO: 使用LLM或规则匹配选择最合适的工具
+
         // 当前简化实现：返回所有可用工具，让LLM决定使用哪个
-        
         log.info("最终找到 {} 个可用工具", availableTools.size());
         return availableTools;
     }

@@ -179,7 +179,7 @@ public class ReflectionEngine {
         if ("direct_response".equals(normalized) || "llm_generate".equals(normalized)) {
             return GoalCheckResult.builder().goalAchieved(true).needsSummary(false).build();
         }
-        if ("tool_call".equals(normalized) || "rag_retrieve".equals(normalized)) {
+        if ("tool_call".equals(normalized)) {
             return GoalCheckResult.builder().goalAchieved(true).needsSummary(false).build();
         }
         return null;

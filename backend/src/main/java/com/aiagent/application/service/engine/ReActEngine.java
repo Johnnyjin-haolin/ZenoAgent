@@ -3,10 +3,12 @@ package com.aiagent.application.service.engine;
 import com.aiagent.application.service.action.ActionExecutor;
 import com.aiagent.application.service.action.ActionResult;
 import com.aiagent.application.service.action.AgentAction;
+import com.aiagent.application.service.action.DirectResponseParams;
 import com.aiagent.application.service.agent.AgentStateMachine;
 import com.aiagent.shared.constant.AgentConstants;
 import com.aiagent.domain.enums.AgentState;
 import com.aiagent.application.model.AgentContext;
+import com.aiagent.application.model.AgentKnowledgeResult;
 import com.aiagent.api.dto.AgentEventData;
 import com.alibaba.fastjson2.JSON;
 import lombok.extern.slf4j.Slf4j;
@@ -82,7 +84,7 @@ public class ReActEngine {
             try {
                 log.info("开始思考");
                 // 1. 思考阶段（Think）
-                sendProgressEvent(context, AgentConstants.EVENT_AGENT_PLANNING, "正在规划下一步...");
+                sendProgressEvent(context, AgentConstants.EVENT_AGENT_PLANNING, "正在思考规划下一步...");
                 long thinkStartNs = System.nanoTime();
                 List<AgentAction> actions = think(goal, context, lastResults);
                 int actionCount = actions == null ? 0 : actions.size();
@@ -92,7 +94,8 @@ public class ReActEngine {
                     stateMachine.transition(AgentState.FAILED);
                     break;
                 }
-                
+
+                //todo 看下是否能把这个挪到反思那里
                 // 检查是否有 COMPLETE action
                 AgentAction completeAction = actions.stream()
                     .filter(a -> a.getType() == AgentAction.ActionType.COMPLETE)
@@ -105,27 +108,6 @@ public class ReActEngine {
                         "任务已完成: " + completeAction.getReasoning());
                 }
                 
-                // 检查是否有 DIRECT_RESPONSE action（简单场景直接返回）
-                AgentAction directResponseAction = actions.stream()
-                    .filter(a -> a.getType() == AgentAction.ActionType.DIRECT_RESPONSE)
-                    .findFirst()
-                    .orElse(null);
-                if (directResponseAction != null) {
-                    log.info("识别为简单场景，执行直接返回响应");
-                    stateMachine.transition(AgentState.EXECUTING);
-                    ActionResult result = actionExecutor.execute(directResponseAction, context);
-                    if (result.isSuccess()) {
-                        log.info("直接返回响应成功，任务完成");
-                        // 直接返回完成后先进入OBSERVING，保证状态机合法转换到COMPLETED
-                        stateMachine.transition(AgentState.OBSERVING);
-                        stateMachine.transition(AgentState.COMPLETED);
-                        return result; // 直接返回，不再继续循环
-                    } else {
-                        log.warn("直接返回响应失败，降级到正常流程: {}", result.getError());
-                        // 失败时继续正常流程
-                    }
-                }
-                
                 log.info("act开始");
                 
                 // 2. 行动阶段（Act）- 统一使用并行处理
@@ -136,89 +118,29 @@ public class ReActEngine {
                 log.info("act结束，耗时 {} ms", elapsedMs(actStartNs));
 
                 log.info("观察开始");
+
+                //todo 这里看下是否能合并到观察阶段
+                // 检查是否有 DIRECT_RESPONSE action（简单场景直接返回）
+                AgentAction directResponseAction = actions.stream()
+                        .filter(a -> a.getType() == AgentAction.ActionType.DIRECT_RESPONSE)
+                        .findFirst()
+                        .orElse(null);
+                if (directResponseAction != null) {
+                    log.info("识别为简单场景，执行直接返回响应");
+                }
                 
                 // 3. 观察阶段（Observe）
                 stateMachine.transition(AgentState.OBSERVING);
                 sendProgressEvent(context, AgentConstants.EVENT_AGENT_OBSERVING, "正在观察执行结果...");
                 long observeStartNs = System.nanoTime();
-                observe(results, context);
+
                 log.info("观察结束，耗时 {} ms", elapsedMs(observeStartNs));
-
-                // 快速响应：单次工具查询直接生成回复，跳过反思与总结
-                ActionResult fastResponse = tryFastResponse(goal, context, actions, results);
-                if (fastResponse != null) {
-                    if (fastResponse.isSuccess()) {
-                        log.info("快速响应成功，跳过反思与总结");
-                        stateMachine.transition(AgentState.COMPLETED);
-                        log.info("ReAct循环执行完成，总耗时 {} ms", elapsedMs(totalStartNs));
-                        return fastResponse;
-                    } else {
-                        log.warn("快速响应失败，继续反思流程: {}", fastResponse.getError());
-                    }
-                }
-
-                log.info("反思开始");
-                
-                // 4. 反思阶段（Reflect）
-                stateMachine.transition(AgentState.REFLECTING);
-                sendProgressEvent(context, AgentConstants.EVENT_AGENT_REFLECTING, "结果反思中...");
-                long reflectStartNs = System.nanoTime();
-                ReflectionEngine.ReflectionResult reflection = reflect(results, context, goal);
-                log.info("反思结束，耗时 {} ms，{}", elapsedMs(reflectStartNs), JSON.toJSONString(reflection));
-                // 根据反思结果决定下一步
-                if (reflection.isGoalAchieved()) {
-                    log.info("反思结果：目标已达成");
+                boolean isEnd = observe(results, context);
+                if (isEnd){
                     stateMachine.transition(AgentState.COMPLETED);
-                    
-                    // 判断是否需要生成友好总结
-                    if (reflection.isNeedsSummary()) {
-                        log.info("需要生成友好总结，使用流式API生成");
-                        
-                        // 发送总结进度事件
-                        sendProgressEvent(context, AgentConstants.EVENT_AGENT_GENERATING, "正在总结完成情况...");
-                        
-                        // 使用流式API生成总结，传入所有结果
-                        long summaryStartNs = System.nanoTime();
-                        ActionResult summaryResult = generateCompletionSummaryWithStreaming(goal, context, results);
-                        log.info("总结生成结束，耗时 {} ms", elapsedMs(summaryStartNs));
-                        
-                        // 返回总结结果（如果总结失败，则返回最后一个成功的结果）
-                        if (summaryResult.isSuccess()) {
-                            log.info("ReAct循环执行完成，总耗时 {} ms", elapsedMs(totalStartNs));
-                            return summaryResult;
-                        } else {
-                            log.warn("生成总结失败，返回最后一个结果");
-                            ActionResult lastSuccessResult = results.stream()
-                                .filter(ActionResult::isSuccess)
-                                .reduce((first, second) -> second)
-                                .orElse(results.get(results.size() - 1));
-                            log.info("ReAct循环执行完成，总耗时 {} ms", elapsedMs(totalStartNs));
-                            return ActionResult.success("complete", "complete", lastSuccessResult.getData());
-                        }
-                    } else {
-                        log.info("不需要总结，直接返回最后一个结果");
-                        // 简单对话等场景，返回最后一个成功的结果
-                        ActionResult lastSuccessResult = results.stream()
-                            .filter(ActionResult::isSuccess)
-                            .reduce((first, second) -> second)
-                            .orElse(results.get(results.size() - 1));
-                        log.info("ReAct循环执行完成，总耗时 {} ms", elapsedMs(totalStartNs));
-                        return ActionResult.success("complete", "complete", lastSuccessResult.getData());
-                    }
-                } else if (reflection.isShouldRetry()) {
-                    log.info("反思结果：需要重试，原因: {}", reflection.getRetryReason());
-                    stateMachine.transition(AgentState.THINKING);
-                } else if (reflection.isShouldContinue()) {
-                    log.info("反思结果：继续执行下一步");
-                    stateMachine.transition(AgentState.THINKING);
-                } else {
-                    log.warn("反思结果：无法继续，结束循环");
-                    stateMachine.transition(AgentState.FAILED);
                     break;
                 }
-                
                 log.info("本轮迭代耗时 {} ms", elapsedMs(iterationStartNs));
-                
             } catch (Exception e) {
                 log.error("ReAct循环执行异常", e);
                 stateMachine.transition(AgentState.FAILED);
@@ -226,7 +148,8 @@ public class ReActEngine {
                     e.getMessage(), "EXCEPTION");
             }
         }
-        
+
+        //todo 这里的逻辑需要放到观察阶段
         // 检查是否因为达到最大迭代次数而结束
         if (iteration >= MAX_ITERATIONS) {
             log.warn("达到最大迭代次数，结束循环");
@@ -241,8 +164,9 @@ public class ReActEngine {
                 .filter(ActionResult::isSuccess)
                 .reduce((first, second) -> second)
                 .orElse(lastResults.get(lastResults.size() - 1));
+            ActionResult finalResult = ensureUserFacingResult(goal, context, lastSuccessResult, lastResults);
             log.info("ReAct循环执行完成，总耗时 {} ms", elapsedMs(totalStartNs));
-            return lastSuccessResult;
+            return finalResult;
         }
         log.info("ReAct循环执行完成，总耗时 {} ms", elapsedMs(totalStartNs));
         return ActionResult.failure("react_loop", "react_loop", 
@@ -268,18 +192,11 @@ public class ReActEngine {
     /**
      * 观察阶段：观察行动结果，更新上下文
      */
-    private void observe(List<ActionResult> results, AgentContext context) {
+    private boolean observe(List<ActionResult> results, AgentContext context) {
         log.debug("进入观察阶段，结果数量: {}", results.size());
-        observationEngine.observe(results, context);
+        return observationEngine.observe(results, context);
     }
-    
-    /**
-     * 反思阶段：评估结果，决定下一步
-     */
-    private ReflectionEngine.ReflectionResult reflect(List<ActionResult> results, AgentContext context, String goal) {
-        log.debug("进入反思阶段，结果数量: {}", results.size());
-        return reflectionEngine.reflect(results, context, goal);
-    }
+
     
     /**
      * 使用流式API生成友好的完成总结
@@ -457,6 +374,105 @@ public class ReActEngine {
         return "用户问题: " + goal + "\n\n" +
             "工具返回结果:\n" + safeResult + "\n\n" +
             "请直接回答用户问题。如果结果为空/无资源，请直接说明。";
+    }
+
+    private ActionResult ensureUserFacingResult(String goal, AgentContext context, ActionResult candidate,
+                                                List<ActionResult> results) {
+        if (candidate == null) {
+            return null;
+        }
+        String actionType = candidate.getActionType();
+        if (actionType == null) {
+            return candidate;
+        }
+        String normalized = actionType.toLowerCase();
+        if ("llm_generate".equals(normalized) || "direct_response".equals(normalized) || "complete".equals(normalized)) {
+            return candidate;
+        }
+        if (!"tool_call".equals(normalized) && !"rag_retrieve".equals(normalized)) {
+            return candidate;
+        }
+        ActionResult response = buildUserFacingResponse(goal, context, candidate);
+        return response != null ? response : candidate;
+    }
+
+    private ActionResult buildUserFacingResponse(String goal, AgentContext context, ActionResult candidate) {
+        if ("rag_retrieve".equalsIgnoreCase(candidate.getActionType())) {
+            ActionResult direct = buildRagEmptyResponseIfNeeded(context, candidate);
+            if (direct != null) {
+                return direct;
+            }
+        }
+
+        String resultText = extractResultText(candidate);
+        if (isEmptyToolResult(candidate.getActionType(), resultText)) {
+            return executeDirectResponse(context, "当前未查询到相关信息。你可以补充更多条件后再试。");
+        }
+
+        String prompt = buildFinalResponsePrompt(goal, resultText, candidate.getActionType());
+        AgentAction action = AgentAction.llmGenerate(
+            com.aiagent.application.service.action.LLMGenerateParams.builder()
+                .prompt(prompt)
+                .systemPrompt("你是一个智能助手，请用简洁、友好的中文直接回答用户问题。不要提及工具调用或技术细节。")
+                .build(),
+            "基于执行结果生成用户回复"
+        );
+        stateMachine.transition(AgentState.EXECUTING);
+        sendProgressEvent(context, AgentConstants.EVENT_AGENT_GENERATING, "正在生成回复...");
+        ActionResult result = actionExecutor.execute(action, context);
+        stateMachine.transition(AgentState.OBSERVING);
+        return result;
+    }
+
+    private ActionResult buildRagEmptyResponseIfNeeded(AgentContext context, ActionResult candidate) {
+        Object data = candidate.getData();
+        if (data instanceof AgentKnowledgeResult) {
+            AgentKnowledgeResult knowledgeResult = (AgentKnowledgeResult) data;
+            if (knowledgeResult.isEmpty() || (knowledgeResult.getTotalCount() != null && knowledgeResult.getTotalCount() == 0)) {
+                return executeDirectResponse(context, "未检索到相关知识库内容，请补充设备、时间范围或告警信息后再试。");
+            }
+        }
+        return null;
+    }
+
+    private ActionResult executeDirectResponse(AgentContext context, String content) {
+        AgentAction action = AgentAction.directResponse(
+            DirectResponseParams.builder()
+                .content(content)
+                .streaming(true)
+                .build(),
+            "基于执行结果直接回复"
+        );
+        stateMachine.transition(AgentState.EXECUTING);
+        sendProgressEvent(context, AgentConstants.EVENT_AGENT_GENERATING, "正在生成回复...");
+        ActionResult result = actionExecutor.execute(action, context);
+        stateMachine.transition(AgentState.OBSERVING);
+        return result;
+    }
+
+    private boolean isEmptyToolResult(String actionType, String resultText) {
+        if (resultText == null || resultText.isEmpty()) {
+            return true;
+        }
+        String normalized = resultText.replaceAll("\\s+", "").toLowerCase();
+        if (normalized.contains("\"resources\":[]") || normalized.contains("\"resources\":null")) {
+            return true;
+        }
+        if (normalized.contains("\"totalcount\":0") || normalized.contains("\"count\":0")) {
+            return true;
+        }
+        return "rag_retrieve".equalsIgnoreCase(actionType) && (normalized.contains("\"documents\":[]") || normalized.contains("\"totalcount\":0"));
+    }
+
+    private String buildFinalResponsePrompt(String goal, String resultText, String actionType) {
+        String safeResult = (resultText == null || resultText.isEmpty()) ? "（无数据）" : resultText;
+        if (safeResult.length() > MAX_FAST_RESULT_CHARS) {
+            safeResult = safeResult.substring(0, MAX_FAST_RESULT_CHARS) + "...";
+        }
+        return "用户问题: " + goal + "\n\n" +
+            "执行结果类型: " + actionType + "\n" +
+            "执行结果:\n" + safeResult + "\n\n" +
+            "请基于以上结果，用简洁的中文回答用户问题。";
     }
 
     private long elapsedMs(long startNs) {
