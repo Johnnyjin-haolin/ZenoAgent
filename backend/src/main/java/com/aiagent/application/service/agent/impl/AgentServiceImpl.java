@@ -253,92 +253,35 @@ public class AgentServiceImpl implements IAgentService {
             "modelId=" + modelId, emitter);
         
         // 6. 处理最终结果
-        if (finalResult.isSuccess()) {
-            // 保存AI回复到记忆和MySQL（统一通过MemorySystem处理）
-            dev.langchain4j.data.message.AiMessage aiMessage = 
-                new dev.langchain4j.data.message.AiMessage(finalResult.getData().toString());
-            context.getMessages().add(aiMessage);
-            
-            // 提取元数据
-            Map<String, Object> metadata = null;
-            if (finalResult.getMetadata() instanceof Map) {
-                metadata = (Map<String, Object>) finalResult.getMetadata();
-            }
-            
-            // 保存到Redis和MySQL（包含模型ID和元数据）
-            memorySystem.saveShortTermMemory(
-                context.getConversationId(), 
-                aiMessage, 
-                context.getModelId(),
-                null, // tokens - 可以从finalResult中获取
-                null, // duration - 可以从finalResult中获取
-                metadata
-            );
-            stepStartNs = logStep("save_ai_message", stepStartNs, requestId, conversationId, null, emitter);
-            
-            // 更新对话消息数量（Redis和MySQL都要更新）
-            conversationStorage.incrementMessageCount(context.getConversationId());
-            try {
-                conversationService.incrementMessageCount(context.getConversationId());
-            } catch (Exception e) {
-                log.warn("更新MySQL消息数量失败: conversationId={}", context.getConversationId(), e);
-            }
-            stepStartNs = logStep("increment_message_count", stepStartNs, requestId, conversationId, null, emitter);
-            
-            // 注意：如果是LLM_GENERATE且使用了流式输出，内容已经通过callback发送了
-            // 这里不再重复发送完整内容，只在metadata中标记streaming为false的情况下才发送
-            boolean isStreaming = false;
-            if (metadata != null && metadata.containsKey("streaming")) {
-                isStreaming = Boolean.TRUE.equals(metadata.get("streaming"));
-            }
-            
-            // 如果actionType是complete或direct_response，说明目标已达成，内容应该已经通过之前的动作发送过了
-            // 不需要再发送，避免重复
-            String actionType = finalResult.getActionType();
-            boolean shouldSendMessage = !isStreaming && 
-                                       !"complete".equals(actionType) && 
-                                       !"direct_response".equals(actionType);
-            
-            if (shouldSendMessage) {
-                // 非流式结果（如工具调用结果），需要发送完整内容
-                streamingService.sendEvent(emitter, AgentEventData.builder()
-                    .requestId(requestId)
-                    .event(AgentConstants.EVENT_AGENT_MESSAGE)
-                    .content(finalResult.getData().toString())
-                    .conversationId(context.getConversationId())
-                    .build());
-            } else if (isStreaming) {
-                log.debug("流式输出已完成，等待所有SSE事件发送完成...");
-                // 如果是流式输出，等待流式完成后再继续
-                // 这样可以确保所有token都通过SSE发送完毕，避免关闭SSE时还有残留事件
-                try {
-                    // 等待最多30秒（正常情况下应该很快完成）
-                    boolean completed = streamingCompleteLatch.await(
-                        AgentConstants.STREAMING_WAIT_TIMEOUT_SECONDS,
-                        java.util.concurrent.TimeUnit.SECONDS
-                    );
-                    if (completed) {
-                        log.debug("流式输出已完全结束，可以安全关闭SSE");
-                    } else {
-                        log.warn("等待流式输出完成超时（{}秒），强制继续", AgentConstants.STREAMING_WAIT_TIMEOUT_SECONDS);
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    log.warn("等待流式输出完成被中断", e);
-                }
-                stepStartNs = logStep("wait_streaming_complete", stepStartNs, requestId, conversationId, null, emitter);
-            } else {
-                log.debug("本次未使用流式输出，跳过等待流式完成");
-            }
-        } else {
-            streamingService.sendEvent(emitter, AgentEventData.builder()
-                .requestId(requestId)
-                .event(AgentConstants.EVENT_AGENT_ERROR)
-                .message("执行失败: " + finalResult.getError())
-                .conversationId(context.getConversationId())
-                .build());
+        // 保存AI回复到记忆和MySQL（统一通过MemorySystem处理）
+        dev.langchain4j.data.message.AiMessage aiMessage =
+            new dev.langchain4j.data.message.AiMessage(finalResult.getData().toString());
+        context.getMessages().add(aiMessage);
+
+        // 提取元数据
+        Map<String, Object> metadata = finalResult.getMetadata();
+
+        // 保存到Redis和MySQL（包含模型ID和元数据）
+        memorySystem.saveShortTermMemory(
+            context.getConversationId(),
+            aiMessage,
+            context.getModelId(),
+            null, // tokens - 可以从finalResult中获取
+            null, // duration - 可以从finalResult中获取
+            metadata
+        );
+        stepStartNs = logStep("save_ai_message", stepStartNs, requestId, conversationId, null, emitter);
+
+        // 更新对话消息数量（Redis和MySQL都要更新）
+        conversationStorage.incrementMessageCount(context.getConversationId());
+        try {
+            conversationService.incrementMessageCount(context.getConversationId());
+        } catch (Exception e) {
+            log.warn("更新MySQL消息数量失败: conversationId={}", context.getConversationId(), e);
         }
-        
+        stepStartNs = logStep("increment_message_count", stepStartNs, requestId, conversationId, null, emitter);
+            
+
         // 7. 保存上下文
         memorySystem.saveContext(context);
         stepStartNs = logStep("save_context", stepStartNs, requestId, conversationId, null, emitter);

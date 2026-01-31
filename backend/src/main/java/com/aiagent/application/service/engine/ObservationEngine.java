@@ -1,8 +1,11 @@
 package com.aiagent.application.service.engine;
 
 import com.aiagent.application.service.action.ActionResult;
+import com.aiagent.application.service.action.AgentAction;
 import com.aiagent.application.service.memory.MemorySystem;
 import com.aiagent.application.model.AgentContext;
+import com.aiagent.domain.enums.ActionType;
+import com.aiagent.domain.enums.AgentState;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -66,6 +69,13 @@ public class ObservationEngine {
         }
         context.setIterations(context.getIterations() + 1);
 
+        ActionResult completeAction = results.stream()
+                .filter(a -> a.getActionType() == ActionType.DIRECT_RESPONSE)
+                .findFirst()
+                .orElse(null);
+        if (completeAction != null) {
+            return true;
+        }
         //todo :可选功能，如果执行长度超过，需要精简历史对话
         
         // 保存上下文

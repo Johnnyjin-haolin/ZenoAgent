@@ -2,6 +2,7 @@ package com.aiagent.application.service.engine;
 
 import com.aiagent.application.service.action.ActionResult;
 import com.aiagent.application.service.action.AgentAction;
+import com.aiagent.domain.enums.ActionType;
 import com.aiagent.shared.constant.AgentConstants;
 import com.aiagent.application.service.action.DirectResponseParams;
 import com.aiagent.application.service.action.LLMGenerateParams;
@@ -603,9 +604,9 @@ public class ThinkingEngine {
             return null;
         }
         
-        AgentAction.ActionType type;
+       ActionType type;
         try {
-            type = AgentAction.ActionType.valueOf(actionType);
+            type = ActionType.valueOf(actionType);
         } catch (IllegalArgumentException e) {
             log.warn("无效的动作类型: {}", actionType);
             return null;
@@ -625,9 +626,6 @@ public class ThinkingEngine {
                 break;
             case DIRECT_RESPONSE:
                 action = parseDirectResponseAction(json, actionName, reasoning, context);
-                break;
-            case COMPLETE:
-                action = AgentAction.complete(reasoning != null ? reasoning : "任务已完成");
                 break;
             default:
                 log.warn("不支持的动作类型: {}", type);
@@ -845,54 +843,7 @@ public class ThinkingEngine {
         
         return AgentAction.llmGenerate(llmParams, reasoning);
     }
-    
-    /**
-     * 检测循环异常
-     * 如果连续调用同一工具且参数相同或结果类似，认为是异常循环
-     */
-    private boolean detectLoopAnomaly(AgentContext context, AgentAction proposedAction, ActionResult lastResult) {
-        if (context == null || context.getToolCallHistory() == null || context.getToolCallHistory().isEmpty()) {
-            return false;
-        }
-        
-        // 只检测TOOL_CALL类型
-        if (proposedAction.getType() != AgentAction.ActionType.TOOL_CALL) {
-            return false;
-        }
-        
-        List<Map<String, Object>> history = context.getToolCallHistory();
-        
-        // 至少需要有一次历史调用
-        if (history.isEmpty()) {
-            return false;
-        }
-        
-        String proposedToolName = proposedAction.getName();
-        String lastToolName = (String) history.get(history.size() - 1).get("toolName");
-        
-        // 检查：是否连续调用同一个工具
-        if (proposedToolName.equals(lastToolName)) {
-            log.warn("检测到重复调用同一工具: {}", proposedToolName);
-            
-            // 进一步检查：如果历史中连续2次都是同一工具，则认为是循环
-            if (history.size() >= 2) {
-                String secondLastToolName = (String) history.get(history.size() - 2).get("toolName");
-                if (proposedToolName.equals(secondLastToolName)) {
-                    log.error("检测到连续3次调用同一工具 {}, 判定为异常循环", proposedToolName);
-                    return true;
-                }
-            }
-            
-            // 如果上次调用成功且有结果，也认为不应该重复调用
-            if (lastResult != null && lastResult.isSuccess() && lastResult.getData() != null) {
-                log.warn("上次工具调用已成功返回结果，不应重复调用");
-                return true;
-            }
-        }
-        
-        return false;
-    }
-    
+
     /**
      * 发送进度事件到前端
      */

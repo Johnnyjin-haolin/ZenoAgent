@@ -4,6 +4,8 @@ import com.aiagent.application.service.action.DirectResponseParams;
 import com.aiagent.application.service.action.LLMGenerateParams;
 import com.aiagent.application.service.action.RAGRetrieveParams;
 import com.aiagent.application.service.action.ToolCallParams;
+import com.aiagent.domain.enums.ActionType;
+import com.aiagent.shared.util.UUIDGenerator;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -22,7 +24,12 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AgentAction {
-    
+
+    /**
+     * 伪id，生成时时间戳
+     */
+    private String id;
+
     /**
      * 动作类型
      */
@@ -67,53 +74,12 @@ public class AgentAction {
      * 预期结果
      */
     private String expectedResult;
-    
-    /**
-     * 动作类型枚举
-     */
-    public enum ActionType {
-        /**
-         * 调用工具
-         */
-        TOOL_CALL,
-        
-        /**
-         * RAG检索
-         */
-        RAG_RETRIEVE,
-        
-        /**
-         * LLM生成
-         */
-        LLM_GENERATE,
-        
-        /**
-         * 完成任务
-         */
-        COMPLETE,
-        
-        /**
-         * 请求用户输入
-         */
-        REQUEST_USER_INPUT,
-        
-        /**
-         * 等待
-         */
-        WAIT,
-        
-        /**
-         * 直接返回响应
-         * 用于简单场景，直接返回预设的回复内容，无需调用LLM
-         */
-        DIRECT_RESPONSE
-    }
-    
+
     /**
      * 创建工具调用动作（使用特定参数类型）
      */
     public static AgentAction toolCall(String toolName, ToolCallParams params, String reasoning) {
-        return AgentAction.builder()
+        return AgentAction.builder().id(UUIDGenerator.generate())
             .type(ActionType.TOOL_CALL)
             .name(toolName)
             .toolCallParams(params)
@@ -128,6 +94,7 @@ public class AgentAction {
      */
     public static AgentAction ragRetrieve(RAGRetrieveParams params, String reasoning) {
         return AgentAction.builder()
+            .id(UUIDGenerator.generate())
             .type(ActionType.RAG_RETRIEVE)
             .name("rag_retrieve")
             .ragRetrieveParams(params)
@@ -141,6 +108,7 @@ public class AgentAction {
      */
     public static AgentAction llmGenerate(LLMGenerateParams params, String reasoning) {
         return AgentAction.builder()
+            .id(UUIDGenerator.generate())
             .type(ActionType.LLM_GENERATE)
             .name("llm_generate")
             .llmGenerateParams(params)
@@ -149,19 +117,6 @@ public class AgentAction {
             .build();
     }
 
-    
-    /**
-     * 创建完成动作
-     */
-    public static AgentAction complete(String reasoning) {
-        return AgentAction.builder()
-            .type(ActionType.COMPLETE)
-            .name("complete")
-            .reasoning(reasoning)
-            .description("任务完成")
-            .build();
-    }
-    
     /**
      * 创建直接返回响应动作
      */
@@ -171,7 +126,7 @@ public class AgentAction {
                 ? params.getContent().substring(0, 50) + "..." 
                 : params.getContent())
             : "";
-        return AgentAction.builder()
+        return AgentAction.builder().id(UUIDGenerator.generate())
             .type(ActionType.DIRECT_RESPONSE)
             .name("direct_response")
             .directResponseParams(params)

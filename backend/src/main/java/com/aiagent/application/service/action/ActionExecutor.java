@@ -1,5 +1,6 @@
 package com.aiagent.application.service.action;
 
+import com.aiagent.domain.enums.ActionType;
 import com.aiagent.shared.constant.AgentConstants;
 import com.aiagent.domain.enums.AgentMode;
 import com.aiagent.application.service.StreamingCallback;
@@ -28,6 +29,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -96,17 +98,14 @@ public class ActionExecutor {
                     return executeLLMGenerate(action, context, startTime);
                 case DIRECT_RESPONSE:
                     return executeDirectResponse(action, context, startTime);
-                case COMPLETE:
-                    return ActionResult.success("complete", "complete",
-                        "任务完成: " + action.getReasoning());
                 default:
-                    return ActionResult.failure(action.getType().name(), action.getName(),
+                    return ActionResult.failure(action.getType(), action.getName(),
                         "不支持的动作类型: " + action.getType(), "UNSUPPORTED_ACTION");
             }
         } catch (Exception e) {
             log.error("执行动作失败", e);
             long duration = System.currentTimeMillis() - startTime;
-            ActionResult result = ActionResult.failure(action.getType().name(), action.getName(),
+            ActionResult result = ActionResult.failure(action.getType(), action.getName(),
                 e.getMessage(), "EXCEPTION");
             result.setDuration(duration);
             return result;
@@ -154,7 +153,7 @@ public class ActionExecutor {
                         ? "用户拒绝执行（确认超时）"
                         : "用户拒绝执行";
                     long duration = System.currentTimeMillis() - startTime;
-                    ActionResult rejectResult = ActionResult.failure("tool_call", toolName,
+                    ActionResult rejectResult = ActionResult.failure(ActionType.TOOL_CALL, toolName,
                         rejectMessage, "USER_REJECTED");
                     rejectResult.setDuration(duration);
                     rejectResult.setMetadata(Map.of(
@@ -199,7 +198,7 @@ public class ActionExecutor {
             memorySystem.recordToolCall(context, toolName, params, toolResult);
             
             long duration = System.currentTimeMillis() - startTime;
-            ActionResult actionResult = ActionResult.success("tool_call", toolName, toolResult);
+            ActionResult actionResult = ActionResult.success(ActionType.TOOL_CALL, toolName, toolResult);
             actionResult.setDuration(duration);
             actionResult.setMetadata(Map.of(
                 "toolExecutionId", toolExecutionId,
@@ -216,7 +215,7 @@ public class ActionExecutor {
         } catch (Exception e) {
             log.error("工具调用失败", e);
             long duration = System.currentTimeMillis() - startTime;
-            ActionResult result = ActionResult.failure("tool_call", action.getName(),
+            ActionResult result = ActionResult.failure(ActionType.TOOL_CALL, action.getName(),
                 e.getMessage(), "TOOL_CALL_ERROR");
             sendProgressEvent(context, AgentConstants.EVENT_AGENT_TOOL_EXECUTING,
                     "调用工具失败");
@@ -293,7 +292,7 @@ public class ActionExecutor {
                 knowledgeResult != null ? knowledgeResult.getTotalCount() : 0);
             
             long duration = System.currentTimeMillis() - startTime;
-            ActionResult result = ActionResult.success("rag_retrieve", "rag_retrieve", knowledgeResult);
+            ActionResult result = ActionResult.success(ActionType.RAG_RETRIEVE, "rag_retrieve", knowledgeResult);
             result.setDuration(duration);
             result.setMetadata(Map.of("query", query, "count",
                 knowledgeResult != null ? knowledgeResult.getTotalCount() : 0));
@@ -303,7 +302,7 @@ public class ActionExecutor {
         } catch (Exception e) {
             log.error("RAG检索失败", e);
             long duration = System.currentTimeMillis() - startTime;
-            ActionResult result = ActionResult.failure("rag_retrieve", "rag_retrieve",
+            ActionResult result = ActionResult.failure(ActionType.RAG_RETRIEVE, "rag_retrieve",
                 e.getMessage(), "RAG_RETRIEVE_ERROR");
             result.setDuration(duration);
             return result;
@@ -386,7 +385,7 @@ public class ActionExecutor {
             }
 
             long duration = System.currentTimeMillis() - startTime;
-            ActionResult result = ActionResult.success("llm_generate", "llm_generate", llmResponse);
+            ActionResult result = ActionResult.success(ActionType.LLM_GENERATE, "llm_generate", llmResponse);
             result.setDuration(duration);
             result.setMetadata(Map.of(
                 "prompt", prompt, 
@@ -401,7 +400,7 @@ public class ActionExecutor {
         } catch (Exception e) {
             log.error("LLM生成失败", e);
             long duration = System.currentTimeMillis() - startTime;
-            ActionResult result = ActionResult.failure("llm_generate", "llm_generate",
+            ActionResult result = ActionResult.failure(ActionType.LLM_GENERATE, "llm_generate",
                 e.getMessage(), "LLM_GENERATE_ERROR");
             result.setDuration(duration);
             return result;
@@ -427,38 +426,38 @@ public class ActionExecutor {
         // 发送并行执行开始事件
         sendProgressEvent(context, AgentConstants.EVENT_AGENT_TOOL_EXECUTING, 
             "正在并行执行 " + actions.size() + " 个操作...");
-        
+
+        Map<String,CompletableFuture<ActionResult>> actionResultMap=new HashMap<>();
         try {
-            // 使用 CompletableFuture 并行执行
-            List<CompletableFuture<ActionResult>> futures = actions.stream()
-                .map(action -> CompletableFuture.supplyAsync(() -> {
+            for (AgentAction action:actions){
+                actionResultMap.put(action.getId(),CompletableFuture.supplyAsync(() -> {
                     try {
                         log.debug("并行执行动作: {}", action.getName());
                         return execute(action, context);
                     } catch (Exception e) {
                         log.error("并行执行动作失败: {}", action.getName(), e);
                         return ActionResult.failure(
-                            action.getType().name(), 
-                            action.getName(),
-                            e.getMessage(), 
-                            "EXCEPTION"
+                                action.getType(),
+                                action.getName(),
+                                e.getMessage(),
+                                "EXCEPTION"
                         );
                     }
-                }, PARALLEL_EXECUTOR))
-                .collect(Collectors.toList());
-            
-            // 等待所有任务完成（即使失败也继续等待）
-            List<ActionResult> results = futures.stream()
-                .map(future -> {
-                    try {
-                        return future.join();
-                    } catch (Exception e) {
-                        log.error("等待动作执行完成时出错", e);
-                        return ActionResult.failure("parallel_execution", "parallel_execution",
-                            "执行异常: " + e.getMessage(), "EXCEPTION");
-                    }
-                })
-                .collect(Collectors.toList());
+                }, PARALLEL_EXECUTOR));
+            }
+            List<ActionResult> results=new ArrayList<>();
+            for (AgentAction action:actions){
+                CompletableFuture<ActionResult> future = actionResultMap.get(action.getId());
+                try {
+                    future.join();
+                    results.add(future.get());
+                } catch (Exception e) {
+                    log.error("等待动作执行完成时出错", e);
+                    results.add(ActionResult.failure(action.getType(), action.getName(),
+                            "执行异常: " + e.getMessage(), "EXCEPTION"));
+                }
+            }
+
             
             long duration = System.currentTimeMillis() - startTime;
             

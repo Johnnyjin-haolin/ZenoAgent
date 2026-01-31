@@ -1,5 +1,6 @@
 package com.aiagent.application.service.action;
 
+import com.aiagent.domain.enums.ActionType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -22,7 +23,6 @@ public class ActionResult {
      * 是否成功
      */
     private boolean success;
-    
     /**
      * 结果数据
      */
@@ -41,8 +41,7 @@ public class ActionResult {
     /**
      * 执行的动作类型
      */
-    private String actionType;
-    
+    private ActionType actionType;
     /**
      * 动作名称
      */
@@ -52,16 +51,16 @@ public class ActionResult {
      * 执行耗时（毫秒）
      */
     private long duration;
-    
+
     /**
-     * 元数据
+     * 元数据,这里记录的是ai需要感知的数据
      */
     private Map<String, Object> metadata;
     
     /**
      * 创建成功结果
      */
-    public static ActionResult success(String actionType, String actionName, Object data) {
+    public static ActionResult success(ActionType actionType, String actionName, Object data) {
         return ActionResult.builder()
             .success(true)
             .actionType(actionType)
@@ -73,7 +72,7 @@ public class ActionResult {
     /**
      * 创建失败结果
      */
-    public static ActionResult failure(String actionType, String actionName, String error, String errorType) {
+    public static ActionResult failure(ActionType actionType, String actionName, String error, String errorType) {
         return ActionResult.builder()
             .success(false)
             .actionType(actionType)
