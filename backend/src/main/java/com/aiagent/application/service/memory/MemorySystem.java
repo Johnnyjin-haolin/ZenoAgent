@@ -5,9 +5,7 @@ import com.aiagent.application.service.message.MessageService;
 import com.aiagent.shared.util.StringUtils;
 import com.aiagent.application.model.AgentContext;
 import com.aiagent.application.model.MessageDTO;
-import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.UserMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -15,7 +13,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 /**
  * 记忆系统
@@ -47,17 +44,7 @@ public class MemorySystem {
      * 默认上下文窗口大小
      */
     private static final int DEFAULT_CONTEXT_WINDOW = 10;
-    
-    /**
-     * 保存短期记忆（对话历史）- 简化版本，兼容旧代码
-     * 
-     * @param conversationId 会话ID
-     * @param message 消息
-     */
-    public void saveShortTermMemory(String conversationId, ChatMessage message) {
-        saveShortTermMemory(conversationId, message, null, null, null, null);
-    }
-    
+
     /**
      * 保存短期记忆（Redis + MySQL双存储）
      * 
@@ -123,41 +110,7 @@ public class MemorySystem {
             log.error("保存短期记忆到Redis失败", e);
         }
     }
-    
-    /**
-     * 获取短期记忆
-     * 
-     * @param conversationId 会话ID
-     * @param limit 限制数量
-     * @return 消息列表
-     */
-    public List<ChatMessage> getShortTermMemory(String conversationId, int limit) {
-        String key = AgentConstants.CACHE_PREFIX_AGENT_MEMORY + conversationId;
-        
-        try {
-            @SuppressWarnings("unchecked")
-            List<MessageDTO> messageDTOs = (List<MessageDTO>) redisTemplate.opsForValue().get(key);
-            
-            if (messageDTOs == null || messageDTOs.isEmpty()) {
-                return new ArrayList<>();
-            }
-            
-            // 返回最近的N条消息
-            int start = Math.max(0, messageDTOs.size() - limit);
-            List<MessageDTO> recentDTOs = messageDTOs.subList(start, messageDTOs.size());
-            
-            // 转换回 ChatMessage
-            return recentDTOs.stream()
-                .map(MessageDTO::toChatMessage)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-            
-        } catch (Exception e) {
-            log.error("获取短期记忆失败", e);
-            return new ArrayList<>();
-        }
-    }
-    
+
     /**
      * 保存上下文
      * 
@@ -301,54 +254,7 @@ public class MemorySystem {
             return null;
         }
     }
-    
-    /**
-     * 记录RAG检索历史 todo 这些方法不适合放在记忆系统中，需要搞清楚记忆系统定位是什么
-     * 
-     * @param context Agent上下文
-     * @param query 查询文本
-     * @param knowledgeIds 知识库ID
-     * @param resultCount 结果数量
-     */
-    public void recordRAGRetrieve(AgentContext context, String query, 
-                                 List<String> knowledgeIds, int resultCount) {
-        if (context.getRagRetrieveHistory() == null) {
-            context.setRagRetrieveHistory(new ArrayList<>());
-        }
-        
-        Map<String, Object> record = new LinkedHashMap<>();
-        record.put("query", query);
-        record.put("knowledgeIds", knowledgeIds);
-        record.put("resultCount", resultCount);
-        record.put("timestamp", System.currentTimeMillis());
-        
-        context.getRagRetrieveHistory().add(record);
-        
-        log.debug("记录RAG检索: query={}, resultCount={}", query, resultCount);
-    }
-    
-    /**
-     * 构建消息摘要（用于向量记忆）
-     * 
-     * @param messages 消息列表
-     * @return 摘要文本
-     */
-    public String buildMessageSummary(List<ChatMessage> messages) {
-        if (messages == null || messages.isEmpty()) {
-            return "";
-        }
-        
-        StringBuilder summary = new StringBuilder();
-        for (ChatMessage message : messages) {
-            if (message instanceof UserMessage) {
-                summary.append("用户: ").append(((UserMessage) message).singleText()).append("\n");
-            } else if (message instanceof AiMessage) {
-                summary.append("助手: ").append(((AiMessage) message).text()).append("\n");
-            }
-        }
-        
-        return summary.toString();
-    }
+
 }
 
 

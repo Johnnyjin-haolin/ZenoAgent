@@ -68,12 +68,9 @@ public class AgentServiceImpl implements IAgentService {
     private StopRequestManager stopRequestManager;
     
     @Override
-    //todo 前端停止生成后，后端react没有终止。
     //todo 前端UI界面参照Google的炫酷画面
 
     //todo 已经经过多个迭代，但是前端还是显示第一次推理
-    //tood rag能力支持自测
-
     public SseEmitter execute(AgentRequest request) {
         log.info("开始执行Agent任务（ReAct架构）: {}", request.getContent());
         
