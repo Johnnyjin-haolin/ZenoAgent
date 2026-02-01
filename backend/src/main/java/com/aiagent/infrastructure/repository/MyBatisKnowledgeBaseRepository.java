@@ -3,13 +3,14 @@ package com.aiagent.infrastructure.repository;
 import com.aiagent.domain.entity.KnowledgeBaseEntity;
 import com.aiagent.infrastructure.mapper.KnowledgeBaseMapper;
 import com.aiagent.domain.model.KnowledgeBase;
-import com.aiagent.infrastructure.repository.KnowledgeBaseRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -61,6 +62,23 @@ public class MyBatisKnowledgeBaseRepository implements KnowledgeBaseRepository {
     @Override
     public boolean existsById(String id) {
         return knowledgeBaseMapper.existsById(id);
+    }
+    
+    @Override
+    public Map<String, KnowledgeBase> findByIds(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return new HashMap<>();
+        }
+        
+        List<KnowledgeBaseEntity> entities = knowledgeBaseMapper.selectByIds(ids);
+        Map<String, KnowledgeBase> result = new HashMap<>();
+        
+        for (KnowledgeBaseEntity entity : entities) {
+            KnowledgeBase model = convertToModel(entity);
+            result.put(model.getId(), model);
+        }
+        
+        return result;
     }
     
     /**

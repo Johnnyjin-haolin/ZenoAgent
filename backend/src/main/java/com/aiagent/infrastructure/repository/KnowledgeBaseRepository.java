@@ -3,6 +3,7 @@ package com.aiagent.infrastructure.repository;
 import com.aiagent.domain.model.KnowledgeBase;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -36,5 +37,13 @@ public interface KnowledgeBaseRepository {
      * 检查是否存在
      */
     boolean existsById(String id);
+    
+    /**
+     * 批量根据ID查找知识库
+     * 
+     * @param ids 知识库ID列表
+     * @return 知识库映射（knowledgeId -> KnowledgeBase）
+     */
+    Map<String, KnowledgeBase> findByIds(List<String> ids);
 }
 

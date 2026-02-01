@@ -11,7 +11,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -139,6 +141,25 @@ public class KnowledgeBaseService {
      */
     public List<KnowledgeBase> listKnowledgeBases() {
         return knowledgeBaseRepository.findAll();
+    }
+    
+    /**
+     * 批量查询知识库
+     * 
+     * @param knowledgeIds 知识库ID列表
+     * @return 知识库映射（knowledgeId -> KnowledgeBase）
+     */
+    public Map<String, KnowledgeBase> getKnowledgeBasesByIds(List<String> knowledgeIds) {
+        if (knowledgeIds == null || knowledgeIds.isEmpty()) {
+            return new HashMap<>();
+        }
+        
+        try {
+            return knowledgeBaseRepository.findByIds(knowledgeIds);
+        } catch (Exception e) {
+            log.warn("批量查询知识库失败: knowledgeIds={}, error={}", knowledgeIds, e.getMessage());
+            return new HashMap<>();
+        }
     }
     
     /**

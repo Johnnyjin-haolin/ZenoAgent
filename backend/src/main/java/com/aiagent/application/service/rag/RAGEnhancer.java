@@ -5,6 +5,7 @@ import com.aiagent.domain.model.KnowledgeBase;
 import com.aiagent.infrastructure.repository.KnowledgeBaseRepository;
 import com.aiagent.infrastructure.external.llm.EmbeddingModelManager;
 import com.aiagent.shared.util.StringUtils;
+import com.aiagent.application.model.AgentContext;
 import com.aiagent.application.model.AgentKnowledgeDocument;
 import com.aiagent.application.model.AgentKnowledgeResult;
 import dev.langchain4j.data.embedding.Embedding;
@@ -70,7 +71,7 @@ public class RAGEnhancer {
     /**
      * 检索相关知识
      * 
-     * 使用langchain4j的EmbeddingModel和EmbeddingStore实现RAG检索
+     * 根据知识库ID列表查询知识库信息，然后执行RAG检索
      * 
      * @param query 查询文本
      * @param knowledgeIds 知识库ID列表
@@ -95,6 +96,46 @@ public class RAGEnhancer {
                 .build();
         }
         
+        // 批量查询知识库信息
+        Map<String, KnowledgeBase> knowledgeBaseMap = knowledgeBaseRepository.findByIds(knowledgeIds);
+        log.debug("查询到知识库信息: count={}", knowledgeBaseMap.size());
+        
+        // 调用核心检索方法
+        return retrieve(query, knowledgeBaseMap);
+    }
+    
+
+    /**
+     * 检索相关知识（使用已查询的知识库信息）
+     * 
+     * 这是RAG检索的核心方法，接收已查询好的知识库信息，执行实际的检索逻辑
+     * 
+     * @param query 查询文本
+     * @param knowledgeBaseMap 知识库映射（knowledgeId -> KnowledgeBase），已查询好的知识库信息
+     * @return Agent领域模型的检索结果
+     */
+    public AgentKnowledgeResult retrieve(String query, Map<String, KnowledgeBase> knowledgeBaseMap) {
+        log.info("执行RAG检索，查询: {}, 知识库数量: {}", query, 
+                 knowledgeBaseMap != null ? knowledgeBaseMap.size() : 0);
+        
+        if (StringUtils.isEmpty(query)) {
+            log.warn("查询文本为空");
+            return null;
+        }
+        
+        if (knowledgeBaseMap == null || knowledgeBaseMap.isEmpty()) {
+            log.warn("知识库信息为空，返回空结果");
+            return AgentKnowledgeResult.builder()
+                .query(query)
+                .documents(new ArrayList<>())
+                .totalCount(0)
+                .summary("")
+                .build();
+        }
+        
+        // 提取知识库ID列表
+        List<String> knowledgeIds = new ArrayList<>(knowledgeBaseMap.keySet());
+        
         // 使用langchain4j实现RAG检索
         try {
             // 1. 获取或创建Embedding模型
@@ -108,6 +149,7 @@ public class RAGEnhancer {
             Embedding queryEmbedding = model.embed(query).content();
             
             // 3. 从存储中检索相似文档（支持多知识库）
+            //todo 这里我希望知识库是可以在前端配置这些参数的
             int maxResults = defaultTopK > 0 ? defaultTopK : DEFAULT_TOP_K;
             double minScore = defaultMinScore > 0 ? defaultMinScore : DEFAULT_MIN_SCORE;
             
@@ -116,12 +158,9 @@ public class RAGEnhancer {
             
             for (String knowledgeId : knowledgeIds) {
                 try {
-                    // 获取知识库信息
-                    KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeId)
-                            .orElse(null);
-                    
+                    KnowledgeBase knowledgeBase = knowledgeBaseMap.get(knowledgeId);
                     if (knowledgeBase == null) {
-                        log.warn("Knowledge base not found: {}", knowledgeId);
+                        log.warn("Knowledge base not found in map: {}", knowledgeId);
                         continue;
                     }
                     

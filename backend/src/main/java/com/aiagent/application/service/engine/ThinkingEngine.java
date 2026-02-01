@@ -1,10 +1,13 @@
 package com.aiagent.application.service.engine;
 
+import com.aiagent.application.model.AgentKnowledgeDocument;
+import com.aiagent.application.model.AgentKnowledgeResult;
 import com.aiagent.application.service.action.ActionInputDTO;
 import com.aiagent.application.service.action.ActionResult;
 import com.aiagent.application.service.action.ActionsResponseDTO;
 import com.aiagent.application.service.action.AgentAction;
 import com.aiagent.domain.enums.ActionType;
+import com.aiagent.domain.model.KnowledgeBase;
 import com.aiagent.infrastructure.config.AgentConfig;
 import com.aiagent.shared.constant.AgentConstants;
 import com.aiagent.application.service.action.DirectResponseParams;
@@ -28,6 +31,7 @@ import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -195,6 +199,9 @@ public class ThinkingEngine {
                 prompt.append("\n");
             }
         }
+
+        // ========== RAG 知识库信息 ==========
+        appendRAGInfo(prompt, context);
 
         // ========== Action执行历史（按迭代轮次展示）==========
         if (context.getActionExecutionHistory() != null && !context.getActionExecutionHistory().isEmpty()) {
@@ -511,6 +518,148 @@ public class ThinkingEngine {
                     .build()
             );
         }
+    }
+    
+    /**
+     * 添加 RAG 知识库信息到提示词
+     */
+    private void appendRAGInfo(StringBuilder prompt, AgentContext context) {
+        // 1. 可用知识库列表
+        appendAvailableKnowledgeBases(prompt, context);
+        
+        // 2. 已检索的知识库信息
+        appendRetrievedKnowledgeInfo(prompt, context);
+    }
+    
+    /**
+     * 添加可用知识库列表到提示词
+     */
+    private void appendAvailableKnowledgeBases(StringBuilder prompt, AgentContext context) {
+        List<String> knowledgeIds = context.getKnowledgeIds();
+        if (knowledgeIds == null || knowledgeIds.isEmpty()) {
+            return;
+        }
+        
+        prompt.append("## 可用知识库\n\n");
+        prompt.append("以下知识库可用于 RAG_RETRIEVE 检索：\n\n");
+        
+        // 从 context 中获取已加载的知识库信息
+        Map<String, KnowledgeBase> knowledgeBaseMap = context.getKnowledgeBaseMap();
+        if (knowledgeBaseMap == null) {
+            knowledgeBaseMap = new HashMap<>();
+        }
+        
+        int index = 1;
+        for (String knowledgeId : knowledgeIds) {
+            KnowledgeBase knowledgeBase = knowledgeBaseMap.get(knowledgeId);
+            if (knowledgeBase != null) {
+                prompt.append(index).append(". ").append(knowledgeBase.getName());
+                prompt.append(" (ID: ").append(knowledgeId).append(")");
+                
+                if (StringUtils.isNotEmpty(knowledgeBase.getDescription())) {
+                    prompt.append("\n   描述: ").append(knowledgeBase.getDescription());
+                }
+                prompt.append("\n\n");
+            } else {
+                // 如果 context 中没有，显示知识库ID（这种情况不应该发生，但作为兜底）
+                prompt.append(index).append(". 知识库 (ID: ").append(knowledgeId).append(")\n\n");
+            }
+            index++;
+        }
+    }
+    
+    /**
+     * 添加已检索的知识库信息到提示词
+     */
+    private void appendRetrievedKnowledgeInfo(StringBuilder prompt, AgentContext context) {
+        AgentKnowledgeResult knowledgeResult = context.getInitialRagResult();
+        if (knowledgeResult == null || knowledgeResult.isEmpty()) {
+            return;
+        }
+        
+        prompt.append("## 已检索的知识库信息\n\n");
+        prompt.append("以下是从知识库中已检索到的相关信息：\n\n");
+        
+        // 查询词
+        if (StringUtils.isNotEmpty(knowledgeResult.getQuery())) {
+            prompt.append("- 查询词: \"").append(knowledgeResult.getQuery()).append("\"\n");
+        }
+        
+        // 检索结果统计
+        int totalCount = knowledgeResult.getTotalCount() != null ? knowledgeResult.getTotalCount() : 0;
+        prompt.append("- 检索结果: 找到 ").append(totalCount).append(" 条相关文档\n");
+        
+        // 平均相关度
+        if (knowledgeResult.getAvgScore() != null) {
+            double avgScorePercent = knowledgeResult.getAvgScore() * 100;
+            prompt.append("- 平均相关度: ").append(String.format("%.1f%%", avgScorePercent)).append("\n");
+        }
+        
+        prompt.append("\n");
+        
+        // 相关文档列表
+        List<AgentKnowledgeDocument> documents = knowledgeResult.getDocuments();
+        if (documents != null && !documents.isEmpty()) {
+            prompt.append("- 相关文档:\n\n");
+            
+            // 从 context 中获取知识库信息（已批量加载）
+            Map<String, KnowledgeBase> knowledgeBaseMap = context.getKnowledgeBaseMap();
+            if (knowledgeBaseMap == null) {
+                knowledgeBaseMap = new HashMap<>();
+            }
+            
+            // 构建知识库ID到名称的映射（用于显示知识库名称）
+            Map<String, String> knowledgeBaseNameMap = new HashMap<>();
+            for (AgentKnowledgeDocument doc : documents) {
+                if (doc.getKnowledgeId() != null && !knowledgeBaseNameMap.containsKey(doc.getKnowledgeId())) {
+                    KnowledgeBase kb = knowledgeBaseMap.get(doc.getKnowledgeId());
+                    if (kb != null) {
+                        knowledgeBaseNameMap.put(doc.getKnowledgeId(), kb.getName());
+                    }
+                }
+            }
+            
+            // 列出每个文档
+            for (int i = 0; i < documents.size(); i++) {
+                AgentKnowledgeDocument doc = documents.get(i);
+                prompt.append("  ").append(i + 1).append(". ");
+                
+                // 文档名
+                if (StringUtils.isNotEmpty(doc.getDocName())) {
+                    prompt.append(doc.getDocName());
+                } else {
+                    prompt.append("文档");
+                }
+                
+                // 相关度
+                if (doc.getScore() != null) {
+                    double scorePercent = doc.getScore() * 100;
+                    prompt.append(" - 相关度: ").append(String.format("%.1f%%", scorePercent));
+                }
+                
+                prompt.append("\n");
+                
+                // 来源知识库
+                if (doc.getKnowledgeId() != null) {
+                    String kbName = knowledgeBaseNameMap.get(doc.getKnowledgeId());
+                    if (kbName != null) {
+                        prompt.append("     来源知识库: ").append(kbName);
+                    } else {
+                        prompt.append("     来源知识库: (ID: ").append(doc.getKnowledgeId()).append(")");
+                    }
+                    prompt.append("\n");
+                }
+                
+                // 文档内容（不截断）
+                if (StringUtils.isNotEmpty(doc.getContent())) {
+                    prompt.append("     ").append(doc.getContent()).append("\n");
+                }
+                
+                prompt.append("\n");
+            }
+        }
+        
+        prompt.append("\n");
     }
     
 }

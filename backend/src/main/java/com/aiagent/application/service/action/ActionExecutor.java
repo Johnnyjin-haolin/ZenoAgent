@@ -1,5 +1,6 @@
 package com.aiagent.application.service.action;
 
+import com.aiagent.application.model.AgentKnowledgeDocument;
 import com.aiagent.shared.constant.AgentConstants;
 import com.aiagent.domain.enums.AgentMode;
 import com.aiagent.application.service.StreamingCallback;
@@ -252,24 +253,16 @@ public class ActionExecutor {
             ragMessage += "...";
             sendProgressEvent(context, AgentConstants.EVENT_AGENT_RAG_QUERYING, ragMessage);
             
-            // 执行RAG检索
-            AgentKnowledgeResult knowledgeResult = ragEnhancer.retrieve(query, knowledgeIds);
-            
-            // 记录RAG检索历史
-            memorySystem.recordRAGRetrieve(context, query, knowledgeIds, 
-                knowledgeResult != null ? knowledgeResult.getTotalCount() : 0);
-            
+            // 执行RAG检索（传递 context，使用已加载的知识库信息）
+            AgentKnowledgeResult knowledgeResult = ragEnhancer.retrieve(query, context.getKnowledgeBaseMap());
             long duration = System.currentTimeMillis() - startTime;
-            
             // 构造出参字符串
             String output = formatRAGOutput(knowledgeResult);
             
             // 创建结果对象
             ActionResult result = ActionResult.success(action, output);
             result.setDuration(duration);
-            
             return result;
-            
         } catch (Exception e) {
             log.error("RAG检索失败", e);
             long duration = System.currentTimeMillis() - startTime;
@@ -576,8 +569,11 @@ public class ActionExecutor {
     /**
      * 截断字符串到指定长度
      */
-    private String truncate(String str, int maxLength) {
+    private String truncate(String str, Integer maxLength) {
         if (str == null) return "";
+        if (maxLength==null){
+            return str;
+        }
         if (str.length() <= maxLength) return str;
         return str.substring(0, maxLength) + "...";
     }
@@ -613,19 +609,15 @@ public class ActionExecutor {
         
         StringBuilder sb = new StringBuilder();
         sb.append("检索到").append(knowledgeResult.getTotalCount()).append("条知识：\n");
-        
-        // 展示前3个文档
-        int limit = Math.min(3, knowledgeResult.getDocuments().size());
-        for (int i = 0; i < limit; i++) {
+
+        // 展示文档
+        for (int i = 0; i < knowledgeResult.getDocuments().size(); i++) {
             var doc = knowledgeResult.getDocuments().get(i);
             sb.append("[").append(i + 1).append("] ");
             sb.append("标题：").append(doc.getDocName() != null ? doc.getDocName() : "未知").append("\n");
-            sb.append("    内容：").append(truncate(doc.getContent(), 200)).append("\n");
+            sb.append("    内容：").append(truncate(doc.getContent(), null)).append("\n");
         }
-        
-        if (knowledgeResult.getTotalCount() > limit) {
-            sb.append("...还有").append(knowledgeResult.getTotalCount() - limit).append("条");
-        }
+
         
         return sb.toString();
     }

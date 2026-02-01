@@ -42,5 +42,13 @@
         SELECT COUNT(*) > 0 FROM knowledge_base WHERE id = #{id}
     </select>
     
+    <select id="selectByIds" resultMap="BaseResultMap">
+        SELECT * FROM knowledge_base 
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+    
 </mapper>
 

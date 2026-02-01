@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -91,6 +92,13 @@ public class AgentContext implements Serializable {
     private List<String> knowledgeIds;
     
     /**
+     * 知识库信息映射（knowledgeId -> KnowledgeBase）
+     * 在初始化时批量加载，避免在 ThinkingEngine 中重复查询
+     */
+    @JsonIgnore
+    private Map<String, com.aiagent.domain.model.KnowledgeBase> knowledgeBaseMap;
+    
+    /**
      * 思考引擎配置
      * 用于控制提示词构建时的历史长度、截断等行为
      */
@@ -117,13 +125,13 @@ public class AgentContext implements Serializable {
      * 事件发布器（用于向前端发送进度事件，不需要序列化）
      */
     @JsonIgnore
-    private transient java.util.function.Consumer<AgentEventData> eventPublisher;
+    private transient Consumer<AgentEventData> eventPublisher;
     
     /**
      * 初始 RAG 检索结果（仅在第一次请求时使用，不序列化）
      */
     @JsonIgnore
-    private transient com.aiagent.application.model.AgentKnowledgeResult initialRagResult;
+    private transient AgentKnowledgeResult initialRagResult;
     
     /**
      * 从 ChatMessage 列表设置消息（自动转换为DTO）

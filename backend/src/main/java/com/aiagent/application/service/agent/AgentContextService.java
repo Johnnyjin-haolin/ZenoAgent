@@ -47,6 +47,9 @@ public class AgentContextService {
     private com.aiagent.application.service.rag.RAGEnhancer ragEnhancer;
     
     @Autowired
+    private com.aiagent.application.service.rag.KnowledgeBaseService knowledgeBaseService;
+    
+    @Autowired
     private MessageMapper messageMapper;
 
     public String normalizeConversationId(String conversationId) {
@@ -77,6 +80,13 @@ public class AgentContextService {
         }
         if (request.getKnowledgeIds() != null) {
             context.setKnowledgeIds(request.getKnowledgeIds());
+            // 批量加载知识库信息并存储到 context
+            if (!request.getKnowledgeIds().isEmpty()) {
+                Map<String, com.aiagent.domain.model.KnowledgeBase> knowledgeBaseMap = 
+                    knowledgeBaseService.getKnowledgeBasesByIds(request.getKnowledgeIds());
+                context.setKnowledgeBaseMap(knowledgeBaseMap);
+                log.debug("批量加载知识库信息: count={}", knowledgeBaseMap.size());
+            }
         }
         if (request.getEnabledMcpGroups() != null) {
             context.setEnabledMcpGroups(request.getEnabledMcpGroups());
@@ -161,16 +171,9 @@ public class AgentContextService {
                 .conversationId(context.getConversationId())
                 .build());
 
-            AgentKnowledgeResult ragResult = ragEnhancer.retrieve(query, knowledgeIds);
+            AgentKnowledgeResult ragResult = ragEnhancer.retrieve(query, context.getKnowledgeBaseMap());
 
             if (ragResult != null && ragResult.isNotEmpty()) {
-                memorySystem.recordRAGRetrieve(
-                    context,
-                    query,
-                    knowledgeIds,
-                    ragResult.getTotalCount()
-                );
-
                 context.setInitialRagResult(ragResult);
 
                 eventPublisher.accept(AgentEventData.builder()

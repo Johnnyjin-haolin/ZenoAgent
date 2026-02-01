@@ -43,5 +43,10 @@ public interface KnowledgeBaseMapper {
      * 检查是否存在
      */
     boolean existsById(@Param("id") String id);
+    
+    /**
+     * 批量根据ID查询知识库
+     */
+    List<KnowledgeBaseEntity> selectByIds(@Param("ids") List<String> ids);
 }
 

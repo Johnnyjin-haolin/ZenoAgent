@@ -303,7 +303,7 @@ public class MemorySystem {
     }
     
     /**
-     * 记录RAG检索历史
+     * 记录RAG检索历史 todo 这些方法不适合放在记忆系统中，需要搞清楚记忆系统定位是什么
      * 
      * @param context Agent上下文
      * @param query 查询文本
