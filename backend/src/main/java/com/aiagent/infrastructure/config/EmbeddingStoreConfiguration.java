@@ -2,13 +2,12 @@ package com.aiagent.infrastructure.config;
 
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
+import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.pgvector.PgVectorEmbeddingStore;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Lazy;
 
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -27,6 +26,12 @@ public class EmbeddingStoreConfiguration {
      * Key: modelId + connectionInfo
      */
     private static final ConcurrentHashMap<String, EmbeddingStore<TextSegment>> EMBED_STORE_CACHE = new ConcurrentHashMap<>();
+    
+    /**
+     * 维度缓存（避免重复调用 dimension() API）
+     * Key: modelId + modelName + baseUrl
+     */
+    private static final ConcurrentHashMap<String, Integer> DIMENSION_CACHE = new ConcurrentHashMap<>();
     
     @Autowired
     private AgentConfig agentConfig;
@@ -50,8 +55,28 @@ public class EmbeddingStoreConfiguration {
             return EMBED_STORE_CACHE.get(key);
         }
         
-        // 创建新的EmbeddingStore
-        int dimension = embeddingModel.dimension();
+        // 尝试从缓存获取维度（避免重复调用 API）
+        String dimensionCacheKey = buildDimensionCacheKey(embeddingModel, modelId);
+        Integer cachedDimension = DIMENSION_CACHE.get(dimensionCacheKey);
+        
+        int dimension;
+        if (cachedDimension != null) {
+            log.debug("从缓存获取维度: dimension={}", cachedDimension);
+            dimension = cachedDimension;
+        } else {
+            log.info("调用 embeddingModel.dimension() 获取向量维度...");
+            try {
+                dimension = embeddingModel.dimension();
+                log.info("成功获取维度: dimension={}", dimension);
+                
+                // 缓存维度信息
+                DIMENSION_CACHE.put(dimensionCacheKey, dimension);
+            } catch (Exception e) {
+                log.error("获取维度失败: {}", e.getMessage(), e);
+                throw e;
+            }
+        }
+        
         String tableName = config.getTable();
         
         // 如果维度不是默认的，加上维度后缀
@@ -97,7 +122,26 @@ public class EmbeddingStoreConfiguration {
      */
     public void clearCache() {
         EMBED_STORE_CACHE.clear();
-        log.info("EmbeddingStore cache cleared");
+        DIMENSION_CACHE.clear();
+        log.info("EmbeddingStore 和 Dimension 缓存已清除");
+    }
+    
+    /**
+     * 构建维度缓存的 key
+     * 使用 modelId + modelName 作为唯一标识
+     */
+    private String buildDimensionCacheKey(EmbeddingModel embeddingModel, String modelId) {
+        StringBuilder key = new StringBuilder();
+        key.append(modelId != null ? modelId : "default");
+        
+        if (embeddingModel instanceof OpenAiEmbeddingModel) {
+            OpenAiEmbeddingModel openAiModel = (OpenAiEmbeddingModel) embeddingModel;
+            key.append(":").append(openAiModel.modelName());
+        } else {
+            key.append(":").append(embeddingModel.getClass().getName());
+        }
+        
+        return key.toString();
     }
 }
 

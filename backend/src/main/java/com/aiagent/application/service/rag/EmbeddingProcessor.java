@@ -1,6 +1,5 @@
 package com.aiagent.application.service.rag;
 
-import com.aiagent.infrastructure.config.AgentConfig;
 import com.aiagent.infrastructure.config.EmbeddingStoreConfiguration;
 import com.aiagent.domain.model.Document;
 import com.aiagent.infrastructure.external.llm.EmbeddingModelManager;
@@ -57,9 +56,6 @@ public class EmbeddingProcessor {
      * 默认重叠大小
      */
     private static final int DEFAULT_OVERLAP_SIZE = 50;
-    
-    @Autowired
-    private AgentConfig agentConfig;
     
     @Autowired
     private EmbeddingStoreConfiguration embeddingStoreConfiguration;

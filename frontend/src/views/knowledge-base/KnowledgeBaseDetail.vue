@@ -59,6 +59,7 @@
         </a-space>
       </template>
       <DocumentList
+        ref="documentListRef"
         :knowledge-base-id="knowledgeBaseId"
         @refresh="handleDocumentRefresh"
       />
@@ -112,6 +113,9 @@ const knowledgeBaseId = computed(() => route.params.id as string);
 const knowledgeBase = ref<KnowledgeBase | null>(null);
 const loading = ref(false);
 
+// DocumentList 组件引用
+const documentListRef = ref<InstanceType<typeof DocumentList>>();
+
 // 弹窗状态
 const formVisible = ref(false);
 const showUploadModal = ref(false);
@@ -156,13 +160,15 @@ const handleFormSuccess = () => {
 // 文档上传成功回调
 const handleUploadSuccess = () => {
   showUploadModal.value = false;
-  // DocumentList组件会自动刷新
+  // 刷新文档列表
+  documentListRef.value?.refresh();
 };
 
 // 文本文档创建成功回调
 const handleTextCreateSuccess = () => {
   showTextEditor.value = false;
-  // DocumentList组件会自动刷新
+  // 刷新文档列表
+  documentListRef.value?.refresh();
 };
 
 // 文档刷新回调（可以触发统计信息刷新）

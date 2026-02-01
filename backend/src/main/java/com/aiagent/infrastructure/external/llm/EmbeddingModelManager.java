@@ -2,12 +2,15 @@ package com.aiagent.infrastructure.external.llm;
 
 import com.aiagent.infrastructure.config.AgentConfig;
 import com.aiagent.domain.enums.ModelType;
+import dev.langchain4j.http.client.jdk.JdkHttpClientBuilder;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.net.http.HttpClient;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
@@ -153,19 +156,47 @@ public class EmbeddingModelManager {
             log.warn("模型 {} 未指定 modelName，使用 id 作为模型名称: {}", modelDef.getId(), modelName);
         }
         
+        // 解析超时时间
+        int timeoutSeconds = resolveTimeoutSeconds(modelDef);
+        
+        // 计算连接超时（通常比请求超时短一些）
+        int connectTimeoutSeconds = Math.min(30, timeoutSeconds / 2);
+        if (connectTimeoutSeconds < 10) {
+            connectTimeoutSeconds = 10; // 最少10秒连接超时
+        }
+        
         // 所有提供商都使用OpenAI兼容接口
         switch (provider) {
             case "OPENAI":
             default:
                 // 所有OpenAI兼容接口的提供商都使用OpenAiEmbeddingModel
-                log.info("创建 Embedding 模型: provider={}, modelId={}, modelName={}, baseUrl={}", 
-                    provider, modelDef.getId(), modelName, baseUrl);
+                // 显式配置 HTTP 客户端，确保超时设置生效
                 return OpenAiEmbeddingModel.builder()
+                    .httpClientBuilder(new JdkHttpClientBuilder()
+                        .httpClientBuilder(HttpClient.newBuilder()
+                            .connectTimeout(Duration.ofSeconds(connectTimeoutSeconds))
+                            .version(HttpClient.Version.HTTP_1_1)))
                     .apiKey(modelDef.getApiKey())
                     .baseUrl(baseUrl)
                     .modelName(modelName)
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
                     .build();
         }
+    }
+    
+    /**
+     * 解析超时时间（秒）
+     * 优先级：模型配置 > 全局配置 > 默认值（120秒）
+     * 
+     * @param modelDef 模型定义
+     * @return 超时时间（秒）
+     */
+    private int resolveTimeoutSeconds(AgentConfig.LLMConfig.ModelDefinition modelDef) {
+        if (modelDef.getTimeoutSeconds() != null && modelDef.getTimeoutSeconds() > 0) {
+            return modelDef.getTimeoutSeconds();
+        }
+        int globalTimeout = agentConfig.getLlm().getTimeoutSeconds();
+        return globalTimeout > 0 ? globalTimeout : 120;
     }
     
     /**
