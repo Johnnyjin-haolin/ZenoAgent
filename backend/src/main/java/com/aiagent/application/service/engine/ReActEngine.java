@@ -155,6 +155,14 @@ public class ReActEngine {
             } catch (Exception e) {
                 log.error("ReAct循环执行异常", e);
                 stateMachine.transition(AgentState.FAILED);
+                // 【关键1】发送错误事件
+                try {
+                    sendProgressEvent(context, AgentConstants.EVENT_AGENT_ERROR,
+                        String.format("第%d轮推理执行失败: %s", iteration, e.getMessage()));
+                } catch (Exception sendErrorEx) {
+                    log.error("发送错误事件失败", sendErrorEx);
+                }
+
                 long totalDurationMs = elapsedMs(totalStartNs);
                 AgentState finalState = stateMachine.getCurrentState();
                 // 即使失败，也返回已有的消息

@@ -558,6 +558,31 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         onComplete: (event) => {
           console.log('任务完成:', event);
           updateConversationId(event);
+          
+          // 【新增】兜底：强制完成所有running状态的迭代和步骤
+          if (assistantMessage.process && assistantMessage.process.iterations) {
+            assistantMessage.process.iterations.forEach((iter: any) => {
+              if (iter.status === 'running') {
+                console.warn(`⚠️ 发现未完成的迭代 ${iter.iterationNumber}，强制标记为completed`);
+                
+                // 完成所有运行中的步骤
+                iter.steps?.forEach((step: any) => {
+                  if (step.status === 'running') {
+                    step.status = 'success';
+                    step.endTime = Date.now();
+                    step.duration = step.startTime ? step.endTime - step.startTime : undefined;
+                  }
+                });
+                
+                // 标记迭代完成
+                iter.status = 'completed';
+                iter.endTime = Date.now();
+                iter.totalDuration = iter.endTime - iter.startTime;
+                iter.collapsed = true;
+              }
+            });
+          }
+          
           assistantMessage.status = 'done';
           assistantMessage.statusText = '';
           assistantMessage.loading = false;
