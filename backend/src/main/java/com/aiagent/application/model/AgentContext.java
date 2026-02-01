@@ -102,7 +102,15 @@ public class AgentContext implements Serializable {
      * 思考引擎配置
      * 用于控制提示词构建时的历史长度、截断等行为
      */
+    @JsonIgnore
     private com.aiagent.api.dto.ThinkingConfig thinkingConfig;
+    
+    /**
+     * RAG配置
+     * 用于控制知识库检索的参数（检索数量、相似度阈值、内容长度限制等）
+     */
+    @JsonIgnore
+    private com.aiagent.api.dto.RAGConfig ragConfig;
 
     /**
      * 用户名

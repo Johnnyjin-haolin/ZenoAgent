@@ -59,10 +59,12 @@
       v-model:selectedTools="selectedTools"
       v-model:executionMode="executionMode"
       v-model:thinkingConfig="thinkingConfig"
+      v-model:ragConfig="ragConfig"
       @model-change="handleModelChange"
       @knowledge-change="handleKnowledgeChange"
       @tools-change="handleToolsChange"
       @thinking-config-change="handleThinkingConfigChange"
+      @rag-config-change="handleRagConfigChange"
     />
 
   </div>
@@ -84,8 +86,8 @@ import ChatInput from './components/ChatInput.vue';
 import ChatMessages from './components/ChatMessages.vue';
 import AgentSlide from './components/AgentSlide.vue';
 import { AGENT_CONFIG_STORAGE_KEY } from './agent.constants';
-import type { ModelInfo, KnowledgeInfo, ThinkingConfig } from './agent.types';
-import { DEFAULT_THINKING_CONFIG } from './agent.types';
+import type { ModelInfo, KnowledgeInfo, ThinkingConfig, RAGConfig } from './agent.types';
+import { DEFAULT_THINKING_CONFIG, DEFAULT_RAG_CONFIG } from './agent.types';
 import { ModelType } from '@/types/model.types';
 import type { BrandConfig } from './hooks/useBrandConfig';
 
@@ -122,7 +124,15 @@ const executionMode = ref<'AUTO' | 'MANUAL'>('AUTO');
 const thinkingConfig = ref<ThinkingConfig>({
   conversationHistoryRounds: DEFAULT_THINKING_CONFIG.conversationHistoryRounds,
   maxMessageLength: DEFAULT_THINKING_CONFIG.maxMessageLength,
-  toolCallHistoryCount: DEFAULT_THINKING_CONFIG.toolCallHistoryCount,
+  actionExecutionHistoryCount: DEFAULT_THINKING_CONFIG.actionExecutionHistoryCount,
+});
+const ragConfig = ref<RAGConfig>({
+  maxResults: DEFAULT_RAG_CONFIG.maxResults,
+  minScore: DEFAULT_RAG_CONFIG.minScore,
+  maxDocumentLength: DEFAULT_RAG_CONFIG.maxDocumentLength,
+  maxTotalContentLength: DEFAULT_RAG_CONFIG.maxTotalContentLength,
+  includeInPrompt: DEFAULT_RAG_CONFIG.includeInPrompt,
+  enableSmartSummary: DEFAULT_RAG_CONFIG.enableSmartSummary,
 });
 const isConfigInitialized = ref(false);
 
@@ -328,6 +338,7 @@ const handleSend = async () => {
     enabledTools: selectedTools.value,
     mode: executionMode.value,
     thinkingConfig: thinkingConfig.value,
+    ragConfig: ragConfig.value,
   });
   
   // 滚动到底部
@@ -371,6 +382,10 @@ const handleToolsChange = (tools: string[]) => {
 
 const handleThinkingConfigChange = (config: ThinkingConfig) => {
   console.log('思考引擎配置变更:', config);
+};
+
+const handleRagConfigChange = (config: RAGConfig) => {
+  console.log('RAG配置变更:', config);
 };
 
 // 初始化

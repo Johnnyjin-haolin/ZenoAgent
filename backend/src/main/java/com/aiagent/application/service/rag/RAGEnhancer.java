@@ -1,11 +1,11 @@
 package com.aiagent.application.service.rag;
 
+import com.aiagent.api.dto.RAGConfig;
 import com.aiagent.infrastructure.config.EmbeddingStoreConfiguration;
 import com.aiagent.domain.model.KnowledgeBase;
 import com.aiagent.infrastructure.repository.KnowledgeBaseRepository;
 import com.aiagent.infrastructure.external.llm.EmbeddingModelManager;
 import com.aiagent.shared.util.StringUtils;
-import com.aiagent.application.model.AgentContext;
 import com.aiagent.application.model.AgentKnowledgeDocument;
 import com.aiagent.application.model.AgentKnowledgeResult;
 import dev.langchain4j.data.embedding.Embedding;
@@ -17,7 +17,6 @@ import dev.langchain4j.store.embedding.EmbeddingSearchResult;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -40,22 +39,6 @@ import static dev.langchain4j.store.embedding.filter.MetadataFilterBuilder.metad
 @Component
 public class RAGEnhancer {
     
-    /**
-     * 默认检索数量
-     */
-    private static final int DEFAULT_TOP_K = 5;
-    
-    /**
-     * 默认相似度阈值
-     */
-    private static final double DEFAULT_MIN_SCORE = 0.5;
-    
-    @Value("${aiagent.rag.default-top-k:5}")
-    private int defaultTopK;
-    
-    @Value("${aiagent.rag.default-min-score:0.5}")
-    private double defaultMinScore;
-    
     @Autowired
     private EmbeddingStoreConfiguration embeddingStoreConfiguration;
     
@@ -77,7 +60,7 @@ public class RAGEnhancer {
      * @param knowledgeIds 知识库ID列表
      * @return Agent领域模型的检索结果
      */
-    public AgentKnowledgeResult retrieve(String query, List<String> knowledgeIds) {
+    public AgentKnowledgeResult retrieve(String query, List<String> knowledgeIds,RAGConfig ragConfig) {
         log.info("开始RAG检索，查询: {}, 知识库数量: {}", query, 
                  knowledgeIds != null ? knowledgeIds.size() : 0);
         
@@ -101,7 +84,7 @@ public class RAGEnhancer {
         log.debug("查询到知识库信息: count={}", knowledgeBaseMap.size());
         
         // 调用核心检索方法
-        return retrieve(query, knowledgeBaseMap);
+        return retrieve(query, knowledgeBaseMap,ragConfig);
     }
     
 
@@ -109,12 +92,12 @@ public class RAGEnhancer {
      * 检索相关知识（使用已查询的知识库信息）
      * 
      * 这是RAG检索的核心方法，接收已查询好的知识库信息，执行实际的检索逻辑
-     * 
+     * @param ragConfig RAG配置
      * @param query 查询文本
      * @param knowledgeBaseMap 知识库映射（knowledgeId -> KnowledgeBase），已查询好的知识库信息
      * @return Agent领域模型的检索结果
      */
-    public AgentKnowledgeResult retrieve(String query, Map<String, KnowledgeBase> knowledgeBaseMap) {
+    public AgentKnowledgeResult retrieve(String query, Map<String, KnowledgeBase> knowledgeBaseMap,RAGConfig ragConfig) {
         log.info("执行RAG检索，查询: {}, 知识库数量: {}", query, 
                  knowledgeBaseMap != null ? knowledgeBaseMap.size() : 0);
         
@@ -125,12 +108,7 @@ public class RAGEnhancer {
         
         if (knowledgeBaseMap == null || knowledgeBaseMap.isEmpty()) {
             log.warn("知识库信息为空，返回空结果");
-            return AgentKnowledgeResult.builder()
-                .query(query)
-                .documents(new ArrayList<>())
-                .totalCount(0)
-                .summary("")
-                .build();
+            return createEmptyResult(query);
         }
         
         // 提取知识库ID列表
@@ -148,12 +126,16 @@ public class RAGEnhancer {
             // 2. 生成查询向量
             Embedding queryEmbedding = model.embed(query).content();
             
-            // 3. 从存储中检索相似文档（支持多知识库）
-            //todo 这里我希望知识库是可以在前端配置这些参数的
-            int maxResults = defaultTopK > 0 ? defaultTopK : DEFAULT_TOP_K;
-            double minScore = defaultMinScore > 0 ? defaultMinScore : DEFAULT_MIN_SCORE;
+            // 3. 使用配置参数
+            int maxResults = ragConfig.getMaxResultsOrDefault();
+            double minScore = ragConfig.getMinScoreOrDefault();
             
-            // 合并所有知识库的检索结果
+            log.info("RAG配置: maxResults={}, minScore={}, maxDocLength={}, maxTotalLength={}", 
+                maxResults, minScore, 
+                ragConfig.hasDocumentLengthLimit() ? ragConfig.getMaxDocumentLength() : "无限制",
+                ragConfig.hasTotalContentLengthLimit() ? ragConfig.getMaxTotalContentLength() : "无限制");
+            
+            // 4. 合并所有知识库的检索结果
             List<EmbeddingMatch<TextSegment>> allMatches = new ArrayList<>();
             
             for (String knowledgeId : knowledgeIds) {
@@ -187,20 +169,30 @@ public class RAGEnhancer {
                 }
             }
             
-            // 按分数排序并取前N个
+            // 5. 按分数排序并取前N个
             List<EmbeddingMatch<TextSegment>> matches = allMatches.stream()
                     .sorted((a, b) -> Double.compare(b.score(), a.score()))
                     .limit(maxResults)
                     .collect(Collectors.toList());
             
-            // 5. 转换为AgentKnowledgeResult
-            return convertToKnowledgeResult(query, matches, knowledgeIds);
+            // 6. 转换为AgentKnowledgeResult
+            AgentKnowledgeResult result = convertToKnowledgeResult(query, matches, knowledgeIds);
+            
+            // 7. 应用文档长度限制（如果配置了）
+            if (ragConfig.hasDocumentLengthLimit() || ragConfig.hasTotalContentLengthLimit()) {
+                result = applyLengthLimits(result, ragConfig);
+            } else {
+                log.info("未配置文档长度限制，保留完整内容");
+            }
+            
+            return result;
             
         } catch (Exception e) {
             log.error("RAG检索失败", e);
             return createEmptyResult(query);
         }
     }
+
     
     /**
      * 构建增强提示词
@@ -417,5 +409,114 @@ public class RAGEnhancer {
         }
         
         return summary.toString();
+    }
+    
+    /**
+     * 应用文档长度限制
+     * 支持null表示无限制
+     * 
+     * @param result 原始检索结果
+     * @param ragConfig RAG配置
+     * @return 应用长度限制后的结果
+     */
+    private AgentKnowledgeResult applyLengthLimits(
+            AgentKnowledgeResult result, 
+            com.aiagent.api.dto.RAGConfig ragConfig) {
+        
+        if (result == null || result.getDocuments() == null || result.getDocuments().isEmpty()) {
+            return result;
+        }
+        
+        List<AgentKnowledgeDocument> documents = result.getDocuments();
+        List<AgentKnowledgeDocument> processedDocs = new ArrayList<>();
+        int totalLength = 0;
+        
+        // 获取限制参数
+        Integer maxDocLength = ragConfig.getMaxDocumentLength();
+        Integer maxTotalLength = ragConfig.getMaxTotalContentLength();
+        boolean hasDocLimit = maxDocLength != null && maxDocLength > 0;
+        boolean hasTotalLimit = maxTotalLength != null && maxTotalLength > 0;
+        
+        log.debug("应用长度限制: 单文档限制={}, 总长度限制={}", 
+            hasDocLimit ? maxDocLength : "无限制", 
+            hasTotalLimit ? maxTotalLength : "无限制");
+        
+        for (AgentKnowledgeDocument doc : documents) {
+            String content = doc.getContent();
+            if (content == null) {
+                processedDocs.add(doc);
+                continue;
+            }
+            
+            int originalLength = content.length();
+            
+            // 1. 应用单文档长度限制
+            if (hasDocLimit && maxDocLength != null && content.length() > maxDocLength) {
+                content = content.substring(0, maxDocLength) + "...";
+                log.debug("文档被截断: {} -> {} 字符", originalLength, maxDocLength);
+            }
+            
+            // 2. 应用总长度限制
+            if (hasTotalLimit && maxTotalLength != null) {
+                if (totalLength >= maxTotalLength) {
+                    log.debug("已达总长度限制 {}，跳过剩余文档", maxTotalLength);
+                    break;
+                }
+                
+                if (totalLength + content.length() > maxTotalLength) {
+                    int remaining = maxTotalLength - totalLength;
+                    if (remaining > 100) { // 至少保留100字符
+                        content = content.substring(0, remaining) + "...";
+                        log.debug("文档因总长度限制被截断: {} 字符", remaining);
+                    } else {
+                        log.debug("剩余空间不足100字符，跳过此文档");
+                        break;
+                    }
+                }
+            }
+            
+            // 创建新的文档对象（避免修改原对象）
+            AgentKnowledgeDocument processedDoc = AgentKnowledgeDocument.builder()
+                .content(content)
+                .score(doc.getScore())
+                .docName(doc.getDocName())
+                .docId(doc.getDocId())
+                .knowledgeId(doc.getKnowledgeId())
+                .metadata(doc.getMetadata())
+                .build();
+            
+            processedDocs.add(processedDoc);
+            totalLength += content.length();
+        }
+        
+        log.info("长度限制应用完成: 原文档数={}, 处理后文档数={}, 总字符数={}", 
+            documents.size(), processedDocs.size(), totalLength);
+        
+        // 重新计算统计信息
+        double totalScore = 0.0;
+        double maxScore = 0.0;
+        double minScore = 1.0;
+        
+        for (AgentKnowledgeDocument doc : processedDocs) {
+            if (doc.getScore() != null) {
+                double score = doc.getScore();
+                totalScore += score;
+                maxScore = Math.max(maxScore, score);
+                minScore = Math.min(minScore, score);
+            }
+        }
+        
+        double avgScore = processedDocs.isEmpty() ? 0.0 : totalScore / processedDocs.size();
+        
+        // 重新构建结果
+        return AgentKnowledgeResult.builder()
+            .query(result.getQuery())
+            .documents(processedDocs)
+            .totalCount(processedDocs.size())
+            .summary(result.getSummary())
+            .avgScore(avgScore)
+            .maxScore(maxScore)
+            .minScore(minScore > 1.0 ? 0.0 : minScore)
+            .build();
     }
 }

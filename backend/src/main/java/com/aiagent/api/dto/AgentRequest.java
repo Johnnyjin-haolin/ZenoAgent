@@ -64,6 +64,12 @@ public class AgentRequest {
      * 用于控制提示词构建时的历史长度、截断等行为
      */
     private ThinkingConfig thinkingConfig;
+    
+    /**
+     * RAG配置（可选，不传则使用默认值）
+     * 用于控制知识库检索的参数（检索数量、相似度阈值、内容长度限制等）
+     */
+    private RAGConfig ragConfig;
 }
 
 

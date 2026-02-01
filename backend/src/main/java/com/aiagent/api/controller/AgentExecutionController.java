@@ -4,6 +4,7 @@ import com.aiagent.shared.response.ErrorCode;
 import com.aiagent.application.service.agent.IAgentService;
 import com.aiagent.api.dto.AgentRequest;
 import com.aiagent.shared.response.Result;
+import dev.langchain4j.internal.Json;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -34,7 +35,26 @@ public class AgentExecutionController {
      */
     @PostMapping("/execute")
     public SseEmitter execute(@RequestBody AgentRequest request) {
-        log.info("收到Agent执行请求: {}", request.getContent());
+        log.info("收到Agent执行请求: {}", Json.toJson(request));
+        
+        // 详细调试信息
+        if (request.getRagConfig() != null) {
+            log.info("RAG配置详情: maxResults={}, minScore={}, maxDocumentLength={}, maxTotalContentLength={}, includeInPrompt={}, enableSmartSummary={}",
+                request.getRagConfig().getMaxResults(),
+                request.getRagConfig().getMinScore(),
+                request.getRagConfig().getMaxDocumentLength(),
+                request.getRagConfig().getMaxTotalContentLength(),
+                request.getRagConfig().getIncludeInPrompt(),
+                request.getRagConfig().getEnableSmartSummary());
+        }
+        
+        if (request.getThinkingConfig() != null) {
+            log.info("思考配置详情: conversationHistoryRounds={}, maxMessageLength={}, actionExecutionHistoryCount={}",
+                request.getThinkingConfig().getConversationHistoryRounds(),
+                request.getThinkingConfig().getMaxMessageLength(),
+                request.getThinkingConfig().getActionExecutionHistoryCount());
+        }
+        
         return agentService.execute(request);
     }
 

@@ -254,7 +254,7 @@ public class ActionExecutor {
             sendProgressEvent(context, AgentConstants.EVENT_AGENT_RAG_QUERYING, ragMessage);
             
             // 执行RAG检索（传递 context，使用已加载的知识库信息）
-            AgentKnowledgeResult knowledgeResult = ragEnhancer.retrieve(query, context.getKnowledgeBaseMap());
+            AgentKnowledgeResult knowledgeResult = ragEnhancer.retrieve(query, context.getKnowledgeBaseMap(),context.getRagConfig());
             long duration = System.currentTimeMillis() - startTime;
             // 构造出参字符串
             String output = formatRAGOutput(knowledgeResult);

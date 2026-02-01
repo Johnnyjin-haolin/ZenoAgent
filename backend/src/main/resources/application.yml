@@ -115,8 +115,6 @@ aiagent:
     max-context-window: 20
   
   rag:
-    default-top-k: 5
-    default-min-score: 0.5
     # 默认 Embedding 模型ID（从 llm.models 中选择，必须是 type: EMBEDDING 的模型）
     default-embedding-model-id: text-embedding-3-small
     # 向量存储配置（PostgreSQL + pgvector）

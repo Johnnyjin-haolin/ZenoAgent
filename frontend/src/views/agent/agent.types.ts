@@ -12,8 +12,8 @@ export interface ThinkingConfig {
   conversationHistoryRounds?: number;
   /** 单条消息最大长度（默认200字符，超过截断） */
   maxMessageLength?: number;
-  /** 工具调用历史数量（默认2次，最近的N次调用） */
-  toolCallHistoryCount?: number;
+  /** 动作执行历史轮数（默认2轮，最近的N轮迭代） */
+  actionExecutionHistoryCount?: number;
 }
 
 /**
@@ -22,7 +22,37 @@ export interface ThinkingConfig {
 export const DEFAULT_THINKING_CONFIG: Required<ThinkingConfig> = {
   conversationHistoryRounds: 3,
   maxMessageLength: 200,
-  toolCallHistoryCount: 2,
+  actionExecutionHistoryCount: 2,
+};
+
+/**
+ * RAG配置
+ */
+export interface RAGConfig {
+  /** 最大检索文档数量（默认3） */
+  maxResults?: number;
+  /** 最小相似度分数（默认0.5，范围0-1） */
+  minScore?: number;
+  /** 单个文档最大字符数（null或不传表示无限制） */
+  maxDocumentLength?: number | null;
+  /** 所有文档总长度限制（null或不传表示无限制） */
+  maxTotalContentLength?: number | null;
+  /** 是否在提示词中包含RAG结果（默认true） */
+  includeInPrompt?: boolean;
+  /** 是否启用智能摘要（默认false，实验性） */
+  enableSmartSummary?: boolean;
+}
+
+/**
+ * RAG配置的默认值
+ */
+export const DEFAULT_RAG_CONFIG: RAGConfig = {
+  maxResults: 3,
+  minScore: 0.5,
+  maxDocumentLength: 1000,  // 默认限制
+  maxTotalContentLength: 3000,  // 默认限制
+  includeInPrompt: true,
+  enableSmartSummary: false,
 };
 
 /**
@@ -45,6 +75,8 @@ export interface AgentRequest {
   mode?: 'AUTO' | 'MANUAL';
   /** 思考引擎配置（可选，不传则使用默认值） */
   thinkingConfig?: ThinkingConfig;
+  /** RAG配置（可选，不传则使用默认值） */
+  ragConfig?: RAGConfig;
   /** 自定义上下文参数 */
   context?: Record<string, any>;
 }

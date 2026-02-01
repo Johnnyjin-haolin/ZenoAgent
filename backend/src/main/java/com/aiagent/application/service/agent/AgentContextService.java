@@ -105,6 +105,18 @@ public class AgentContextService {
             context.setThinkingConfig(com.aiagent.api.dto.ThinkingConfig.builder().build());
         }
         
+        // 设置RAG配置（如果前端传入）
+        if (request.getRagConfig() != null) {
+            context.setRagConfig(request.getRagConfig());
+            log.debug("使用前端传入的RAG配置: maxResults={}, minScore={}", 
+                request.getRagConfig().getMaxResults(), 
+                request.getRagConfig().getMinScore());
+        } else {
+            // 如果前端未传入，使用默认配置
+            context.setRagConfig(com.aiagent.api.dto.RAGConfig.builder().build());
+            log.debug("使用默认RAG配置");
+        }
+        
         // 加载历史对话消息（如果 messages 为空）
         if (context.getMessages() == null || context.getMessages().isEmpty()) {
             loadHistoryMessages(context, conversationId);
@@ -171,7 +183,7 @@ public class AgentContextService {
                 .conversationId(context.getConversationId())
                 .build());
 
-            AgentKnowledgeResult ragResult = ragEnhancer.retrieve(query, context.getKnowledgeBaseMap());
+            AgentKnowledgeResult ragResult = ragEnhancer.retrieve(query, context.getKnowledgeBaseMap(),context.getRagConfig());
 
             if (ragResult != null && ragResult.isNotEmpty()) {
                 context.setInitialRagResult(ragResult);

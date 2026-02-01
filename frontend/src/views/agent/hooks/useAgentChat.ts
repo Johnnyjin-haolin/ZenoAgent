@@ -18,6 +18,7 @@ import type {
   PlanInfo,
   ProcessSubStep,
   ThinkingConfig,
+  RAGConfig,
 } from '../agent.types';
 
 export interface UseAgentChatOptions {
@@ -196,6 +197,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       enabledTools?: string[];
       mode?: 'AUTO' | 'MANUAL';
       thinkingConfig?: ThinkingConfig;
+      ragConfig?: RAGConfig;
       images?: string[];
     } = {}
   ) => {
@@ -260,6 +262,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       enabledTools: options.enabledTools || defaultEnabledTools,
       mode: options.mode || 'AUTO',
       thinkingConfig: options.thinkingConfig,
+      ragConfig: options.ragConfig,
     };
 
     try {

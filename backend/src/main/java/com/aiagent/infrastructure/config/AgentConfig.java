@@ -133,9 +133,6 @@ public class AgentConfig {
     
     @Data
     public static class RAGConfig {
-        private int defaultTopK = 5;
-        private double defaultMinScore = 0.5;
-        
         /**
          * 默认 Embedding 模型ID（从 llm.models 中选择）
          */
