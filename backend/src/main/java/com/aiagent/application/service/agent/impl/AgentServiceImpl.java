@@ -65,8 +65,6 @@ public class AgentServiceImpl implements IAgentService {
     
     @Override
     //todo 前端UI界面参照Google的炫酷画面
-
-    //todo 已经经过多个迭代，但是前端还是显示第一次推理
     public SseEmitter execute(AgentRequest request) {
         log.info("开始执行Agent任务（ReAct架构）: {}", request.getContent());
         

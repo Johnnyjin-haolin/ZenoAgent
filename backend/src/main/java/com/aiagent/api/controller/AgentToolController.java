@@ -29,7 +29,7 @@ public class AgentToolController {
         if (request == null || request.getToolExecutionId() == null || request.getApprove() == null) {
             throw new IllegalArgumentException("参数不完整");
         }
-        boolean success = Boolean.TRUE.equals(request.getApprove())
+        boolean success = request.getApprove()
             ? toolConfirmationManager.approve(request.getToolExecutionId())
             : toolConfirmationManager.reject(request.getToolExecutionId());
 

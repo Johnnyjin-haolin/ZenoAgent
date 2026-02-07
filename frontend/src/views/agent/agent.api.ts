@@ -35,14 +35,8 @@ export enum AgentApi {
   conversation = '/aiagent/conversation',
   /** 更新会话标题 */
   conversationTitle = '/aiagent/conversation/title',
-  /** 归档会话 */
-  conversationArchive = '/aiagent/conversations/archive',
   /** 会话消息列表 */
   conversationMessages = '/aiagent/conversation/{id}/messages',
-  /** 枚举查询 */
-  enumMessageRoles = '/aiagent/enums/message-roles',
-  enumMessageStatus = '/aiagent/enums/message-status',
-  enumConversationStatus = '/aiagent/enums/conversation-status',
   /** 工具执行确认 */
   toolConfirm = '/aiagent/tool/confirm',
 }
@@ -507,70 +501,3 @@ export async function deleteConversation(conversationId: string): Promise<boolea
     return false;
   }
 }
-
-/**
- * 归档会话
- */
-export async function archiveConversations(conversationIds: string[]): Promise<boolean> {
-  try {
-    const response = await http.post(
-      { 
-        url: AgentApi.conversationArchive,
-        params: conversationIds
-      }
-    );
-    return response.success === true;
-  } catch (error) {
-    logger.error('归档会话失败:', error);
-    return false;
-  }
-}
-
-/**
- * 获取消息角色枚举列表
- */
-export async function getMessageRoles(): Promise<Array<{ code: string; name: string }>> {
-  try {
-    const response = await http.get(
-      { url: AgentApi.enumMessageRoles },
-      { isTransformResponse: false }
-    );
-    return response.data || [];
-  } catch (error) {
-    logger.error('获取消息角色枚举失败:', error);
-    return [];
-  }
-}
-
-/**
- * 获取消息状态枚举列表
- */
-export async function getMessageStatus(): Promise<Array<{ code: string; name: string }>> {
-  try {
-    const response = await http.get(
-      { url: AgentApi.enumMessageStatus },
-      { isTransformResponse: false }
-    );
-    return response.data || [];
-  } catch (error) {
-    logger.error('获取消息状态枚举失败:', error);
-    return [];
-  }
-}
-
-/**
- * 获取对话状态枚举列表
- */
-export async function getConversationStatus(): Promise<Array<{ code: string; name: string }>> {
-  try {
-    const response = await http.get(
-      { url: AgentApi.enumConversationStatus },
-      { isTransformResponse: false }
-    );
-    return response.data || [];
-  } catch (error) {
-    logger.error('获取对话状态枚举失败:', error);
-    return [];
-  }
-}
-

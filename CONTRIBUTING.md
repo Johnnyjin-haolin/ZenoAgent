@@ -17,7 +17,7 @@
 
 1. **Fork 项目**
    ```bash
-   git clone https://github.com/your-username/ZenoAgent.git
+   git clone https://github.com/Johnnyjin-haolin/ZenoAgent.git
    cd ZenoAgent
    ```
 
