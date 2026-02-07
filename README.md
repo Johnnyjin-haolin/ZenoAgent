@@ -20,6 +20,23 @@
 
 Zeno Agent 是一个基于 Spring Boot 和 Vue 3 构建的 AI Agent 平台，集成了 LangChain4j 框架，提供智能对话、知识检索增强（RAG）、工具调用（MCP）等核心能力。项目采用前后端分离架构，支持流式响应、多会话管理、知识库管理等完整功能。
 
+## 📸 项目截图
+
+### 首页
+![首页](docs/pic/newchat.png)
+
+### 智能对话
+![对话](docs/pic/chat.png)
+
+![可视化思考过程](docs/pic/chat-thking.png)
+
+### Agent 配置
+![Agent配置](docs/pic/config.png)
+
+### 知识库管理
+![知识库截图](docs/pic/rag.png)
+
+
 ## ✨ 核心特性
 
 ### 🤖 智能 Agent 能力

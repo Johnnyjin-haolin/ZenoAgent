@@ -129,7 +129,7 @@ import mdKatex from 'markdown-it-katex';
 import mila from 'markdown-it-link-attributes';
 import hljs from 'highlight.js';
 import defaultAvatar from "@/assets/images/ai/avatar.jpg";
-import aiLogo from "@/assets/images/ai/ailogo.png";
+import zenoAgentAvatar from "@/assets/images/ai/zeno-agent-avatar.svg";
 import ProcessCard from './ProcessCard.vue';
 import type { AgentMessage } from '../agent.types';
 
@@ -153,9 +153,9 @@ const userAvatar = computed(() => {
   return getFileAccessHttpUrl(userStore.userInfo?.avatar) || defaultAvatar;
 });
 
-// AI 头像
+// AI 头像 - 使用 ZenoAgent 品牌头像
 const aiAvatar = computed(() => {
-  return aiLogo;
+  return zenoAgentAvatar;
 });
 
 // Markdown 渲染器

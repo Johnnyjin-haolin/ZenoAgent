@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="zeno-avatar-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4F46E5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7C3AED;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle with gradient -->
+  <circle cx="64" cy="64" r="64" fill="url(#zeno-avatar-grad)"/>
+  
+  <!-- AI Brain/Network icon - optimized for avatar -->
+  <g fill="white" opacity="0.95">
+    <!-- Central node (larger for better visibility) -->
+    <circle cx="64" cy="64" r="9"/>
+    
+    <!-- Connected nodes (optimized positions) -->
+    <circle cx="38" cy="38" r="5.5"/>
+    <circle cx="90" cy="38" r="5.5"/>
+    <circle cx="38" cy="90" r="5.5"/>
+    <circle cx="90" cy="90" r="5.5"/>
+    <circle cx="64" cy="28" r="5.5"/>
+    <circle cx="64" cy="100" r="5.5"/>
+    
+    <!-- Connection lines (slightly thicker for avatar) -->
+    <line x1="64" y1="64" x2="38" y2="38" stroke="white" stroke-width="2.5" opacity="0.7"/>
+    <line x1="64" y1="64" x2="90" y2="38" stroke="white" stroke-width="2.5" opacity="0.7"/>
+    <line x1="64" y1="64" x2="38" y2="90" stroke="white" stroke-width="2.5" opacity="0.7"/>
+    <line x1="64" y1="64" x2="90" y2="90" stroke="white" stroke-width="2.5" opacity="0.7"/>
+    <line x1="64" y1="64" x2="64" y2="28" stroke="white" stroke-width="2.5" opacity="0.7"/>
+    <line x1="64" y1="64" x2="64" y2="100" stroke="white" stroke-width="2.5" opacity="0.7"/>
+  </g>
+  
+  <!-- Sparkle effect (enhanced for avatar) -->
+  <g fill="white" opacity="0.9">
+    <circle cx="28" cy="28" r="2.5"/>
+    <circle cx="100" cy="28" r="2.5"/>
+    <circle cx="28" cy="100" r="2.5"/>
+    <circle cx="100" cy="100" r="2.5"/>
+  </g>
+</svg>
