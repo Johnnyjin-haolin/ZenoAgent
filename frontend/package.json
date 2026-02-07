@@ -2,6 +2,7 @@
   "name": "ai-agent-frontend",
   "version": "1.0.0",
   "description": "AI Agent Frontend - 独立前端项目",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",

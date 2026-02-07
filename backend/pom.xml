@@ -19,6 +19,13 @@
     <name>AI Agent Standalone</name>
     <description>轻量级 AI Agent 独立项目，支持 RAG、MCP、Agent Chat</description>
 
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+        </license>
+    </licenses>
+
     <properties>
         <java.version>17</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

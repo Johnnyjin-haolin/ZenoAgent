@@ -16,7 +16,10 @@
 ### 依赖服务
 
 - Redis 6.0+ (必需)
+- MySQL 8.0+ (必需，用于持久化存储)
 - PostgreSQL with pgvector (可选，RAG 功能需要)
+
+详细的后端服务配置说明请参考 [后端服务配置文档](./BACKEND_CONFIG.md)。
 
 ## 🐳 Docker 部署（推荐）
 
@@ -96,6 +99,126 @@ docker run -d \
   --name zenoagent-frontend \
   zenoagent-frontend:latest
 ```
+
+## 💾 数据库初始化
+
+### MySQL 数据库表结构
+
+ZenoAgent 使用 MySQL 存储会话、消息、知识库和文档等持久化数据。首次部署前需要创建数据库和表结构。
+
+#### 创建数据库
+
+```sql
+CREATE DATABASE IF NOT EXISTS zeno_agent DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE zeno_agent;
+```
+
+#### 表结构定义
+
+**1. agent_conversation 表（Agent会话表）**
+
+```sql
+CREATE TABLE agent_conversation
+(
+    id            VARCHAR(64)                            NOT NULL COMMENT '会话ID（UUID）'
+        PRIMARY KEY,
+    title         VARCHAR(255) DEFAULT '新对话'          NOT NULL COMMENT '会话标题',
+    user_id       VARCHAR(64)                            NULL COMMENT '用户ID（预留）',
+    model_id      VARCHAR(64)                            NULL COMMENT '使用的模型ID',
+    model_name    VARCHAR(128)                           NULL COMMENT '模型名称',
+    status        VARCHAR(32)  DEFAULT 'active'          NOT NULL COMMENT '状态：active/archived/deleted',
+    message_count INT          DEFAULT 0                 NOT NULL COMMENT '消息数量',
+    create_time   DATETIME     DEFAULT CURRENT_TIMESTAMP NOT NULL COMMENT '创建时间',
+    update_time   DATETIME     DEFAULT CURRENT_TIMESTAMP NOT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
+)
+    COMMENT 'Agent会话表' COLLATE = utf8mb4_unicode_ci;
+
+CREATE INDEX idx_status ON agent_conversation (status);
+CREATE INDEX idx_update_time ON agent_conversation (update_time);
+CREATE INDEX idx_user_id ON agent_conversation (user_id);
+```
+
+**2. agent_message 表（Agent消息表）**
+
+```sql
+CREATE TABLE agent_message
+(
+    id              BIGINT AUTO_INCREMENT COMMENT '消息ID'
+        PRIMARY KEY,
+    conversation_id VARCHAR(64)                        NOT NULL COMMENT '会话ID',
+    message_id      VARCHAR(64)                        NOT NULL COMMENT '消息唯一标识（UUID）',
+    role            VARCHAR(32)                        NOT NULL COMMENT '角色：user/assistant/system',
+    content         TEXT                               NOT NULL COMMENT '消息内容',
+    model_id        VARCHAR(64)                        NULL COMMENT '使用的模型ID',
+    tokens          INT                                NULL COMMENT 'Token数量',
+    duration        INT                                NULL COMMENT '耗时（毫秒）',
+    metadata        JSON                               NULL COMMENT '元数据（工具调用、RAG结果等）',
+    create_time     DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL COMMENT '创建时间',
+    CONSTRAINT fk_message_conversation
+        FOREIGN KEY (conversation_id) REFERENCES agent_conversation (id)
+            ON DELETE CASCADE
+)
+    COMMENT 'Agent消息表' COLLATE = utf8mb4_unicode_ci;
+
+CREATE INDEX idx_conversation_id ON agent_message (conversation_id);
+CREATE INDEX idx_create_time ON agent_message (create_time);
+CREATE INDEX idx_message_id ON agent_message (message_id);
+```
+
+**3. knowledge_base 表（知识库表）**
+
+```sql
+CREATE TABLE knowledge_base
+(
+    id                 VARCHAR(64)                         NOT NULL
+        PRIMARY KEY,
+    name               VARCHAR(255)                        NOT NULL,
+    description        TEXT                                NULL,
+    embedding_model_id VARCHAR(255)                        NOT NULL,
+    create_time        TIMESTAMP DEFAULT CURRENT_TIMESTAMP NULL,
+    update_time        TIMESTAMP DEFAULT CURRENT_TIMESTAMP NULL
+);
+```
+
+**4. document 表（文档表）**
+
+```sql
+CREATE TABLE document
+(
+    id                VARCHAR(64)                         NOT NULL
+        PRIMARY KEY,
+    knowledge_base_id VARCHAR(64)                         NOT NULL,
+    title             VARCHAR(255)                        NOT NULL,
+    type              VARCHAR(50)                         NOT NULL,
+    content           TEXT                                NULL,
+    metadata          TEXT                                NULL,
+    status            VARCHAR(50)                         NOT NULL,
+    create_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP NULL,
+    update_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP NULL,
+    CONSTRAINT document_ibfk_1
+        FOREIGN KEY (knowledge_base_id) REFERENCES knowledge_base (id)
+            ON DELETE CASCADE
+);
+
+CREATE INDEX knowledge_base_id ON document (knowledge_base_id);
+```
+
+#### 快速初始化
+
+您可以使用项目提供的初始化脚本：
+
+```bash
+# 方式1：使用 MySQL 命令行
+mysql -u root -p < backend/src/main/resources/sql/init.sql
+
+# 方式2：在 MySQL 客户端中执行
+mysql -u root -p
+source backend/src/main/resources/sql/init.sql
+```
+
+### PostgreSQL 数据库初始化（RAG 功能需要）
+
+如果使用 RAG 功能，需要配置 PostgreSQL 并安装 pgvector 扩展。详细配置请参考 [后端服务配置文档](./BACKEND_CONFIG.md)。
 
 ## 🚀 传统部署
 

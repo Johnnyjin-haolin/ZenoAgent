@@ -1,58 +1,56 @@
 # 本地开发环境配置（profile: local）
-# 复制此文件为 application.yml 并修改配置值
 # 此文件会被 .gitignore 忽略，不会被提交到Git
+# 请在此文件中填写你的真实配置值
 
 # 注意：此配置文件会覆盖 application.yml 中的相同配置项
 
 aiagent:
   # LLM配置
   llm:
+    # 请求超时（秒）
+    timeout-seconds: 180
     # 模型列表配置（支持多个模型，按id引用）
     models:
-      # OpenAI官方模型
-      - id: gpt-4o-mini
-        name: GPT-4o Mini
-        provider: OPENAI
-        type: CHAT  # 模型类型：CHAT（对话模型）或 EMBEDDING（向量模型）
-        apiKey: sk-your-openai-api-key-here
-        baseUrl: https://api.openai.com/v1
-      - id: gpt-4o
-        name: GPT-4o
-        provider: OPENAI
-        type: CHAT
-        apiKey: sk-your-openai-api-key-here
-        baseUrl: https://api.openai.com/v1
+      # OpenAI官方模型示例
+      # - id: gpt-4o-mini
+      #   name: GPT-4o Mini
+      #   provider: OPENAI
+      #   type: CHAT  # 模型类型：CHAT（对话模型）或 EMBEDDING（向量模型）
+      #   apiKey: sk-your-openai-api-key-here  # 请在此处填写你的API Key
+      #   baseUrl: https://api.openai.com/v1
       
-      # Embedding 模型配置
-      - id: text-embedding-3-small
-        name: OpenAI Embedding 3 Small
-        provider: OPENAI
-        type: EMBEDDING  # 向量模型
-        modelName: text-embedding-3-small  # 实际的模型名称（用于Embedding API调用）
-        apiKey: sk-your-openai-api-key-here
-        baseUrl: https://api.openai.com/v1
-      
-      # 智谱AI (ZHIPU)
+      # 智谱AI (ZHIPU) 示例
       # - id: glm-4.7
       #   name: GLM-4.7
-      #   provider: ZHIPU
-      #   api-key: your-zhipu-api-key
-      #   base-url: https://open.bigmodel.cn/api/paas/v4/  # 可选，不配置会使用默认值
-      
-      # DeepSeek
-      # - id: deepseek-chat
-      #   name: DeepSeek Chat
-      #   provider: DEEPSEEK
-      #   api-key: your-deepseek-api-key
-      #   base-url: https://api.deepseek.com/v1  # 可选
-      
-      # 通义千问 (QWEN)
-      # - id: qwen-turbo
-      #   name: Qwen Turbo
-      #   provider: QWEN
+      #   provider: ZHIPU  # 智谱AI
       #   type: CHAT
-      #   api-key: your-qwen-api-key
-      #   base-url: https://dashscope.aliyuncs.com/compatible-mode/v1  # 可选
+      #   apiKey: your-zhipu-api-key-here  # 请在此处填写你的API Key
+      #   baseUrl: https://open.bigmodel.cn/api/paas/v4/
+      
+      # 通义千问 (QWEN) 示例
+      # - id: qwen/qwen3-vl-8b
+      #   name: qwen/qwen3-vl-8b
+      #   provider: QWEN  # 千问
+      #   type: CHAT
+      #   apiKey: your-qwen-api-key-here  # 请在此处填写你的API Key
+      #   baseUrl: http://127.0.0.1:1234/v1  # 本地部署的模型服务地址
+      
+      # Embedding 模型配置示例
+      # - id: text-embedding-3-small
+      #   name: OpenAI Embedding 3 Small
+      #   provider: OPENAI
+      #   type: EMBEDDING  # 向量模型
+      #   modelName: text-embedding-3-small  # 实际的模型名称（用于Embedding API调用）
+      #   apiKey: sk-your-openai-api-key-here  # 请填写你的OpenAI API Key
+      #   baseUrl: https://api.openai.com/v1
+      
+      # - id: text-embedding-qwen3-embedding
+      #   name: text-embedding-qwen3-embedding
+      #   provider: QWEN
+      #   type: EMBEDDING
+      #   modelName: text-embedding-qwen3-embedding-4b
+      #   apiKey: your-qwen-api-key-here
+      #   baseUrl: http://127.0.0.1:1234/v1
     # 默认模型ID（从上面的models列表中选择）
     default-model: gpt-4o-mini
   
@@ -67,10 +65,10 @@ aiagent:
         - gpt-4o-mini
       TOOL_CALL:
         - gpt-4o
-        - gpt-4o-mini  # 如果gpt-4o失败，尝试gpt-4o-mini
+        - gpt-4o-mini
       COMPLEX_WORKFLOW:
         - gpt-4o
-        - gpt-4o-mini  # 如果gpt-4o失败，尝试gpt-4o-mini
+        - gpt-4o-mini
   
   # RAG配置
   rag:
@@ -78,23 +76,9 @@ aiagent:
     default-embedding-model-id: text-embedding-3-small
 
 spring:
-  # Redis配置（必需）
-  # 用于存储对话、文档元数据、知识库等数据
-  # 注意：本项目不使用MySQL，所有业务数据存储在Redis中
   redis:
     host: localhost
     port: 6379
     password: 
     database: 0
-
-# 向量数据库配置（可选，仅在使用RAG功能时需要）
-# 如果不需要RAG功能，可以删除此部分
-# aiagent:
-#   rag:
-#     embedding-store:
-#       host: localhost
-#       port: 5432
-#       database: aiagent
-#       user: postgres
-#       password: postgres
 

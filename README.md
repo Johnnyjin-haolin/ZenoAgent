@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Java](https://img.shields.io/badge/Java-17-orange.svg)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-2.7.18-brightgreen.svg)
 ![Vue](https://img.shields.io/badge/Vue-3.3+-4FC08D.svg)
@@ -199,7 +199,7 @@ ZenoAgent/
 
 ## 📄 许可证
 
-本项目采用 [Apache License 2.0](./LICENSE) 开源协议。
+本项目采用 [MIT License](./LICENSE) 开源协议。
 
 ## 🤝 贡献
 

@@ -1,41 +1,74 @@
 # 生产环境配置（profile: prod）
-# 复制此文件为 application.yml 并修改配置值
 # 此文件会被 .gitignore 忽略，不会被提交到Git
+# 请在此文件中填写你的真实配置值
 
 # 使用方式：
 # 1. 复制此文件为 application.yml
-# 2. 填写真实的配置值（建议使用环境变量或配置中心）
+# 2. 填写真实的配置值
 # 3. 启动时指定profile: java -jar app.jar --spring.profiles.active=prod
+
+# 注意：此配置文件会覆盖 application.yml 中的相同配置项
 
 aiagent:
   # LLM配置
   llm:
+    # 请求超时（秒）
+    timeout-seconds: 180
+    # 模型列表配置（支持多个模型，按id引用）
     models:
-      - id: gpt-4o
-        name: GPT-4o
-        provider: OPENAI
-        type: CHAT  # 模型类型：CHAT（对话模型）或 EMBEDDING（向量模型）
-        apiKey: ${OPENAI_API_KEY}  # 建议使用环境变量
-        baseUrl: https://api.openai.com/v1
-      - id: gpt-4o-mini
-        name: GPT-4o Mini
-        provider: OPENAI
-        type: CHAT
-        apiKey: ${OPENAI_API_KEY}
-        baseUrl: https://api.openai.com/v1
-      # Embedding 模型配置
-      - id: text-embedding-3-small
-        name: OpenAI Embedding 3 Small
-        provider: OPENAI
-        type: EMBEDDING  # 向量模型
-        modelName: text-embedding-3-small  # 实际的模型名称（用于Embedding API调用）
-        apiKey: ${OPENAI_API_KEY}
-        baseUrl: https://api.openai.com/v1
+      # OpenAI官方模型示例
+      # - id: gpt-4o
+      #   name: GPT-4o
+      #   provider: OPENAI
+      #   type: CHAT  # 模型类型：CHAT（对话模型）或 EMBEDDING（向量模型）
+      #   apiKey: sk-your-openai-api-key-here  # 请在此处填写你的API Key
+      #   baseUrl: https://api.openai.com/v1
+      # - id: gpt-4o-mini
+      #   name: GPT-4o Mini
+      #   provider: OPENAI
+      #   type: CHAT
+      #   apiKey: sk-your-openai-api-key-here
+      #   baseUrl: https://api.openai.com/v1
+      
+      # 智谱AI (ZHIPU) 示例
+      # - id: glm-4.7
+      #   name: GLM-4.7
+      #   provider: ZHIPU  # 智谱AI
+      #   type: CHAT
+      #   apiKey: your-zhipu-api-key-here  # 请在此处填写你的API Key
+      #   baseUrl: https://open.bigmodel.cn/api/paas/v4/
+      
+      # 通义千问 (QWEN) 示例
+      # - id: qwen/qwen3-vl-8b
+      #   name: qwen/qwen3-vl-8b
+      #   provider: QWEN  # 千问
+      #   type: CHAT
+      #   apiKey: your-qwen-api-key-here  # 请在此处填写你的API Key
+      #   baseUrl: https://dashscope.aliyuncs.com/compatible-mode/v1
+      
+      # Embedding 模型配置示例
+      # - id: text-embedding-3-small
+      #   name: OpenAI Embedding 3 Small
+      #   provider: OPENAI
+      #   type: EMBEDDING  # 向量模型
+      #   modelName: text-embedding-3-small  # 实际的模型名称（用于Embedding API调用）
+      #   apiKey: sk-your-openai-api-key-here  # 请填写你的OpenAI API Key
+      #   baseUrl: https://api.openai.com/v1
+      
+      # - id: text-embedding-qwen3-embedding
+      #   name: text-embedding-qwen3-embedding
+      #   provider: QWEN
+      #   type: EMBEDDING
+      #   modelName: text-embedding-qwen3-embedding-4b
+      #   apiKey: your-qwen-api-key-here
+      #   baseUrl: https://dashscope.aliyuncs.com/compatible-mode/v1
+    # 默认模型ID（从上面的models列表中选择）
     default-model: gpt-4o
   
   # 模型配置
   model:
     default-model-id: gpt-4o
+    # 任务模型映射（值为模型ID列表，按顺序尝试，前面的失败会尝试后面的）
     task-model-mapping:
       SIMPLE_CHAT:
         - gpt-4o-mini
@@ -52,17 +85,18 @@ aiagent:
   rag:
     # 默认 Embedding 模型ID（从 llm.models 中选择，必须是 type: EMBEDDING 的模型）
     default-embedding-model-id: text-embedding-3-small
-    embedding-store:
-      host: ${PG_HOST:localhost}
-      port: ${PG_PORT:5432}
-      database: ${PG_DATABASE:aiagent}
-      user: ${PG_USER:postgres}
-      password: ${PG_PASSWORD:}
+    # 向量存储配置（PostgreSQL + pgvector，可选，仅在使用RAG功能时需要）
+    # embedding-store:
+    #   host: localhost
+    #   port: 5432
+    #   database: aiagent
+    #   user: postgres
+    #   password: your-postgres-password-here
 
 spring:
   redis:
-    host: ${REDIS_HOST:localhost}
-    port: ${REDIS_PORT:6379}
-    password: ${REDIS_PASSWORD:}
+    host: localhost
+    port: 6379
+    password: 
     database: 0
 

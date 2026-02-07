@@ -1,5 +1,7 @@
 package com.aiagent.api.controller;
 
+import com.aiagent.api.dto.McpGroupInfo;
+import com.aiagent.api.dto.McpToolInfo;
 import com.aiagent.infrastructure.config.AgentConfig;
 import com.aiagent.shared.response.ErrorCode;
 import com.aiagent.domain.enums.ModelType;
@@ -98,51 +100,14 @@ public class AgentMetadataController {
         log.debug("获取模型列表成功，类型筛选: {}, 返回数量: {}", type, models.size());
         return Result.success(models);
     }
-
-    /**
-     * 获取消息角色枚举
-     */
-    @GetMapping("/enums/message-roles")
-    public Result<List<Map<String, String>>> getMessageRoles() {
-        List<Map<String, String>> roles = Arrays.asList(
-            Map.of("code", "user", "name", "用户"),
-            Map.of("code", "assistant", "name", "助手"),
-            Map.of("code", "system", "name", "系统")
-        );
-        return Result.success(roles);
-    }
-
-    /**
-     * 获取消息状态枚举
-     */
-    @GetMapping("/enums/message-status")
-    public Result<List<Map<String, String>>> getMessageStatus() {
-        List<Map<String, String>> statuses = Arrays.asList(
-            Map.of("code", "success", "name", "成功"),
-            Map.of("code", "error", "name", "错误"),
-            Map.of("code", "processing", "name", "处理中")
-        );
-        return Result.success(statuses);
-    }
-
-    /**
-     * 获取会话状态枚举
-     */
-    @GetMapping("/enums/conversation-status")
-    public Result<List<Map<String, String>>> getConversationStatus() {
-        List<Map<String, String>> statuses = Arrays.asList(
-            Map.of("code", "active", "name", "活跃"),
-            Map.of("code", "archived", "name", "已归档")
-        );
-        return Result.success(statuses);
-    }
+    
 
     /**
      * 获取MCP分组列表
      */
     @GetMapping("/mcp/groups")
-    public Result<List<com.aiagent.api.dto.McpGroupInfo>> getMcpGroups() {
-        List<com.aiagent.api.dto.McpGroupInfo> groups = mcpGroupManager.getEnabledGroups();
+    public Result<List<McpGroupInfo>> getMcpGroups() {
+        List<McpGroupInfo> groups = mcpGroupManager.getEnabledGroups();
         return Result.success(groups);
     }
 
@@ -150,8 +115,8 @@ public class AgentMetadataController {
      * 获取MCP分组详情
      */
     @GetMapping("/mcp/groups/{groupId}")
-    public Result<com.aiagent.api.dto.McpGroupInfo> getMcpGroup(@PathVariable String groupId) {
-        com.aiagent.api.dto.McpGroupInfo group = mcpGroupManager.getGroupById(groupId);
+    public Result<McpGroupInfo> getMcpGroup(@PathVariable String groupId) {
+        McpGroupInfo group = mcpGroupManager.getGroupById(groupId);
         if (group != null) {
             return Result.success(group);
         }
@@ -163,8 +128,8 @@ public class AgentMetadataController {
      * 支持按分组筛选
      */
     @GetMapping("/mcp/tools")
-    public Result<List<com.aiagent.api.dto.McpToolInfo>> getMcpTools(@RequestParam(required = false) List<String> groups) {
-        List<com.aiagent.api.dto.McpToolInfo> tools = mcpGroupManager.getToolsByGroups(groups);
+    public Result<List<McpToolInfo>> getMcpTools(@RequestParam(required = false) List<String> groups) {
+        List<McpToolInfo> tools = mcpGroupManager.getToolsByGroups(groups);
         return Result.success(tools);
     }
 
