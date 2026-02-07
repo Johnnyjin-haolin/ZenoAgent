@@ -4,6 +4,7 @@
  */
 
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import logger from './logger';
 
 // API 基础 URL（从环境变量读取，默认为后端地址）
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
@@ -53,7 +54,7 @@ httpInstance.interceptors.response.use(
   },
   (error) => {
     // 统一错误处理
-    console.error('HTTP请求错误:', error);
+    logger.error('HTTP请求错误:', error);
     return Promise.reject(error);
   }
 );
@@ -201,7 +202,7 @@ function handleStreamRequest(config: {
 }
 
 /**
- * 兼容原项目的 defHttp 导出
+ * 将在未来版本中移除
  */
 export const defHttp = http;
 

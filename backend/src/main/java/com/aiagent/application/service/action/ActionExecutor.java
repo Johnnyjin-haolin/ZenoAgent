@@ -335,7 +335,7 @@ public class ActionExecutor {
             }
             
             String llmResponse;
-            log.info("调用LLM生成，模型ID: {}, 提示词: {}", modelId, prompt);
+            log.debug("调用LLM生成，模型ID: {}, 提示词长度: {}", modelId, prompt != null ? prompt.length() : 0);
 
             if (context != null && context.getStreamingCallback() != null) {
                 // 有回调，使用流式输出

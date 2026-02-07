@@ -93,11 +93,11 @@ public class ThinkingEngine {
         
         // 构建思考提示词（分离系统提示词和用户提示词）
         PromptPair promptPair = buildThinkingPrompt(goal, context, lastResults);
-        log.info("系统提示词长度: {}, 用户提示词长度: {}", 
+        log.debug("系统提示词长度: {}, 用户提示词长度: {}", 
             promptPair.getSystemPrompt().length(), promptPair.getUserPrompt().length());
         // 调用LLM进行思考
         String thinkingResult = callLLMForThinking(promptPair, context);
-        log.info("思考结果: {}", thinkingResult);
+        log.debug("思考结果: {}", thinkingResult);
         // 解析思考结果，生成Action列表
         List<AgentAction> actions = parseThinkingResult(thinkingResult, goal, context);
         
@@ -260,15 +260,15 @@ public class ThinkingEngine {
                 modelId = agentConfig.getLlm().getDefaultModel();
             }
             long startNs = System.nanoTime();
-            log.info("思考LLM请求开始，modelId={}, systemPromptChars={}, userPromptChars={}", 
+            log.debug("思考LLM请求开始，modelId={}, systemPromptChars={}, userPromptChars={}", 
                 modelId, 
-                promptPair.getSystemPrompt(),
-                promptPair.getUserPrompt());
+                promptPair.getSystemPrompt().length(),
+                promptPair.getUserPrompt().length());
             
             // 调用非流式LLM获取完整响应
             String response = llmChatHandler.chatNonStreaming(modelId, messages);
             
-            log.info("思考LLM请求完成，耗时 {} ms", java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs));
+            log.debug("思考LLM请求完成，耗时 {} ms", java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs));
             log.debug("LLM思考响应: {}", response);
             return response;
     }

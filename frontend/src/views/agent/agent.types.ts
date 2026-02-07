@@ -1,6 +1,5 @@
 /**
  * AI Agent 相关类型定义
- * @author JeecG Team
  * @date 2025-11-30
  */
 
@@ -589,3 +588,28 @@ export interface AgentEventCallbacks {
   onError?: (event: AgentEvent) => void;
 }
 
+/**
+ * 分页响应结果
+ */
+export interface PageResult<T> {
+  /** 数据列表 */
+  records: T[];
+  /** 总记录数 */
+  total: number;
+  /** 当前页码 */
+  pageNo: number;
+  /** 每页大小 */
+  pageSize: number;
+  /** 总页数 */
+  pages: number;
+}
+
+/**
+ * 健康检查响应
+ */
+export interface HealthResponse {
+  /** 状态 */
+  status: string;
+  /** 消息 */
+  message: string;
+}

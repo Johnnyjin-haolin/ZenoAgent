@@ -53,7 +53,7 @@ export enum AgentApi {
 
 ### 2. HTTP请求工具
 
-原项目使用JeecG的`defHttp`，新项目需要：
+HTTP 请求工具使用说明：
 
 **选项1：创建独立的HTTP工具**
 ```typescript

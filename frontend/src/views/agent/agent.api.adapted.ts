@@ -7,6 +7,7 @@
  */
 
 import { http } from '@/utils/http';
+import logger from '@/utils/logger';
 import type {
   AgentRequest,
   AgentEvent,
@@ -82,7 +83,7 @@ export async function executeAgent(
     // 处理 SSE 流
     processSSEStream(readableStream, callbacks, controller);
   } catch (error: any) {
-    console.error('Agent 执行失败:', error);
+    logger.error('Agent 执行失败:', error);
     
     // 超时错误
     if (error.code === 'ETIMEDOUT' || error.name === 'AbortError') {
@@ -120,7 +121,7 @@ async function processSSEStream(
       const { done, value } = await reader.read();
       
       if (done) {
-        console.log('SSE 流结束');
+        logger.debug('SSE 流结束');
         break;
       }
 
@@ -157,19 +158,19 @@ async function processSSEStream(
           try {
             const parsedData: AgentEvent = JSON.parse(eventData);
             parsedData.event = eventType as any;
-            console.log(`[Agent SSE] 收到事件: ${eventType}`, parsedData);
+            logger.debug(`[Agent SSE] 收到事件: ${eventType}`, parsedData);
             dispatchEvent(parsedData, callbacks);
           } catch (error) {
-            console.error('解析事件数据失败:', error, eventData);
+            logger.error('解析事件数据失败:', error, eventData);
           }
         }
       }
     }
   } catch (error: any) {
     if (error.name === 'AbortError') {
-      console.log('请求已取消');
+      logger.debug('请求已取消');
     } else {
-      console.error('处理 SSE 流时出错:', error);
+      logger.error('处理 SSE 流时出错:', error);
       callbacks.onError?.({
         requestId: '',
         error: 'STREAM_ERROR',
@@ -187,56 +188,56 @@ async function processSSEStream(
 function dispatchEvent(event: AgentEvent, callbacks: AgentEventCallbacks) {
   const { event: eventType } = event;
 
-  console.log(`[Agent] 分发事件: ${eventType}`);
+  logger.debug(`[Agent] 分发事件: ${eventType}`);
 
   switch (eventType) {
     case 'agent:start':
-      console.log('[Agent] 任务开始');
+      logger.debug('[Agent] 任务开始');
       callbacks.onStart?.(event);
       break;
 
     case 'agent:thinking':
-      console.log('[Agent] AI 思考中:', event.message);
+      logger.debug('[Agent] AI 思考中:', event.message);
       callbacks.onThinking?.(event);
       break;
 
     case 'agent:model_selected':
-      console.log('[Agent] 模型已选择:', event.data);
+      logger.debug('[Agent] 模型已选择:', event.data);
       callbacks.onModelSelected?.(event);
       break;
 
     case 'agent:rag_retrieve':
-      console.log('[Agent] RAG 检索:', event.message);
+      logger.debug('[Agent] RAG 检索:', event.message);
       callbacks.onRagRetrieve?.(event);
       break;
 
     case 'agent:tool_call':
-      console.log('[Agent] 工具调用:', event.data);
+      logger.debug('[Agent] 工具调用:', event.data);
       callbacks.onToolCall?.(event);
       break;
 
     case 'agent:tool_result':
-      console.log('[Agent] 工具结果:', event.data);
+      logger.debug('[Agent] 工具结果:', event.data);
       callbacks.onToolResult?.(event);
       break;
 
     case 'agent:message':
-      console.log('[Agent] 流式内容:', event.content?.substring(0, 20));
+      logger.debug('[Agent] 流式内容:', event.content?.substring(0, 20));
       callbacks.onMessage?.(event);
       break;
 
     case 'agent:complete':
-      console.log('[Agent] 任务完成');
+      logger.debug('[Agent] 任务完成');
       callbacks.onComplete?.(event);
       break;
 
     case 'agent:error':
-      console.error('[Agent] 发生错误:', event.message);
+      logger.error('[Agent] 发生错误:', event.message);
       callbacks.onError?.(event);
       break;
 
     default:
-      console.warn('[Agent] 未知的事件类型:', eventType);
+      logger.warn('[Agent] 未知的事件类型:', eventType);
   }
 }
 
@@ -248,7 +249,7 @@ export async function getMcpGroups(): Promise<McpGroupInfo[]> {
     const response = await http.get({ url: AgentApi.mcpGroups });
     return response.data || [];
   } catch (error) {
-    console.error('获取MCP分组列表失败:', error);
+    logger.error('获取MCP分组列表失败:', error);
     return [];
   }
 }
@@ -265,7 +266,7 @@ export async function getMcpGroup(groupId: string): Promise<McpGroupInfo | null>
     }
     return null;
   } catch (error) {
-    console.error('获取MCP分组详情失败:', error);
+    logger.error('获取MCP分组详情失败:', error);
     return null;
   }
 }
@@ -288,7 +289,7 @@ export async function getMcpTools(groups?: string[]): Promise<McpToolInfo[]> {
     });
     return response.data || [];
   } catch (error) {
-    console.error('获取MCP工具列表失败:', error);
+    logger.error('获取MCP工具列表失败:', error);
     return [];
   }
 }

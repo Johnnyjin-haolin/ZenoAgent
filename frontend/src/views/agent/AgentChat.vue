@@ -75,6 +75,7 @@ import { ref, computed, nextTick, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { Icon } from '@/components/Icon';
 import { message } from 'ant-design-vue';
+import logger from '@/utils/logger';
 import { useAgentChat } from './hooks/useAgentChat';
 import { useBrandConfig } from './hooks/useBrandConfig';
 import { useConversationList } from './hooks/useConversationList';
@@ -226,7 +227,7 @@ const readConfigCache = (): AgentConfigCache | null => {
       updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : Date.now(),
     };
   } catch (error) {
-    console.warn('读取Agent配置缓存失败:', error);
+    logger.warn('读取Agent配置缓存失败:', error);
     return null;
   }
 };
@@ -365,7 +366,7 @@ const handleRejectTool = async () => {
 
 // 配置变更处理
 const handleModelChange = (modelId: string, model: ModelInfo | null) => {
-  console.log('模型变更:', modelId, model);
+  logger.debug('模型变更:', modelId, model);
   // 状态已经通过 v-model 双向绑定了，这里只需要处理额外的逻辑
   if (model) {
     message.success(`已切换到模型: ${model.displayName}`);
@@ -373,19 +374,19 @@ const handleModelChange = (modelId: string, model: ModelInfo | null) => {
 };
 
 const handleKnowledgeChange = (knowledgeIds: string[], knowledgeList: KnowledgeInfo[]) => {
-  console.log('知识库变更:', knowledgeIds, knowledgeList);
+  logger.debug('知识库变更:', knowledgeIds, knowledgeList);
 };
 
 const handleToolsChange = (tools: string[]) => {
-  console.log('工具变更:', tools);
+  logger.debug('工具变更:', tools);
 };
 
 const handleThinkingConfigChange = (config: ThinkingConfig) => {
-  console.log('思考引擎配置变更:', config);
+  logger.debug('思考引擎配置变更:', config);
 };
 
 const handleRagConfigChange = (config: RAGConfig) => {
-  console.log('RAG配置变更:', config);
+  logger.debug('RAG配置变更:', config);
 };
 
 // 初始化

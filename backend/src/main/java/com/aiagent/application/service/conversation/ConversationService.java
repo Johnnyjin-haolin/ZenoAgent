@@ -58,7 +58,6 @@ public class ConversationService {
         page.setCurrent(pageNo);
         page.setSize(pageSize);
         
-        log.debug("查询会话列表: pageNo={}, pageSize={}, total={}", pageNo, pageSize, total);
         return page;
     }
     
@@ -84,7 +83,6 @@ public class ConversationService {
      */
     public boolean updateStatus(String conversationId, String status) {
         conversationMapper.updateStatus(conversationId, status);
-        log.info("更新会话状态: id={}, status={}", conversationId, status);
         return true;
     }
     
@@ -93,7 +91,6 @@ public class ConversationService {
      */
     public void incrementMessageCount(String conversationId) {
         conversationMapper.incrementMessageCount(conversationId);
-        log.debug("增加消息数量: id={}", conversationId);
     }
     
     /**

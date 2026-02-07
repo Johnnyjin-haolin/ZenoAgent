@@ -5,8 +5,6 @@ import com.aiagent.application.service.agent.IAgentService;
 import com.aiagent.api.dto.AgentRequest;
 import com.aiagent.api.dto.HealthResponse;
 import com.aiagent.shared.response.Result;
-import dev.langchain4j.internal.Json;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,7 +18,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 /**
  * Agent 执行相关接口
  */
-@Slf4j
 @RestController
 @RequestMapping("/aiagent")
 public class AgentExecutionController {
@@ -33,7 +30,6 @@ public class AgentExecutionController {
      */
     @PostMapping("/execute")
     public SseEmitter execute(@RequestBody AgentRequest request) {
-        log.info("收到Agent执行请求: {}", Json.toJson(request));
         return agentService.execute(request);
     }
 

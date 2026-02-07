@@ -1,11 +1,11 @@
 /**
  * Agent 聊天逻辑 Hook
- * @author JeecG Team
  * @date 2025-11-30
  */
 
 import { ref, Ref, computed, reactive, nextTick } from 'vue';
 import { message } from 'ant-design-vue';
+import logger from '@/utils/logger';
 import { executeAgent, getConversationMessages, confirmToolExecution, stopAgent } from '../agent.api';
 import type {
   AgentMessage,
@@ -269,7 +269,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       // 执行 Agent 任务
       currentController = await executeAgent(request, {
         onStart: (event) => {
-          console.log('任务开始:', event);
+          logger.debug('任务开始:', event);
           updateConversationId(event);
           // 【新增】保存 requestId 用于停止功能
           currentRequestId = event.requestId || null;
@@ -279,7 +279,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         },
 
         onIterationStart: (event) => {
-          console.log('迭代开始:', event);
+          logger.debug('迭代开始:', event);
           updateConversationId(event);
           
           const iterationNumber = event.data?.iterationNumber || 1;
@@ -296,11 +296,11 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           assistantMessage.process!.iterations.push(newIteration);
           currentIteration = newIteration;
           
-          console.log(`🔁 创建第 ${iterationNumber} 轮迭代（展开）`);
+          logger.debug(`🔁 创建第 ${iterationNumber} 轮迭代（展开）`);
         },
 
         onThinking: (event) => {
-          console.log('AI 思考中:', event);
+          logger.debug('AI 思考中:', event);
           updateConversationId(event);
           assistantMessage.status = 'thinking';
           assistantMessage.statusText = event.message || '思考中...';
@@ -330,7 +330,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         },
 
         onModelSelected: (event) => {
-          console.log('模型已选择:', event);
+          logger.debug('模型已选择:', event);
           updateConversationId(event);
           if (event.data) {
             assistantMessage.model = event.data.name || event.data.id;
@@ -339,7 +339,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         },
 
         onRagRetrieve: (event) => {
-          console.log('RAG 检索:', event);
+          logger.debug('RAG 检索:', event);
           updateConversationId(event);
           assistantMessage.status = 'retrieving';
           assistantMessage.statusText = '正在检索知识库...';
@@ -387,7 +387,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         },
 
         onToolCall: (event) => {
-          console.log('工具调用:', event);
+          logger.debug('工具调用:', event);
           updateConversationId(event);
           const requiresConfirmation = Boolean(event.data?.requiresConfirmation);
           assistantMessage.status = 'calling_tool';
@@ -436,7 +436,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         },
 
         onToolResult: (event) => {
-          console.log('工具结果:', event);
+          logger.debug('工具结果:', event);
           updateConversationId(event);
           currentStatus.value = '工具执行完成';
 
@@ -474,7 +474,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
         onMessage: (event) => {
           // 流式内容
-          console.log('[useAgentChat] 收到消息片段:', event.content);
+          logger.debug('[useAgentChat] 收到消息片段:', event.content);
           updateConversationId(event);
           
           // 标记流式输出已开始
@@ -513,7 +513,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         },
 
         onIterationEnd: (event) => {
-          console.log('迭代结束:', event);
+          logger.debug('迭代结束:', event);
           updateConversationId(event);
 
           if (!currentIteration) return;
@@ -539,7 +539,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           // 自动折叠已完成的迭代
           currentIteration.collapsed = true;
 
-          console.log(`🔁 完成第 ${currentIteration.iterationNumber} 轮迭代（自动折叠）`);
+          logger.debug(`🔁 完成第 ${currentIteration.iterationNumber} 轮迭代（自动折叠）`);
 
           // 如果不继续迭代，清空 currentIteration
           if (!event.data?.shouldContinue) {
@@ -549,7 +549,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
         onStreamComplete: (event) => {
           // 流式输出完成（所有 token 已发送）
-          console.log('[useAgentChat] 流式输出完成');
+          logger.debug('[useAgentChat] 流式输出完成');
           updateConversationId(event);
           
           // 更新状态：流式输出完成，但任务还未完全结束
@@ -559,14 +559,14 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         },
 
         onComplete: (event) => {
-          console.log('任务完成:', event);
+          logger.debug('任务完成:', event);
           updateConversationId(event);
           
           // 【新增】兜底：强制完成所有running状态的迭代和步骤
           if (assistantMessage.process && assistantMessage.process.iterations) {
             assistantMessage.process.iterations.forEach((iter: any) => {
               if (iter.status === 'running') {
-                console.warn(`⚠️ 发现未完成的迭代 ${iter.iterationNumber}，强制标记为completed`);
+                logger.warn(`⚠️ 发现未完成的迭代 ${iter.iterationNumber}，强制标记为completed`);
                 
                 // 完成所有运行中的步骤
                 iter.steps?.forEach((step: any) => {
@@ -611,7 +611,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         },
 
         onError: (event) => {
-          console.error('发生错误:', event);
+          logger.error('发生错误:', event);
           updateConversationId(event);
           assistantMessage.status = 'error';
           assistantMessage.statusText = '';
@@ -648,7 +648,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         },
       });
     } catch (error: any) {
-      console.error('发送消息失败:', error);
+      logger.error('发送消息失败:', error);
       assistantMessage.status = 'error';
       assistantMessage.loading = false;
       assistantMessage.error = true;
@@ -670,9 +670,9 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       try {
         // 1. 先调用后端停止接口（重要：先告诉后端停止）
         if (currentRequestId) {
-          console.log('调用后端停止接口:', currentRequestId);
+          logger.debug('调用后端停止接口:', currentRequestId);
           const success = await stopAgent(currentRequestId);
-          console.log('后端停止结果:', success);
+          logger.debug('后端停止结果:', success);
         }
         
         // 2. 等待一小段时间让后端处理
@@ -681,7 +681,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         // 3. 再中止前端 SSE 连接
         currentController.abort();
       } catch (error) {
-        console.error('停止失败:', error);
+        logger.error('停止失败:', error);
       } finally {
         currentController = null;
         currentRequestId = null;
@@ -760,9 +760,9 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       // 转换为前端格式
       messages.value = rawMessages.map(convertToAgentMessage);
       
-      console.log(`已加载 ${messages.value.length} 条历史消息`);
+      logger.debug(`已加载 ${messages.value.length} 条历史消息`);
     } catch (error) {
-      console.error('加载历史消息失败:', error);
+      logger.error('加载历史消息失败:', error);
       message.error('加载历史消息失败');
       messages.value = [];
     } finally {

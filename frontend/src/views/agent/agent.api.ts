@@ -1,10 +1,10 @@
 /**
  * AI Agent API 封装
- * @author JeecG Team
  * @date 2025-11-30
  */
 
-import { defHttp } from '@/utils/http';
+import { http } from '@/utils/http';
+import logger from '@/utils/logger';
 import type {
   AgentRequest,
   AgentEvent,
@@ -54,13 +54,13 @@ export enum AgentApi {
 export async function getAvailableModels(type?: ModelType): Promise<ModelInfo[]> {
   try {
     const params = type ? { type: type as string } : undefined;
-    const response = await defHttp.get(
+    const response = await http.get(
       { url: AgentApi.availableModels, params },
       { isTransformResponse: false }
     );
     return response.data || [];
   } catch (error) {
-    console.error('获取模型列表失败:', error);
+    logger.error('获取模型列表失败:', error);
     return [];
   }
 }
@@ -77,7 +77,7 @@ export async function getEmbeddingModels(): Promise<ModelInfo[]> {
  */
 export async function checkHealth(): Promise<HealthResponse | null> {
   try {
-    const response = await defHttp.get(
+    const response = await http.get(
       { url: AgentApi.health },
       { isTransformResponse: false }
     );
@@ -86,7 +86,7 @@ export async function checkHealth(): Promise<HealthResponse | null> {
     }
     return null;
   } catch (error) {
-    console.error('健康检查失败:', error);
+    logger.error('健康检查失败:', error);
     return null;
   }
 }
@@ -97,7 +97,7 @@ export async function checkHealth(): Promise<HealthResponse | null> {
  */
 export async function getKnowledgeList(): Promise<KnowledgeInfo[]> {
   try {
-    const response = await defHttp.get(
+    const response = await http.get(
       { url: '/api/knowledge-bases' },
       { isTransformResponse: false }
     );
@@ -113,7 +113,7 @@ export async function getKnowledgeList(): Promise<KnowledgeInfo[]> {
     }
     return [];
   } catch (error) {
-    console.error('获取知识库列表失败:', error);
+    logger.error('获取知识库列表失败:', error);
     return [];
   }
 }
@@ -131,7 +131,7 @@ export async function executeAgent(
   const controller = new AbortController();
 
   try {
-    const readableStream = await defHttp.post(
+    const readableStream = await http.post(
       {
         url: AgentApi.execute,
         params: request,
@@ -148,7 +148,7 @@ export async function executeAgent(
     // 处理 SSE 流
     processSSEStream(readableStream, callbacks, controller);
   } catch (error: any) {
-    console.error('Agent 执行失败:', error);
+    logger.error('Agent 执行失败:', error);
     
     // 超时错误
     if (error.code === 'ETIMEDOUT' || error.name === 'AbortError') {
@@ -174,13 +174,13 @@ export async function executeAgent(
  */
 export async function stopAgent(requestId: string): Promise<boolean> {
   try {
-    const response = await defHttp.post(
+    const response = await http.post(
       { url: `${AgentApi.stop}/${requestId}` },
       { isTransformResponse: false }
     );
     return response.success === true;
   } catch (error) {
-    console.error('停止 Agent 失败:', error);
+    logger.error('停止 Agent 失败:', error);
     return false;
   }
 }
@@ -194,7 +194,7 @@ export async function confirmToolExecution(
   requestId?: string
 ): Promise<boolean> {
   try {
-    const response = await defHttp.post(
+    const response = await http.post(
       {
         url: AgentApi.toolConfirm,
         params: { toolExecutionId, approve, requestId },
@@ -203,7 +203,7 @@ export async function confirmToolExecution(
     );
     return response.success === true;
   } catch (error) {
-    console.error('工具确认失败:', error);
+    logger.error('工具确认失败:', error);
     return false;
   }
 }
@@ -225,7 +225,7 @@ async function processSSEStream(
       const { done, value } = await reader.read();
       
       if (done) {
-        console.log('SSE 流结束');
+        logger.debug('SSE 流结束');
         break;
       }
 
@@ -262,19 +262,19 @@ async function processSSEStream(
           try {
             const parsedData: AgentEvent = JSON.parse(eventData);
             parsedData.event = eventType as any;
-            console.log(`[Agent SSE] 收到事件: ${eventType}`, parsedData);
+            logger.debug(`[Agent SSE] 收到事件: ${eventType}`, parsedData);
             dispatchEvent(parsedData, callbacks);
           } catch (error) {
-            console.error('解析事件数据失败:', error, eventData);
+            logger.error('解析事件数据失败:', error, eventData);
           }
         }
       }
     }
   } catch (error: any) {
     if (error.name === 'AbortError') {
-      console.log('请求已取消');
+      logger.debug('请求已取消');
     } else {
-      console.error('处理 SSE 流时出错:', error);
+      logger.error('处理 SSE 流时出错:', error);
       callbacks.onError?.({
         requestId: '',
         error: 'STREAM_ERROR',
@@ -292,101 +292,101 @@ async function processSSEStream(
 function dispatchEvent(event: AgentEvent, callbacks: AgentEventCallbacks) {
   const { event: eventType } = event;
 
-  console.log(`[Agent] 分发事件: ${eventType}`);
+  logger.debug(`[Agent] 分发事件: ${eventType}`);
 
   switch (eventType) {
     case 'agent:start':
-      console.log('[Agent] 任务开始');
+      logger.debug('[Agent] 任务开始');
       callbacks.onStart?.(event);
       break;
 
     case 'agent:iteration_start':
-      console.log('[Agent] 迭代开始:', event.data?.iterationNumber);
+      logger.debug('[Agent] 迭代开始:', event.data?.iterationNumber);
       callbacks.onIterationStart?.(event);
       break;
 
     case 'agent:thinking':
-      console.log('[Agent] AI 思考中:', event.message);
+      logger.debug('[Agent] AI 思考中:', event.message);
       callbacks.onThinking?.(event);
       break;
 
     case 'agent:planning':
-      console.log('[Agent] 正在规划:', event.message);
+      logger.debug('[Agent] 正在规划:', event.message);
       callbacks.onThinking?.({ ...event, message: event.message || '正在规划下一步...', statusText: '规划中' });
       break;
 
     case 'agent:tool_executing':
-      console.log('[Agent] 正在执行工具:', event.message);
+      logger.debug('[Agent] 正在执行工具:', event.message);
       callbacks.onThinking?.({ ...event, message: event.message || '正在执行工具...', statusText: '执行中' });
       break;
 
     case 'agent:rag_querying':
-      console.log('[Agent] 正在查询知识库:', event.message);
+      logger.debug('[Agent] 正在查询知识库:', event.message);
       callbacks.onThinking?.({ ...event, message: event.message || '查询相关知识...', statusText: '检索中' });
       break;
 
     case 'agent:generating':
-      console.log('[Agent] 正在生成回复:', event.message);
+      logger.debug('[Agent] 正在生成回复:', event.message);
       callbacks.onThinking?.({ ...event, message: event.message || '正在生成回复...', statusText: '生成中' });
       break;
 
     case 'agent:observing':
-      console.log('[Agent] 正在观察结果:', event.message);
+      logger.debug('[Agent] 正在观察结果:', event.message);
       callbacks.onThinking?.({ ...event, message: event.message || '正在观察执行结果...', statusText: '观察中' });
       break;
 
     case 'agent:reflecting':
-      console.log('[Agent] 正在反思:', event.message);
+      logger.debug('[Agent] 正在反思:', event.message);
       callbacks.onThinking?.({ ...event, message: event.message || '结果反思中...', statusText: '反思中' });
       break;
 
     case 'agent:model_selected':
-      console.log('[Agent] 模型已选择:', event.data);
+      logger.debug('[Agent] 模型已选择:', event.data);
       callbacks.onModelSelected?.(event);
       break;
 
     case 'agent:rag_retrieve':
-      console.log('[Agent] RAG 检索:', event.message);
+      logger.debug('[Agent] RAG 检索:', event.message);
       callbacks.onRagRetrieve?.(event);
       break;
 
     case 'agent:tool_call':
-      console.log('[Agent] 工具调用:', event.data);
+      logger.debug('[Agent] 工具调用:', event.data);
       callbacks.onToolCall?.(event);
       break;
 
     case 'agent:tool_result':
-      console.log('[Agent] 工具结果:', event.data);
+      logger.debug('[Agent] 工具结果:', event.data);
       callbacks.onToolResult?.(event);
       break;
 
     case 'agent:message':
-      console.log('[Agent] 流式内容:', event.content?.substring(0, 20));
+      logger.debug('[Agent] 流式内容:', event.content?.substring(0, 20));
       callbacks.onMessage?.(event);
       break;
 
     case 'agent:stream_complete':
-      console.log('[Agent] 流式输出完成');
+      logger.debug('[Agent] 流式输出完成');
       callbacks.onStreamComplete?.(event);
       break;
 
     case 'agent:iteration_end':
-      console.log('[Agent] 迭代结束:', event.data?.iterationNumber);
+      logger.debug('[Agent] 迭代结束:', event.data?.iterationNumber);
       callbacks.onIterationEnd?.(event);
       break;
 
     case 'agent:complete':
-      console.log('[Agent] 任务完成');
+      logger.debug('[Agent] 任务完成');
       callbacks.onComplete?.(event);
       break;
 
     case 'agent:error':
-      console.error('[Agent] 发生错误:', event.message);
+      logger.error('[Agent] 发生错误:', event.message);
       callbacks.onError?.(event);
       break;
 
     default:
-      console.warn('[Agent] 未知的事件类型:', eventType);
+      logger.warn('[Agent] 未知的事件类型:', eventType);
   }
 }
 
@@ -395,7 +395,7 @@ function dispatchEvent(event: AgentEvent, callbacks: AgentEventCallbacks) {
  */
 export async function getConversations(pageNo = 1, pageSize = 50, status?: string): Promise<PageResult<ConversationInfo>> {
   try {
-    const response = await defHttp.get(
+    const response = await http.get(
       { 
         url: AgentApi.conversations,
         params: { pageNo, pageSize, status }
@@ -437,7 +437,7 @@ export async function getConversations(pageNo = 1, pageSize = 50, status?: strin
       pages: 0,
     };
   } catch (error) {
-    console.error('获取会话列表失败:', error);
+    logger.error('获取会话列表失败:', error);
     return {
       records: [],
       total: 0,
@@ -454,7 +454,7 @@ export async function getConversations(pageNo = 1, pageSize = 50, status?: strin
 export async function getConversationMessages(conversationId: string, limit = 50): Promise<any[]> {
   try {
     const url = AgentApi.conversationMessages.replace('{id}', conversationId);
-    const response = await defHttp.get(
+    const response = await http.get(
       { 
         url,
         params: { limit }
@@ -467,7 +467,7 @@ export async function getConversationMessages(conversationId: string, limit = 50
     }
     return [];
   } catch (error) {
-    console.error('获取会话消息失败:', error);
+    logger.error('获取会话消息失败:', error);
     return [];
   }
 }
@@ -477,7 +477,7 @@ export async function getConversationMessages(conversationId: string, limit = 50
  */
 export async function updateConversationTitle(conversationId: string, title: string): Promise<boolean> {
   try {
-    const response = await defHttp.put(
+    const response = await http.put(
       { 
         url: AgentApi.conversationTitle,
         params: { conversationId, title }
@@ -486,7 +486,7 @@ export async function updateConversationTitle(conversationId: string, title: str
     );
     return response.success === true;
   } catch (error) {
-    console.error('更新会话标题失败:', error);
+    logger.error('更新会话标题失败:', error);
     return false;
   }
 }
@@ -496,14 +496,14 @@ export async function updateConversationTitle(conversationId: string, title: str
  */
 export async function deleteConversation(conversationId: string): Promise<boolean> {
   try {
-    const response = await defHttp.delete(
+    const response = await http.delete(
       { 
         url: `${AgentApi.conversation}/${conversationId}`
       }
     );
     return response.success === true;
   } catch (error) {
-    console.error('删除会话失败:', error);
+    logger.error('删除会话失败:', error);
     return false;
   }
 }
@@ -513,7 +513,7 @@ export async function deleteConversation(conversationId: string): Promise<boolea
  */
 export async function archiveConversations(conversationIds: string[]): Promise<boolean> {
   try {
-    const response = await defHttp.post(
+    const response = await http.post(
       { 
         url: AgentApi.conversationArchive,
         params: conversationIds
@@ -521,7 +521,7 @@ export async function archiveConversations(conversationIds: string[]): Promise<b
     );
     return response.success === true;
   } catch (error) {
-    console.error('归档会话失败:', error);
+    logger.error('归档会话失败:', error);
     return false;
   }
 }
@@ -531,13 +531,13 @@ export async function archiveConversations(conversationIds: string[]): Promise<b
  */
 export async function getMessageRoles(): Promise<Array<{ code: string; name: string }>> {
   try {
-    const response = await defHttp.get(
+    const response = await http.get(
       { url: AgentApi.enumMessageRoles },
       { isTransformResponse: false }
     );
     return response.data || [];
   } catch (error) {
-    console.error('获取消息角色枚举失败:', error);
+    logger.error('获取消息角色枚举失败:', error);
     return [];
   }
 }
@@ -547,13 +547,13 @@ export async function getMessageRoles(): Promise<Array<{ code: string; name: str
  */
 export async function getMessageStatus(): Promise<Array<{ code: string; name: string }>> {
   try {
-    const response = await defHttp.get(
+    const response = await http.get(
       { url: AgentApi.enumMessageStatus },
       { isTransformResponse: false }
     );
     return response.data || [];
   } catch (error) {
-    console.error('获取消息状态枚举失败:', error);
+    logger.error('获取消息状态枚举失败:', error);
     return [];
   }
 }
@@ -563,13 +563,13 @@ export async function getMessageStatus(): Promise<Array<{ code: string; name: st
  */
 export async function getConversationStatus(): Promise<Array<{ code: string; name: string }>> {
   try {
-    const response = await defHttp.get(
+    const response = await http.get(
       { url: AgentApi.enumConversationStatus },
       { isTransformResponse: false }
     );
     return response.data || [];
   } catch (error) {
-    console.error('获取对话状态枚举失败:', error);
+    logger.error('获取对话状态枚举失败:', error);
     return [];
   }
 }

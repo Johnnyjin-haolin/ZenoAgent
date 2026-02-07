@@ -222,9 +222,9 @@ const request: AgentRequest = {
 
 ## 📚 相关文档
 
-- [后端 API 文档](../../jeecg-boot/jeecg-module-aiagent/FRONTEND_API_DOCUMENTATION.md)
-- [Agent 架构文档](../../jeecg-boot/jeecg-module-aiagent/AI_AGENT_ARCHITECTURE.md)
-- [MCP 工具文档](../../jeecg-boot/jeecg-module-mcp/QUICKSTART.md)
+- [后端 API 文档](../../../docs/API.md)
+- [技术方案](../../../TECHNICAL_PLAN.md)
+- [部署指南](../../../DEPLOYMENT.md)
 
 ## 🎉 更新日志
 
@@ -240,6 +240,5 @@ const request: AgentRequest = {
 ---
 
 **版本**: 1.0.0  
-**创建时间**: 2025-11-30  
-**维护者**: JeecG Team
+**创建时间**: 2025-11-30
 
