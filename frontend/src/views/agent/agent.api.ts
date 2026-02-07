@@ -12,6 +12,8 @@ import type {
   ModelInfo,
   KnowledgeInfo,
   ConversationInfo,
+  PageResult,
+  HealthResponse,
 } from './agent.types';
 import { ModelType } from '@/types/model.types';
 
@@ -73,13 +75,19 @@ export async function getEmbeddingModels(): Promise<ModelInfo[]> {
 /**
  * 健康检查
  */
-export async function checkHealth(): Promise<boolean> {
+export async function checkHealth(): Promise<HealthResponse | null> {
   try {
-    const response = await defHttp.get({ url: AgentApi.health });
-    return response.success === true;
+    const response = await defHttp.get(
+      { url: AgentApi.health },
+      { isTransformResponse: false }
+    );
+    if (response.success && response.data) {
+      return response.data as HealthResponse;
+    }
+    return null;
   } catch (error) {
     console.error('健康检查失败:', error);
-    return false;
+    return null;
   }
 }
 
@@ -385,7 +393,7 @@ function dispatchEvent(event: AgentEvent, callbacks: AgentEventCallbacks) {
 /**
  * 获取会话列表（分页）
  */
-export async function getConversations(pageNo = 1, pageSize = 50, status?: string): Promise<ConversationInfo[]> {
+export async function getConversations(pageNo = 1, pageSize = 50, status?: string): Promise<PageResult<ConversationInfo>> {
   try {
     const response = await defHttp.get(
       { 
@@ -395,8 +403,10 @@ export async function getConversations(pageNo = 1, pageSize = 50, status?: strin
       { isTransformResponse: false }
     );
     
-    if (response.success && response.data?.records) {
-      return response.data.records.map((item: any) => ({
+    if (response.success && response.data) {
+      const pageResult = response.data as PageResult<any>;
+      // 转换 records 中的每个项，添加前端需要的字段
+      const records = pageResult.records.map((item: any) => ({
         id: item.id,
         title: item.title,
         isEdit: false,
@@ -408,11 +418,33 @@ export async function getConversations(pageNo = 1, pageSize = 50, status?: strin
         createTime: item.createTime,
         updateTime: item.updateTime,
       }));
+      
+      return {
+        records,
+        total: pageResult.total,
+        pageNo: pageResult.pageNo,
+        pageSize: pageResult.pageSize,
+        pages: pageResult.pages,
+      };
     }
-    return [];
+    
+    // 返回空的分页结果
+    return {
+      records: [],
+      total: 0,
+      pageNo: pageNo,
+      pageSize: pageSize,
+      pages: 0,
+    };
   } catch (error) {
     console.error('获取会话列表失败:', error);
-    return [];
+    return {
+      records: [],
+      total: 0,
+      pageNo: pageNo,
+      pageSize: pageSize,
+      pages: 0,
+    };
   }
 }
 

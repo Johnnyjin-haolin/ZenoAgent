@@ -5,7 +5,6 @@ import com.aiagent.infrastructure.external.mcp.ToolConfirmationManager;
 import com.aiagent.shared.response.Result;
 import com.aiagent.api.dto.ToolConfirmRequest;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,7 +25,7 @@ public class AgentToolController {
      * 工具执行确认（手动模式）
      */
     @PostMapping("/tool/confirm")
-    public ResponseEntity<Result<Boolean>> confirmTool(@RequestBody ToolConfirmRequest request) {
+    public Result<Boolean> confirmTool(@RequestBody ToolConfirmRequest request) {
         if (request == null || request.getToolExecutionId() == null || request.getApprove() == null) {
             throw new IllegalArgumentException("参数不完整");
         }
@@ -35,9 +34,9 @@ public class AgentToolController {
             : toolConfirmationManager.reject(request.getToolExecutionId());
 
         if (success) {
-            return ResponseEntity.ok(Result.success("操作成功", true));
+            return Result.success("操作成功", true);
         }
-        return ResponseEntity.ok(Result.error(ErrorCode.NOT_FOUND, "未找到待确认的工具执行"));
+        return Result.error(ErrorCode.NOT_FOUND, "未找到待确认的工具执行");
     }
 }
 

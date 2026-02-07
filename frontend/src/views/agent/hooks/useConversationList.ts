@@ -30,11 +30,11 @@ export const useConversationList = (options: UseConversationListOptions) => {
   const loadConversations = async () => {
     try {
       const result = await getConversations();
-      conversations.value = result;
+      conversations.value = result.records;
 
-      if (result.length > 0 && !currentConversationId.value) {
-        currentConversationId.value = result[0].id;
-        await loadMessages(result[0].id);
+      if (result.records.length > 0 && !currentConversationId.value) {
+        currentConversationId.value = result.records[0].id;
+        await loadMessages(result.records[0].id);
         await scrollToBottom();
       }
     } catch (error) {
@@ -125,7 +125,7 @@ export const useConversationList = (options: UseConversationListOptions) => {
   const syncConversationTitle = async (conversationId: string) => {
     try {
       const result = await getConversations();
-      const matched = result.find((item) => item.id === conversationId);
+      const matched = result.records.find((item) => item.id === conversationId);
       if (matched) {
         const index = conversations.value.findIndex((c) => c.id === conversationId);
         if (index !== -1) {
