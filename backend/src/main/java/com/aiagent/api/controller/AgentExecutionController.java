@@ -34,25 +34,6 @@ public class AgentExecutionController {
     @PostMapping("/execute")
     public SseEmitter execute(@RequestBody AgentRequest request) {
         log.info("收到Agent执行请求: {}", Json.toJson(request));
-        
-        // 详细调试信息
-        if (request.getRagConfig() != null) {
-            log.info("RAG配置详情: maxResults={}, minScore={}, maxDocumentLength={}, maxTotalContentLength={}, includeInPrompt={}, enableSmartSummary={}",
-                request.getRagConfig().getMaxResults(),
-                request.getRagConfig().getMinScore(),
-                request.getRagConfig().getMaxDocumentLength(),
-                request.getRagConfig().getMaxTotalContentLength(),
-                request.getRagConfig().getIncludeInPrompt(),
-                request.getRagConfig().getEnableSmartSummary());
-        }
-        
-        if (request.getThinkingConfig() != null) {
-            log.info("思考配置详情: conversationHistoryRounds={}, maxMessageLength={}, actionExecutionHistoryCount={}",
-                request.getThinkingConfig().getConversationHistoryRounds(),
-                request.getThinkingConfig().getMaxMessageLength(),
-                request.getThinkingConfig().getActionExecutionHistoryCount());
-        }
-        
         return agentService.execute(request);
     }
 

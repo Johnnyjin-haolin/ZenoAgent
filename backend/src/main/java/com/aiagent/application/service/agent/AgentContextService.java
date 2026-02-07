@@ -2,7 +2,6 @@ package com.aiagent.application.service.agent;
 
 import com.aiagent.shared.constant.AgentConstants;
 import com.aiagent.application.service.memory.MemorySystem;
-import com.aiagent.infrastructure.storage.ConversationStorage;
 import com.aiagent.shared.util.StringUtils;
 import com.aiagent.shared.util.UUIDGenerator;
 import com.aiagent.application.model.AgentContext;
@@ -36,9 +35,6 @@ public class AgentContextService {
 
     @Autowired
     private MemorySystem memorySystem;
-
-    @Autowired
-    private ConversationStorage conversationStorage;
 
     @Autowired
     private ConversationService conversationService;
@@ -130,29 +126,13 @@ public class AgentContextService {
             ConversationInfo existingConversation = conversationService.getConversation(conversationId);
 
             if (existingConversation == null) {
-                Map<String, Object> redisConversation = conversationStorage.getConversation(conversationId);
-
-                ConversationInfo conversationInfo;
-                if (redisConversation != null && !redisConversation.isEmpty()) {
-                    conversationInfo = ConversationInfo.builder()
-                        .id(conversationId)
-                        .title(redisConversation.get("title") != null ? redisConversation.get("title").toString() : AgentConstants.DEFAULT_CONVERSATION_TITLE)
-                        .status(redisConversation.get("status") != null ? redisConversation.get("status").toString() : AgentConstants.DEFAULT_CONVERSATION_STATUS)
-                        .messageCount(redisConversation.get("messageCount") != null ?
-                            Integer.parseInt(redisConversation.get("messageCount").toString()) : 0)
-                        .modelId(redisConversation.get("modelId") != null ? redisConversation.get("modelId").toString() : null)
-                        .modelName(redisConversation.get("modelName") != null ? redisConversation.get("modelName").toString() : null)
-                        .build();
-                } else {
-                    conversationInfo = ConversationInfo.builder()
-                        .id(conversationId)
-                        .title(generateTitle(request.getContent()))
-                        .status(AgentConstants.DEFAULT_CONVERSATION_STATUS)
-                        .messageCount(0)
-                        .build();
-
-                    conversationStorage.saveConversation(conversationInfo);
-                }
+                // 如果MySQL中不存在，创建新的会话
+                ConversationInfo conversationInfo = ConversationInfo.builder()
+                    .id(conversationId)
+                    .title(generateTitle(request.getContent()))
+                    .status(AgentConstants.DEFAULT_CONVERSATION_STATUS)
+                    .messageCount(0)
+                    .build();
 
                 conversationService.createConversation(conversationInfo);
                 log.info("确保会话存在: conversationId={}, 已创建到MySQL", conversationId);

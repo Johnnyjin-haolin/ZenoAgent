@@ -79,8 +79,6 @@ public class AgentConstants {
      * Redis缓存前缀
      */
     public static final String CACHE_PREFIX_AGENT_CONTEXT = "aiagent:context:";
-    public static final String CACHE_PREFIX_AGENT_MEMORY = "aiagent:memory:";
-    public static final String CACHE_PREFIX_AGENT_CONVERSATION = "aiagent:conversation:";
     public static final String CACHE_PREFIX_AGENT_SSE = "aiagent:sse:";
 
     /**

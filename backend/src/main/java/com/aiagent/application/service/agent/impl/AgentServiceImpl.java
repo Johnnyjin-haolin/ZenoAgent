@@ -15,7 +15,6 @@ import com.aiagent.application.service.memory.MemorySystem;
 import com.aiagent.api.dto.AgentEventData;
 import com.aiagent.api.dto.AgentRequest;
 import com.aiagent.application.model.AgentContext;
-import com.aiagent.infrastructure.storage.ConversationStorage;
 import com.aiagent.shared.util.UUIDGenerator;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -45,9 +44,6 @@ public class AgentServiceImpl implements IAgentService {
     
     @Autowired
     private MemorySystem memorySystem;
-    
-    @Autowired
-    private ConversationStorage conversationStorage;
     
     @Autowired
     private AgentStateMachine stateMachine;
@@ -269,12 +265,11 @@ public class AgentServiceImpl implements IAgentService {
             log.debug("执行结果包含 {} 条消息（已在观察阶段持久化）",
                 allMessages != null ? allMessages.size() : 0);
 
-            // 更新对话消息数量（Redis和MySQL都要更新）
-            conversationStorage.incrementMessageCount(context.getConversationId());
+            // 更新对话消息数量
             try {
                 conversationService.incrementMessageCount(context.getConversationId());
             } catch (Exception e) {
-                log.warn("更新MySQL消息数量失败: conversationId={}", context.getConversationId(), e);
+                log.warn("更新消息数量失败: conversationId={}", context.getConversationId(), e);
             }
             stepStartNs = logStep("increment_message_count", stepStartNs, requestId, conversationId, null, emitter);
 

@@ -4,7 +4,6 @@ import com.aiagent.shared.constant.AgentConstants;
 import com.aiagent.application.service.message.MessageService;
 import com.aiagent.shared.util.StringUtils;
 import com.aiagent.application.model.AgentContext;
-import com.aiagent.application.model.MessageDTO;
 import dev.langchain4j.data.message.ChatMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,7 +15,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * 记忆系统
- * 管理Agent的短期记忆、工作记忆和长期记忆（基于Redis）
+ * 管理Agent的工作记忆（基于Redis Context缓存）
+ * 消息持久化统一使用MySQL，不再使用Redis存储消息
  * 
  * @author aiagent
  */
@@ -31,22 +31,12 @@ public class MemorySystem {
     private MessageService messageService;
     
     /**
-     * 短期记忆过期时间（小时）
-     */
-    private static final int SHORT_TERM_EXPIRE_HOURS = 24;
-    
-    /**
      * 工作记忆过期时间（小时）
      */
     private static final int WORK_MEMORY_EXPIRE_HOURS = 1;
-    
-    /**
-     * 默认上下文窗口大小
-     */
-    private static final int DEFAULT_CONTEXT_WINDOW = 10;
 
     /**
-     * 保存短期记忆（Redis + MySQL双存储）
+     * 保存消息到MySQL（持久化）
      * 
      * @param conversationId 会话ID
      * @param message 消息
@@ -58,56 +48,14 @@ public class MemorySystem {
     public void saveShortTermMemory(String conversationId, ChatMessage message,
                                    String modelId, Integer tokens, Integer duration,
                                    Map<String, Object> metadata) {
-        // 1. 保存到Redis（短期记忆）
-        saveToRedis(conversationId, message);
-        
-        // 2. 保存到MySQL（持久化，异步执行，避免影响主流程）
+        // 保存到MySQL（持久化）
         if (messageService != null) {
             try {
                 messageService.saveMessage(conversationId, message, modelId, tokens, duration, metadata);
             } catch (Exception e) {
-                log.warn("保存消息到MySQL失败，但Redis已保存: conversationId={}", conversationId, e);
-                // 不抛出异常，确保Redis保存成功即可，MySQL失败不影响主流程
+                log.warn("保存消息到MySQL失败: conversationId={}", conversationId, e);
+                // 不抛出异常，MySQL失败不影响主流程
             }
-        }
-    }
-    
-    /**
-     * 保存消息到Redis（私有方法，提取公共逻辑）
-     */
-    private void saveToRedis(String conversationId, ChatMessage message) {
-        String key = AgentConstants.CACHE_PREFIX_AGENT_MEMORY + conversationId;
-        
-        try {
-            // 获取现有消息列表（DTO格式）
-            @SuppressWarnings("unchecked")
-            List<MessageDTO> messageDTOs = (List<MessageDTO>) redisTemplate.opsForValue().get(key);
-            
-            if (messageDTOs == null) {
-                messageDTOs = new ArrayList<>();
-            }
-            
-            // 转换为 DTO 并添加
-            MessageDTO messageDTO = MessageDTO.from(message);
-            if (messageDTO != null) {
-                messageDTOs.add(messageDTO);
-            }
-            
-            // 限制消息数量
-            if (messageDTOs.size() > DEFAULT_CONTEXT_WINDOW * 2) {
-                messageDTOs = new ArrayList<>(messageDTOs.subList(
-                    messageDTOs.size() - DEFAULT_CONTEXT_WINDOW * 2, 
-                    messageDTOs.size()
-                ));
-            }
-            
-            // 保存到Redis（保存DTO，可序列化）
-            redisTemplate.opsForValue().set(key, messageDTOs, SHORT_TERM_EXPIRE_HOURS, TimeUnit.HOURS);
-            
-            log.debug("保存短期记忆到Redis: conversationId={}, messageCount={}", conversationId, messageDTOs.size());
-            
-        } catch (Exception e) {
-            log.error("保存短期记忆到Redis失败", e);
         }
     }
 
@@ -172,23 +120,24 @@ public class MemorySystem {
     }
     
     /**
-     * 清除会话记忆
+     * 清除会话上下文缓存
      * 
      * @param conversationId 会话ID
      */
     public void clearMemory(String conversationId) {
-        String memoryKey = AgentConstants.CACHE_PREFIX_AGENT_MEMORY + conversationId;
         String contextKey = AgentConstants.CACHE_PREFIX_AGENT_CONTEXT + conversationId;
         
         try {
-            redisTemplate.delete(memoryKey);
             redisTemplate.delete(contextKey);
-            log.info("清除会话记忆: conversationId={}", conversationId);
+            log.info("清除会话上下文缓存: conversationId={}", conversationId);
         } catch (Exception e) {
-            log.error("清除会话记忆失败", e);
+            log.error("清除会话上下文缓存失败", e);
         }
     }
 
 }
+
+
+
 
 
