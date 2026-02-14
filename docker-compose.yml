@@ -18,6 +18,31 @@ services:
       timeout: 5s
       retries: 5
 
+  mysql:
+    image: mysql:8.0
+    container_name: zenoagent-mysql
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-root123456}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-zeno_agent}
+      - MYSQL_USER=${MYSQL_USER:-zenoagent}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-zeno123456}
+      - TZ=Asia/Shanghai
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./backend/src/main/resources/sql:/docker-entrypoint-initdb.d
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    restart: unless-stopped
+    networks:
+      - zenoagent-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot123456"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   backend:
     build:
       context: ./backend
@@ -29,11 +54,16 @@ services:
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-prod}
       - SPRING_REDIS_HOST=redis
       - SPRING_REDIS_PORT=6379
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-zeno_agent}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
+      - SPRING_DATASOURCE_USERNAME=${MYSQL_USER:-zenoagent}
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_PASSWORD:-zeno123456}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - AIAGENT_MODEL_DEFAULT_MODEL_ID=${AIAGENT_MODEL_DEFAULT_MODEL_ID:-gpt-4o-mini}
     depends_on:
       redis:
+        condition: service_healthy
+      mysql:
         condition: service_healthy
     restart: unless-stopped
     networks:
@@ -61,6 +91,8 @@ services:
 
 volumes:
   redis-data:
+    driver: local
+  mysql-data:
     driver: local
 
 networks:

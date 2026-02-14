@@ -26,9 +26,9 @@ spring:
   # Redis配置（用于存储对话、文档元数据、知识库等）
   # 注意：本项目不使用MySQL，所有数据存储在Redis中
   redis:
-    host: localhost
-    port: 6379
-    password: 
+    host: ${SPRING_REDIS_HOST:localhost}
+    port: ${SPRING_REDIS_PORT:6379}
+    password: ${SPRING_REDIS_PASSWORD:}
     database: 0
     timeout: 5000ms
     lettuce:
@@ -41,9 +41,9 @@ spring:
   datasource:
     type: com.alibaba.druid.pool.DruidDataSource
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/zeno-agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
-    username: root
-    password: jinhaolin
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/zeno-agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:jinhaolin}
     druid:
       initial-size: 5
       min-idle: 5
