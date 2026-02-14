@@ -2,9 +2,9 @@
 -- 创建日期: 2025-01-03
 
 -- 创建数据库
-CREATE DATABASE IF NOT EXISTS aiagent DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS zeno_agent DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-USE aiagent;
+USE zeno_agent;
 
 -- 会话表
 CREATE TABLE IF NOT EXISTS `agent_conversation` (

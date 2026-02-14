@@ -226,6 +226,7 @@ PostgreSQL + pgvector 在 ZenoAgent 中用于：
 #### 使用 Docker（推荐，包含 pgvector）
 
 ```bash
+# 在项目根目录执行，以便挂载 init 脚本自动创建 pgvector 扩展
 # 使用 pgvector 官方镜像（推荐）
 docker run -d \
   --name postgres \
@@ -234,8 +235,14 @@ docker run -d \
   -e POSTGRES_PASSWORD=Rag@123456 \
   -e POSTGRES_DB=zeno_agent \
   -v postgres-data:/var/lib/postgresql/data \
+  -v $(pwd)/backend/src/main/resources/sql/init-pgvector.sql:/docker-entrypoint-initdb.d/01-pgvector.sql:ro \
   pgvector/pgvector:pg16
 ```
+
+> **注意**：init 脚本仅在数据目录为空时执行（即首次创建容器）。若已有 `postgres-data` 卷，需先删除容器和卷后重新创建，或手动执行：
+> `docker exec -it postgres psql -U rag_user -d zeno_agent -c "CREATE EXTENSION IF NOT EXISTS vector;"`
+
+> **说明**：使用 `POSTGRES_USER=rag_user` 时，容器内超级用户为 `rag_user`（不存在 `postgres` 角色）。数据库 `zeno_agent` 和 pgvector 扩展已由 init 脚本自动创建，无需执行下方「创建数据库和启用扩展」步骤。操作数据库请使用 `psql -U rag_user -d zeno_agent`。
 
 #### 手动安装 PostgreSQL 和 pgvector
 
@@ -285,12 +292,33 @@ sudo apt-get install postgresql-14-pgvector
 
 ### 创建数据库和启用扩展
 
+#### Docker 安装用户
+
+数据库和扩展已自动创建，直接验证即可：
+
 ```bash
-# 连接到 PostgreSQL
+# 验证 pgvector 扩展
+docker exec -it postgres psql -U rag_user -d zeno_agent -c "\dx"
+# 应看到 vector 扩展
+
+# 如需进入交互式 psql
+docker exec -it postgres psql -U rag_user -d zeno_agent
+```
+
+#### 手动安装用户
+
+```bash
+# 连接到 PostgreSQL（手动安装时默认存在 postgres 超级用户）
 psql -U postgres
 
 # 创建数据库
 CREATE DATABASE zeno_agent;
+
+# 创建用户并授权（可选，用于应用连接）
+CREATE USER rag_user WITH PASSWORD 'Rag@123456';
+GRANT ALL PRIVILEGES ON DATABASE zeno_agent TO rag_user;
+\c zeno_agent
+GRANT ALL ON SCHEMA public TO rag_user;
 
 # 连接到新数据库
 \c zeno_agent

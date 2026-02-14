@@ -20,22 +20,6 @@
 
 Zeno Agent 是一个基于 Spring Boot 和 Vue 3 构建的 AI Agent 平台，集成了 LangChain4j 框架，提供智能对话、知识检索增强（RAG）、工具调用（MCP）等核心能力。项目采用前后端分离架构，支持流式响应、多会话管理、知识库管理等完整功能。
 
-## 📸 项目截图
-
-### 首页
-![首页](docs/pic/newchat.png)
-
-### 智能对话
-![对话](docs/pic/chat.png)
-
-![可视化思考过程](docs/pic/chat-thking.png)
-
-### Agent 配置
-![Agent配置](docs/pic/config.png)
-
-### 知识库管理
-![知识库截图](docs/pic/rag.png)
-
 
 ## ✨ 核心特性
 
@@ -146,18 +130,47 @@ ZenoAgent/
 ├── backend/                      # 后端项目
 │   ├── src/main/java/com/aiagent/
 │   │   ├── api/                  # API 层
+│   │   │   ├── controller/       # REST 控制器
+│   │   │   └── dto/              # 数据传输对象
 │   │   ├── application/          # 应用服务层
+│   │   │   ├── service/          # 业务服务
+│   │   │   │   ├── agent/        # Agent 服务
+│   │   │   │   ├── engine/       # 推理引擎（ReAct）
+│   │   │   │   ├── rag/          # RAG 服务
+│   │   │   │   ├── action/       # 动作执行
+│   │   │   │   └── memory/       # 记忆管理
+│   │   │   └── model/            # 领域模型
 │   │   ├── domain/               # 领域层
+│   │   │   ├── entity/           # 实体类
+│   │   │   └── enums/            # 枚举类
 │   │   ├── infrastructure/       # 基础设施层
+│   │   │   ├── config/           # 配置类
+│   │   │   ├── external/         # 外部服务集成
+│   │   │   │   ├── llm/          # LLM 集成
+│   │   │   │   └── mcp/          # MCP 工具集成
+│   │   │   ├── mapper/           # MyBatis Mapper
+│   │   │   └── repository/      # 数据访问
 │   │   └── shared/               # 共享组件
-│   └── src/main/resources/       # 配置文件
+│   │       ├── response/         # 统一响应
+│   │       ├── exception/        # 异常处理
+│   │       └── util/             # 工具类
+│   └── src/main/resources/
+│       ├── application.yml       # 主配置
+│       ├── profile/              # 环境配置
+│       ├── mapper/               # MyBatis XML
+│       └── sql/                  # SQL 脚本
 │
 ├── frontend/                     # 前端项目
 │   ├── src/
 │   │   ├── views/agent/          # Agent 聊天界面
+│   │   │   ├── AgentChat.vue     # 主组件
+│   │   │   ├── components/       # 子组件
+│   │   │   ├── hooks/            # Vue Hooks
+│   │   │   └── agent.api.ts      # API 封装
 │   │   ├── views/knowledge-base/ # 知识库管理
 │   │   ├── api/                  # API 定义
-│   │   └── utils/                # 工具函数
+│   │   ├── utils/                # 工具函数
+│   │   └── types/                # TypeScript 类型
 │   └── public/                   # 静态资源
 │
 ├── docs/                         # 文档
@@ -169,20 +182,130 @@ ZenoAgent/
 
 ### 1. ReAct 推理引擎
 
-项目实现了完整的 ReAct（Reasoning + Acting）推理引擎，支持思考-行动-观察循环，自动规划并执行多步骤任务。
+项目实现了完整的 ReAct（Reasoning + Acting）推理引擎，支持：
+
+- **思考阶段**: AI 分析任务，生成思考过程和行动计划
+- **行动阶段**: 执行工具调用、RAG 检索等动作
+- **观察阶段**: 观察执行结果，决定下一步行动
+- **迭代循环**: 支持多轮迭代，直到任务完成或达到最大迭代次数
 
 ### 2. RAG 知识检索
 
-支持文档上传、向量化、相似度检索，将检索到的知识注入到 LLM 提示词中，实现知识增强。
+- **文档上传**: 支持多种格式文档上传（PDF、Word、TXT 等）
+- **向量化**: 使用 Embedding 模型将文档转换为向量
+- **相似度检索**: 根据用户问题检索相关文档片段
+- **上下文增强**: 将检索到的知识注入到 LLM 提示词中
 
 ### 3. MCP 工具调用
 
-基于 Model Context Protocol 的工具调用框架，支持工具自动发现、分组管理、手动确认等特性。
+- **工具发现**: 自动发现 MCP 服务器提供的工具
+- **工具分组**: 支持工具分组管理，可按组启用/禁用
+- **执行模式**: 支持自动执行和手动确认两种模式
+- **结果处理**: 自动解析工具执行结果，传递给 LLM
 
 ### 4. 会话管理
 
-支持多会话、上下文记忆、会话持久化等功能，提供完整的对话体验。
+- **多会话支持**: 支持创建多个独立对话会话
+- **上下文记忆**: 自动维护对话上下文，支持多轮对话
+- **会话持久化**: 会话和消息持久化到 MySQL
+- **记忆管理**: Redis 缓存短期记忆，提高响应速度
 
+## ⚙️ 配置说明
+
+### 最小配置
+
+只需配置数据库连接和 LLM API Key：
+
+```yaml
+spring:
+  redis:
+    host: localhost
+    port: 6379
+  datasource:
+    url: jdbc:mysql://localhost:3306/zeno_agent
+    username: root
+    password: your_password
+
+aiagent:
+  llm:
+    models:
+      - id: gpt-4o-mini
+        provider: OPENAI
+        apiKey: ${OPENAI_API_KEY}
+    default-model: gpt-4o-mini
+```
+
+### 环境变量
+
+```bash
+# LLM API Keys
+OPENAI_API_KEY=sk-xxx
+DEEPSEEK_API_KEY=sk-xxx
+
+# 数据库
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=your_password
+
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+```
+
+## 🎯 使用示例
+
+### 1. 简单对话
+
+直接与 AI 进行对话，无需任何配置：
+
+```
+用户: 你好，介绍一下你自己
+AI: 你好！我是 Zeno Agent，一个智能 AI 助手...
+```
+
+### 2. 知识库查询
+
+创建知识库并上传文档后，AI 可以从知识库中检索相关信息：
+
+```
+用户: 什么是 Spring Boot？
+AI: [从知识库检索相关文档] Spring Boot 是...
+```
+
+### 3. 工具调用
+
+配置 MCP 工具后，AI 可以调用工具完成任务：
+
+```
+用户: 查询当前系统时间
+AI: [调用系统工具] 当前时间是 2024-01-01 12:00:00
+```
+
+### 4. 复杂任务
+
+AI 可以自动规划并执行多步骤任务：
+
+```
+用户: 帮我分析这个文档并生成摘要
+AI: [思考] -> [上传文档] -> [解析文档] -> [生成摘要]
+```
+
+## 📸 项目截图
+
+### 首页
+![首页](docs/pic/newchat.png)
+
+### 智能对话
+![对话](docs/pic/chat.png)
+
+![可视化思考过程](docs/pic/chat-thking.png)
+
+### Agent 配置
+![Agent配置](docs/pic/config.png)
+
+### 知识库管理
+![知识库截图](docs/pic/rag.png)
 ## 📝 开发计划
 
 - [x] 基础框架搭建
