@@ -210,14 +210,16 @@ pnpm build
 
 #### 使用 Nginx 部署
 
-创建 Nginx 配置 `/etc/nginx/sites-available/zenoagent`：
+SSE 流式接口 `/aiagent/execute` 必须单独配置：关闭缓冲并拉长超时，否则 Nginx 默认 `proxy_read_timeout` 为 60s，会导致约 60 秒断连、前端报错或后端出现 `Broken pipe`。以下为已验证可用的配置。
+
+创建或修改 Nginx 配置（如 `/etc/nginx/sites-available/zenoagent` 或宝塔面板中对应站点的配置）：
 
 ```nginx
 server {
     listen 80;
-    server_name your-domain.com;
+    server_name zeno-agent;   # 或 your-domain.com，按实际域名修改
 
-    root /opt/zenoagent/frontend/dist;
+    root /www/wwwroot/ZenoAgent/front/dist;   # 或 /opt/zenoagent/frontend/dist，按实际路径修改
     index index.html;
 
     # 前端路由
@@ -225,9 +227,9 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    # Agent 执行接口（SSE 流式）：必须关闭缓冲，否则流式响应会卡住
+    # Agent 执行接口（SSE 流式）：必须单独配置，否则默认 60s 断连
     location /aiagent/execute {
-        proxy_pass http://localhost:8080;
+        proxy_pass http://127.0.0.1:8080;   # Nginx 与后端同机用 127.0.0.1，否则改为后端地址如 http://1.2.3.4:8080
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -242,20 +244,26 @@ server {
 
     # 其余 API 代理
     location /aiagent {
-        proxy_pass http://localhost:8080;
+        proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
     }
 }
 ```
 
-启用配置：
+说明：
+- **`/aiagent/execute`** 必须单独成块并设置 `proxy_read_timeout`/`proxy_send_timeout`（如 300s），否则会按默认 60s 断连。
+- 不要为 SSE 使用 `location /aiagent/stream` 而漏配 `/aiagent/execute`，实际流式接口是 **`/aiagent/execute`**。
+
+启用或重载配置：
 ```bash
-sudo ln -s /etc/nginx/sites-available/zenoagent /etc/nginx/sites-enabled/
 sudo nginx -t
-sudo systemctl reload nginx
+sudo nginx -s reload
+# 或 systemctl reload nginx
 ```
 
 #### 使用 PM2 部署（Node.js 环境）
@@ -391,6 +399,10 @@ sudo systemctl reload nginx
 - **前端同源部署（推荐）**：前端与 Nginx 同域时，构建时不要设置 `VITE_API_BASE_URL`，或设为空。前端会使用相对路径（如 `/aiagent/execute`），由 Nginx 转发到后端。重新构建并部署：`cd frontend && pnpm build`。
 - **前端与后端不同域**：构建时设置 `VITE_API_BASE_URL` 为后端完整地址（如 `https://api.example.com`），并确保后端允许该域的 CORS。
 - **Nginx**：按本文“使用 Nginx 部署”一节，为 `/aiagent/execute` 单独添加 `location`，并设置 `proxy_buffering off`、`proxy_cache off`、合理 `proxy_read_timeout`，然后 `nginx -t && systemctl reload nginx`。
+
+### 约 60 秒断连或后端报 "Broken pipe"
+
+若前端约 60 秒后断连、或后端日志出现 `SSE连接错误: Broken pipe` / `ClientAbortException: java.io.IOException: Broken pipe`，多半是 Nginx 未对 `/aiagent/execute` 单独配置，使用了默认的 **60 秒** `proxy_read_timeout`。解决：按本文「使用 Nginx 部署」为 `/aiagent/execute` 单独写 `location`，并设置 `proxy_read_timeout 300s`、`proxy_send_timeout 300s`。详见 [SSE 报错分析](./docs/SSE_ERR_INCOMPLETE_CHUNKED_ENCODING.md)。
 
 ## 📞 获取帮助
 

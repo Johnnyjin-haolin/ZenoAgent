@@ -109,6 +109,18 @@ RAG 配置示例见 [BACKEND_CONFIG.md](../BACKEND_CONFIG.md#-postgresql--pgvect
 - **前后端不同域**：构建时设置 `VITE_API_BASE_URL=https://api.example.com` 等完整后端地址，并确保后端 CORS 允许该前端域名。
 - Docker 构建前端时需通过 `--build-arg VITE_API_BASE_URL=...` 传入（若需覆盖默认）。
 
+### 5.2 LLM 请求超时
+
+若日志出现 `TimeoutException: request timed out` 或 `HttpTimeoutException: request timed out`，说明调用 LLM（含本地 Ollama）时 HTTP 请求超时。
+
+| 配置项 | 说明 | 默认值 | 配置位置 |
+|--------|------|--------|----------|
+| `aiagent.llm.timeout-seconds` | 全局 LLM 请求超时（秒） | 120 | application.yml / profile yml |
+| `aiagent.llm.models[].timeout-seconds` | 单个模型的请求超时（秒），不配则用全局 | 同全局 | 同上 |
+
+- 使用本地 Ollama 或网络较慢的远程模型时，建议为该模型单独设置更大值（如 `300`）。
+- 示例（profile 中）：在对应模型下增加 `timeout-seconds: 300`。
+
 ---
 
 ## 6. 快速配置示例
