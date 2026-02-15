@@ -10,6 +10,16 @@ ZenoAgent 后端依赖以下服务：
 - **MySQL** (必需): 用于会话、消息、知识库、文档等持久化存储
 - **PostgreSQL + pgvector** (可选): 用于向量存储，仅在启用 RAG 功能时需要
 
+### 配置方式说明
+
+| 场景 | 推荐方式 |
+|------|----------|
+| **本地开发** | 直接编辑 `profile/local/application.yml` |
+| **Docker 部署** | 复制 `env.example` 为 `.env`，编辑后 `docker-compose up -d` |
+| **传统部署** | 编辑 `application.yml` 或 profile 配置，必要时用环境变量覆盖 |
+
+所有配置项及环境变量一览见 **[配置变量参考](./docs/CONFIG_REFERENCE.md)**。配置模板文件：项目根目录 `env.example`。
+
 ## 🔴 Redis 配置
 
 ### 作用说明
@@ -76,13 +86,7 @@ spring:
 
 ### 环境变量配置
 
-也可以通过环境变量配置：
-
-```bash
-export REDIS_HOST=localhost
-export REDIS_PORT=6379
-export REDIS_PASSWORD=your_password  # 可选
-```
+可通过 `SPRING_REDIS_HOST`、`SPRING_REDIS_PORT`、`SPRING_REDIS_PASSWORD` 覆盖，详见 [配置变量参考](./docs/CONFIG_REFERENCE.md)。
 
 ### 验证连接
 
@@ -176,13 +180,7 @@ spring:
 
 ### 环境变量配置
 
-```bash
-export MYSQL_HOST=localhost
-export MYSQL_PORT=3306
-export MYSQL_DATABASE=zeno_agent
-export MYSQL_USERNAME=root
-export MYSQL_PASSWORD=your_password
-```
+可通过 `SPRING_DATASOURCE_URL`、`SPRING_DATASOURCE_USERNAME`、`SPRING_DATASOURCE_PASSWORD` 覆盖；Docker 部署使用 `MYSQL_*` 变量，详见 [配置变量参考](./docs/CONFIG_REFERENCE.md)。
 
 ### 初始化表结构
 
@@ -353,13 +351,7 @@ aiagent:
 
 ### 环境变量配置
 
-```bash
-export PG_HOST=localhost
-export PG_PORT=5432
-export PG_DATABASE=zeno_agent
-export PG_USER=rag_user
-export PG_PASSWORD=Rag@123456
-```
+RAG 的 PostgreSQL 配置主要在 profile 的 `aiagent.rag.embedding-store` 中设置；可选环境变量 `PG_HOST`、`PG_PORT` 等详见 [配置变量参考](./docs/CONFIG_REFERENCE.md)。
 
 ### 验证连接和扩展
 
@@ -392,7 +384,7 @@ psql -U rag_user -d zeno_agent -c "SELECT '[1,2,3]'::vector;"
 
 ## 🔧 配置文件位置
 
-所有配置都在 `backend/src/main/resources/application.yml` 中，或者通过环境变量覆盖。
+主配置在 `backend/src/main/resources/application.yml`，可通过 profile 或环境变量覆盖。配置项一览见 [配置变量参考](./docs/CONFIG_REFERENCE.md)。
 
 ### Profile 配置
 

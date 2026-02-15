@@ -1,3 +1,5 @@
+import { apiBaseUrl } from '@/config/env';
+
 /**
  * 组件工具函数
  */
@@ -15,8 +17,7 @@ export function getFileAccessHttpUrl(url?: string): string {
     return url;
   }
   
-  // 如果是相对路径，拼接基础URL
-  const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
-  return `${baseURL}${url.startsWith('/') ? url : '/' + url}`;
+  // 相对路径时拼接基础 URL（见 @/config/env）
+  return `${apiBaseUrl}${url.startsWith('/') ? url : '/' + url}`;
 }
 

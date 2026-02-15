@@ -47,6 +47,7 @@ backend/src/main/resources/application-*.yml
 
 # Profile目录下的配置文件（包含敏感信息）
 backend/src/main/resources/profile/*/application.yml
+!backend/src/main/resources/profile/prod/application.yml  # prod 默认使用环境变量，可提交
 backend/src/main/resources/profile/*/mcp.json
 !backend/src/main/resources/profile/*/application.yml.example
 !backend/src/main/resources/profile/*/mcp.json.example

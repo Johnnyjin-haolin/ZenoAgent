@@ -19,7 +19,7 @@
 - MySQL 8.0+ (必需，用于持久化存储)
 - PostgreSQL with pgvector (可选，RAG 功能需要)
 
-详细的后端服务配置说明请参考 [后端服务配置文档](./BACKEND_CONFIG.md)。
+详细的后端服务配置说明请参考 [后端服务配置文档](./BACKEND_CONFIG.md)，配置项一览见 [配置变量参考](./docs/CONFIG_REFERENCE.md)。
 
 ## 🐳 Docker 部署（推荐）
 
@@ -35,27 +35,10 @@
    
    创建 `.env` 文件：
    ```bash
-   cp .env.example .env
+   cp env.example .env
    ```
    
-   编辑 `.env` 文件，设置必要的环境变量：
-   ```env
-   # LLM API Keys
-   OPENAI_API_KEY=sk-your-openai-key
-   DEEPSEEK_API_KEY=sk-your-deepseek-key
-   
-   # Redis
-   REDIS_HOST=redis
-   REDIS_PORT=6379
-   
-   # Backend
-   BACKEND_PORT=8080
-   SPRING_PROFILES_ACTIVE=prod
-   
-   # Frontend
-   FRONTEND_PORT=5173
-   VITE_API_BASE_URL=http://localhost:8080
-   ```
+   编辑 `.env` 文件，设置必要的环境变量。**所有配置项说明**见 [配置变量参考](./docs/CONFIG_REFERENCE.md)，至少需配置：
 
 3. **启动服务**
    ```bash
@@ -203,6 +186,21 @@ sudo systemctl status zenoagent
 
 ### 3. 部署前端
 
+前端运行时常量（如 API 地址、日志级别）集中在 **`frontend/src/config/env.ts`**，由构建时环境变量 `VITE_*` 注入。构建前可按需在项目根目录或 `frontend` 下配置 `.env` 或 `.env.production`，例如：
+
+```bash
+# 与 Nginx 同源部署时可不设置（使用相对路径 /aiagent/...）
+# VITE_API_BASE_URL=
+
+# 前端与后端不同域时填写后端完整地址
+# VITE_API_BASE_URL=https://api.example.com
+
+# 可选：生产环境日志级别 debug | info | warn | error | none
+# VITE_LOG_LEVEL=error
+```
+
+详见 [配置变量参考](./docs/CONFIG_REFERENCE.md) 中的「前端配置」小节。
+
 #### 构建生产版本
 ```bash
 cd frontend
@@ -227,26 +225,28 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    # API 代理
-    location /aiagent {
+    # Agent 执行接口（SSE 流式）：必须关闭缓冲，否则流式响应会卡住
+    location /aiagent/execute {
         proxy_pass http://localhost:8080;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
-
-    # SSE 支持
-    location /aiagent/stream {
-        proxy_pass http://localhost:8080;
-        proxy_http_version 1.1;
         proxy_set_header Connection '';
         proxy_buffering off;
         proxy_cache off;
         chunked_transfer_encoding off;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
+    # 其余 API 代理
+    location /aiagent {
+        proxy_pass http://localhost:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 }
 ```
@@ -366,6 +366,31 @@ sudo systemctl reload nginx
 1. 检查 CORS 配置
 2. 检查 Nginx 代理配置
 3. 检查后端服务是否运行
+
+### 前端报错 "Agent 执行失败: TypeError: Failed to fetch"
+
+**原因说明**：浏览器发起的请求没有到达后端。常见有两种情况：
+
+1. **API 地址指向了错误的主机（最常见）**  
+   前端未设置 `VITE_API_BASE_URL` 时，旧版本默认请求 `http://localhost:8080`。在用户浏览器里，“localhost” 是用户本机，不是服务器，因此会报 `Failed to fetch`。
+
+2. **Nginx 未对 SSE 接口关闭缓冲**  
+   `/aiagent/execute` 是 SSE 流式接口，若 Nginx 开启缓冲，可能导致连接异常或超时。
+
+**排查步骤：**
+
+| 步骤 | 操作 |
+|------|------|
+| 1 | 在浏览器开发者工具 → Network，找到执行 Agent 时的请求，看请求 URL。若为 `http://localhost:8080/aiagent/execute`，说明前端仍在使用绝对后端地址，需按下方“解决方案”处理。 |
+| 2 | 若请求 URL 为相对路径（如 `/aiagent/execute`）或与当前页面同域，再看该请求的状态码：4xx/5xx 表示 Nginx 或后端异常；若为 CORS 错误，检查后端 CORS 配置。 |
+| 3 | 在服务器上执行：`curl -X POST http://localhost:8080/aiagent/execute -H "Content-Type: application/json" -d '{"content":"hi","conversationId":"1","agentId":"1","mode":"MANUAL","modelId":"1"}'`，确认本机直连后端是否正常。 |
+| 4 | 检查 Nginx 配置是否对 `/aiagent/execute` 单独配置了 `proxy_buffering off` 等 SSE 相关项（见上文“使用 Nginx 部署”示例）。 |
+
+**解决方案：**
+
+- **前端同源部署（推荐）**：前端与 Nginx 同域时，构建时不要设置 `VITE_API_BASE_URL`，或设为空。前端会使用相对路径（如 `/aiagent/execute`），由 Nginx 转发到后端。重新构建并部署：`cd frontend && pnpm build`。
+- **前端与后端不同域**：构建时设置 `VITE_API_BASE_URL` 为后端完整地址（如 `https://api.example.com`），并确保后端允许该域的 CORS。
+- **Nginx**：按本文“使用 Nginx 部署”一节，为 `/aiagent/execute` 单独添加 `location`，并设置 `proxy_buffering off`、`proxy_cache off`、合理 `proxy_read_timeout`，然后 `nginx -t && systemctl reload nginx`。
 
 ## 📞 获取帮助
 

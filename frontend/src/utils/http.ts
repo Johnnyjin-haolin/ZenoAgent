@@ -4,16 +4,14 @@
  */
 
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import { apiBaseUrl } from '@/config/env';
 import logger from './logger';
-
-// API 基础 URL（从环境变量读取，默认为后端地址）
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
 /**
  * 创建 Axios 实例
  */
 const httpInstance: AxiosInstance = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: apiBaseUrl,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
@@ -180,7 +178,7 @@ function handleStreamRequest(config: {
   timeout?: number;
   signal?: AbortSignal;
 }): Promise<ReadableStream> {
-  const url = `${API_BASE_URL}${config.url}`;
+  const url = `${apiBaseUrl}${config.url}`;
   
   return fetch(url, {
     method: 'POST',

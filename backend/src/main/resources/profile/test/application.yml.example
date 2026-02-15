@@ -3,6 +3,7 @@
 # 请在此文件中填写你的真实配置值
 
 # 注意：此配置文件会覆盖 application.yml 中的相同配置项
+# apiKey 支持两种方式：① 直接填写 apiKey: sk-xxx  ② 从环境变量读取 apiKey: ${OPENAI_API_KEY:}
 
 aiagent:
   # LLM配置
@@ -16,7 +17,7 @@ aiagent:
       #   name: GPT-4o Mini
       #   provider: OPENAI
       #   type: CHAT  # 模型类型：CHAT（对话模型）或 EMBEDDING（向量模型）
-      #   apiKey: sk-test-api-key-here  # 请在此处填写你的API Key
+      #   apiKey: sk-xxx  # 或 apiKey: ${OPENAI_API_KEY:} 从环境变量读取
       #   baseUrl: https://api.openai.com/v1
       
       # 智谱AI (ZHIPU) 示例
@@ -41,7 +42,7 @@ aiagent:
       #   provider: OPENAI
       #   type: EMBEDDING  # 向量模型
       #   modelName: text-embedding-3-small  # 实际的模型名称（用于Embedding API调用）
-      #   apiKey: sk-test-api-key-here  # 请填写你的OpenAI API Key
+      #   apiKey: sk-xxx  # 或 apiKey: ${OPENAI_API_KEY:} 从环境变量读取
       #   baseUrl: https://api.openai.com/v1
       
       # - id: text-embedding-qwen3-embedding

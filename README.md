@@ -93,7 +93,7 @@ Zeno Agent 是一个基于 Spring Boot 和 Vue 3 构建的 AI Agent 平台，集
 ```bash
 # 1. 复制环境变量配置
 cp env.example .env
-# 编辑 .env 文件，设置您的 API Key 和数据库密码
+# 编辑 .env 文件，至少设置 OPENAI_API_KEY 或 DEEPSEEK_API_KEY（详见 [配置变量参考](./docs/CONFIG_REFERENCE.md)）
 
 # 2. 启动所有服务
 ./scripts/docker-start.sh
@@ -117,6 +117,7 @@ docker-compose down
 
 ## 📖 文档
 
+- [配置变量参考](./docs/CONFIG_REFERENCE.md) - 所有配置项一览
 - [部署指南](./DEPLOYMENT.md) - 生产环境部署说明
 - [贡献指南](./CONTRIBUTING.md) - 如何参与项目贡献
 - [技术架构](./TECHNICAL_ARCHITECTURE.md) - 详细的技术架构设计

@@ -1,7 +1,7 @@
 /**
  * 统一日志工具类
- * 根据环境变量控制日志输出级别
- * 
+ * 根据环境变量控制日志输出级别（见 @/config/env）
+ *
  * 使用方式：
  * import logger from '@/utils/logger';
  * logger.debug('调试信息');
@@ -10,21 +10,17 @@
  * logger.error('错误信息');
  */
 
+import { isDev, logLevel as envLogLevel } from '@/config/env';
+
 type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'none';
 
 class Logger {
   private level: LogLevel;
 
   constructor() {
-    // 从环境变量获取日志级别，默认为 'info'
-    // 开发环境：debug，生产环境：error
-    const envLevel = import.meta.env.VITE_LOG_LEVEL as LogLevel;
-    const isDev = import.meta.env.DEV;
-    
-    if (envLevel) {
-      this.level = envLevel;
+    if (envLogLevel) {
+      this.level = envLogLevel;
     } else {
-      // 根据环境自动设置
       this.level = isDev ? 'debug' : 'error';
     }
   }
