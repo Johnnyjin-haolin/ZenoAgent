@@ -14,6 +14,7 @@ import com.aiagent.application.service.action.DirectResponseParams;
 import com.aiagent.application.service.action.LLMGenerateParams;
 import com.aiagent.application.service.action.RAGRetrieveParams;
 import com.aiagent.application.service.action.ToolCallParams;
+import com.aiagent.application.service.StreamingCallback;
 import com.aiagent.shared.util.StringUtils;
 import com.aiagent.application.model.AgentContext;
 import com.aiagent.api.dto.AgentEventData;
@@ -68,20 +69,33 @@ public class ThinkingEngine {
     
     /**
      * 输出格式提示词
-     * 统一使用 actions 数组格式，即使只有一个Action也要放在数组中
+     * 先输出思考过程，再输出JSON动作决策
      */
-    private static final String OUTPUT_FORMAT_PROMPT = "## 输出格式\n\n" +
-            "只返回JSON对象，不要包含其他文字。\n" +
-            "必须使用 actions 数组格式，即使只有一个Action也要放在数组中。\n" +
-            "actionType 只能是 TOOL_CALL / RAG_RETRIEVE / LLM_GENERATE / DIRECT_RESPONSE / COMPLETE。\n\n" +
-            "格式示例（单个Action）：\n" +
+    private static final String OUTPUT_FORMAT_PROMPT = "## 输出阶段说明\n\n" +
+            "你必须严格按照以下顺序输出内容：\n\n" +
+            "1. 先输出思考过程，使用以下格式：\n" +
+            "<thinking>\n" +
+            "...你的详细分析过程...\n" +
+            "</thinking>\n\n" +
+            "2. 然后输出一行思考结束标记：\n" +
+            "<THINKING_DONE>\n\n" +
+            "3. 最后输出只包含JSON对象的动作决策，使用以下格式：\n" +
+            "<actions>\n" +
             "{\"actions\":[{\"actionType\":\"TOOL_CALL\",\"actionName\":\"工具名\",\"reasoning\":\"原因\",\"toolCallParams\":{\"toolName\":\"工具名\",\"toolParams\":{}}}]}\n" +
-            "{\"actions\":[{\"actionType\":\"RAG_RETRIEVE\",\"actionName\":\"rag_retrieve\",\"reasoning\":\"原因\",\"ragRetrieveParams\":{\"query\":\"检索词\",\"knowledgeIds\":[],\"maxResults\":10}}]}\n" +
-            "{\"actions\":[{\"actionType\":\"LLM_GENERATE\",\"actionName\":\"llm_generate\",\"reasoning\":\"原因\",\"llmGenerateParams\":{\"prompt\":\"请根据上下文生成回复\"}}]}\n" +
+            "</actions>\n\n" +
+            "注意：\n" +
+            "- <thinking> 和 </thinking> 之间可以是自然语言思考过程；\n" +
+            "- 在 <THINKING_DONE> 之后，必须尽快输出最终动作决策JSON；\n" +
+            "- <actions> 标签内必须是合法JSON对象，只能包含 actions 数组，不要包含其他文字；\n" +
+            "- actionType 与参数字段必须一一对应：TOOL_CALL=toolCallParams，RAG_RETRIEVE=ragRetrieveParams，LLM_GENERATE=llmGenerateParams，DIRECT_RESPONSE=directResponseParams；\n" +
+            "- actions 数组中的 actionType 只能是 TOOL_CALL / RAG_RETRIEVE / LLM_GENERATE / DIRECT_RESPONSE / COMPLETE。\n\n" +
+            "示例（单个 Action）：\n" +
             "{\"actions\":[{\"actionType\":\"DIRECT_RESPONSE\",\"actionName\":\"direct_response\",\"reasoning\":\"原因\",\"directResponseParams\":{\"content\":\"...\",\"streaming\":true}}]}\n\n" +
-            "格式示例（多个Action）：\n" +
-            "{\"actions\":[{\"actionType\":\"TOOL_CALL\",\"actionName\":\"工具名1\",\"reasoning\":\"原因1\",\"toolCallParams\":{\"toolName\":\"工具名1\",\"toolParams\":{}}},{\"actionType\":\"RAG_RETRIEVE\",\"actionName\":\"rag_retrieve\",\"reasoning\":\"原因2\",\"ragRetrieveParams\":{\"query\":\"检索词\",\"knowledgeIds\":[],\"maxResults\":10}}]}\n";
-    
+            "示例（LLM_GENERATE）：\n" +
+            "{\"actions\":[{\"actionType\":\"LLM_GENERATE\",\"actionName\":\"llm_generate\",\"reasoning\":\"原因\",\"llmGenerateParams\":{\"prompt\":\"请根据上下文生成回复\"}}]}\n\n" +
+            "示例（多个 Action）：\n" +
+            "{\"actions\":[{\"actionType\":\"TOOL_CALL\",\"actionName\":\"工具名1\",\"reasoning\":\"原因1\",\"toolCallParams\":{\"toolName\":\"工具名1\",\"toolParams\":{}}},{\"actionType\":\"RAG_RETRIEVE\",\"actionName\":\"rag_retrieve\",\"reasoning\":\"原因2\",\"ragRetrieveParams\":{\"query\":\"检索词\",\"knowledgeIds\":[],\"maxResults\":10}}]}"
+            ;
     /**
      * 思考：分析目标、上下文和历史结果，决定下一步Action（支持返回多个Action）
      */
@@ -114,6 +128,7 @@ public class ThinkingEngine {
         }
         log.info("思考完成，决定执行 {} 个Action: {}", actions.size(),
             actions.stream().map(AgentAction::getName).collect(java.util.stream.Collectors.joining(", ")));
+        sendDecidedActionsEvent(context, actions);
         return actions;
     }
     
@@ -242,19 +257,11 @@ public class ThinkingEngine {
         return prompt.toString();
     }
     
-    /**
-     * 调用LLM进行思考
-     * 使用系统提示词和用户提示词分离的方式
-     */
     private String callLLMForThinking(PromptPair promptPair, AgentContext context) {
-            // 准备消息列表
             List<ChatMessage> messages = new ArrayList<>();
-            // 使用构建好的系统提示词
             messages.add(new SystemMessage(promptPair.getSystemPrompt()));
-            // 使用构建好的用户提示词
             messages.add(new UserMessage(promptPair.getUserPrompt()));
             
-            // 获取模型ID（从上下文或使用默认值）
             String modelId = context != null ? context.getModelId() : null;
             if (StringUtils.isEmpty(modelId)) {
                 modelId = agentConfig.getLlm().getDefaultModel();
@@ -265,12 +272,13 @@ public class ThinkingEngine {
                 promptPair.getSystemPrompt().length(),
                 promptPair.getUserPrompt().length());
             
-            // 调用非流式LLM获取完整响应
-            String response = llmChatHandler.chatNonStreaming(modelId, messages);
-            
+            StreamingCallback callback = createThinkingStreamingCallback(context);
+            String response = llmChatHandler.chatWithCallback(modelId, messages, callback);
             log.debug("思考LLM请求完成，耗时 {} ms", java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs));
-            log.debug("LLM思考响应: {}", response);
-            return response;
+            log.debug("LLM思考完整响应: {}", response);
+            String actionsJson = extractActionsJson(response);
+            log.debug("LLM思考提取的动作JSON: {}", actionsJson);
+            return actionsJson;
     }
 
     /**
@@ -298,6 +306,16 @@ public class ThinkingEngine {
             log.debug("清理后的思考结果: {}", cleaned);
             return JSON.parseObject(cleaned, ActionsResponseDTO.class);
         } catch (Exception e) {
+            try {
+                String normalized = removeControlChars(text);
+                String extracted = extractFirstJsonObject(normalized);
+                String fallback = StringUtils.isNotEmpty(extracted) ? extracted : cleanJsonResponse(normalized);
+                if (StringUtils.isNotEmpty(fallback)) {
+                    log.debug("清理后的思考结果(兜底): {}", fallback);
+                    return JSON.parseObject(fallback, ActionsResponseDTO.class);
+                }
+            } catch (Exception ignored) {
+            }
             log.error("解析JSON失败，原始结果: {}", text, e);
             return null;
         }
@@ -361,10 +379,6 @@ public class ThinkingEngine {
     }
     
     
-    /**
-     * 清理JSON响应文本
-     * 移除Markdown代码块标记、前后空白等
-     */
     private String cleanJsonResponse(String response) {
         if (StringUtils.isEmpty(response)) {
             return response;
@@ -386,6 +400,13 @@ public class ThinkingEngine {
         
         // 移除前后空白
         cleaned = cleaned.trim();
+
+        cleaned = removeControlChars(cleaned);
+
+        String extracted = extractFirstJsonObject(cleaned);
+        if (StringUtils.isNotEmpty(extracted)) {
+            return extracted;
+        }
         
         // 如果文本中包含JSON对象（以{开头，以}结尾），提取它
         int jsonStart = cleaned.indexOf('{');
@@ -393,8 +414,223 @@ public class ThinkingEngine {
         if (jsonStart >= 0 && jsonEnd > jsonStart) {
             cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
         }
-        
+
         return cleaned;
+    }
+
+    private String removeControlChars(String input) {
+        if (StringUtils.isEmpty(input)) {
+            return "";
+        }
+        // 激进清理：只保留可见字符、空格、换行、回车、制表符
+        // 替换掉所有其他控制字符（包括 0x1A SUB）
+        return input.replaceAll("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]", "");
+    }
+
+    private String extractFirstJsonObject(String input) {
+        if (StringUtils.isEmpty(input)) {
+            return "";
+        }
+        int start = -1;
+        int depth = 0;
+        boolean inString = false;
+        boolean escape = false;
+        
+        for (int i = 0; i < input.length(); i++) {
+            char c = input.charAt(i);
+            
+            // 处理转义字符
+            if (escape) {
+                escape = false;
+                continue;
+            }
+            if (c == '\\' && inString) {
+                escape = true;
+                continue;
+            }
+            
+            // 处理字符串引号
+            if (c == '"') {
+                inString = !inString;
+                continue;
+            }
+            
+            // 如果在字符串内，忽略结构字符
+            if (inString) {
+                continue;
+            }
+            
+            // 处理 JSON 结构
+            if (c == '{') {
+                if (depth == 0) {
+                    start = i;
+                }
+                depth++;
+            } else if (c == '}') {
+                if (depth > 0) {
+                    depth--;
+                    // 找到完整的 JSON 对象
+                    if (depth == 0 && start >= 0) {
+                        return input.substring(start, i + 1);
+                    }
+                }
+            }
+        }
+        
+        // 如果循环结束但 depth > 0，说明 JSON 被截断
+        // 尝试自动补全
+        if (depth > 0 && start >= 0) {
+            log.warn("检测到 JSON 截断，尝试自动补全。depth: {}, content: {}", depth, input.substring(start));
+            StringBuilder sb = new StringBuilder(input.substring(start));
+            // 如果还在字符串内，先补齐引号
+            if (inString) {
+                sb.append('"');
+            }
+            // 补齐缺失的大括号
+            for (int k = 0; k < depth; k++) {
+                sb.append('}');
+            }
+            String fixed = sb.toString();
+            log.info("自动补全后的 JSON: {}", fixed);
+            return fixed;
+        }
+        
+        return "";
+    }
+
+    private StreamingCallback createThinkingStreamingCallback(AgentContext context) {
+        return new StreamingCallback() {
+            private final ThinkingStreamState state = new ThinkingStreamState();
+
+            @Override
+            public void onToken(String token) {
+                if (StringUtils.isEmpty(token)) {
+                    return;
+                }
+                state.fullText.append(token);
+                String delta = handleThinkingStream(state, context);
+                if (StringUtils.isNotEmpty(delta)) {
+                    sendThinkingDeltaEvent(context, delta);
+                }
+            }
+
+            @Override
+            public void onComplete(String fullText) {
+                if (!StringUtils.isEmpty(fullText) && state.fullText.length() == 0) {
+                    state.fullText.append(fullText);
+                }
+                String delta = handleThinkingStream(state, context);
+                if (StringUtils.isNotEmpty(delta)) {
+                    sendThinkingDeltaEvent(context, delta);
+                }
+                log.info(state.fullText.toString());
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                sendProgressEvent(context, AgentConstants.EVENT_AGENT_ERROR, "思考阶段发生错误: " + error.getMessage());
+            }
+        };
+    }
+
+    private String handleThinkingStream(ThinkingStreamState state, AgentContext context) {
+        String text = state.fullText.toString();
+        if (StringUtils.isEmpty(text)) {
+            return "";
+        }
+        int thinkingStartIdx = text.indexOf("<thinking>");
+        int thinkingEndIdx = text.indexOf("</thinking>");
+        int tagLength = "<thinking>".length();
+        if (thinkingStartIdx != -1 && !state.thinkingStarted) {
+            state.thinkingStarted = true;
+            state.thinkingContentSentIndex = thinkingStartIdx + tagLength;
+            sendProgressEvent(context, AgentConstants.EVENT_AGENT_THINKING, "正在进行深入思考...");
+        }
+        String delta = "";
+        if (state.thinkingStarted) {
+            int logicalEnd = thinkingEndIdx != -1 ? thinkingEndIdx : text.length();
+            if (state.thinkingContentSentIndex < logicalEnd) {
+                String newContent = text.substring(state.thinkingContentSentIndex, logicalEnd);
+                if (StringUtils.isNotEmpty(newContent)) {
+                    delta = sanitizeThinkingDelta(newContent);
+                }
+                state.thinkingContentSentIndex = logicalEnd;
+            }
+            if (thinkingEndIdx != -1 && !state.thinkingClosed) {
+                state.thinkingClosed = true;
+            }
+        }
+        int doneIdx = text.indexOf("<THINKING_DONE>");
+        if (doneIdx != -1 && !state.thinkingDoneMarked) {
+            state.thinkingDoneMarked = true;
+            sendProgressEvent(context, AgentConstants.EVENT_AGENT_THINKING, "思考完成，正在生成动作计划...");
+        }
+        return delta;
+    }
+
+    private void sendThinkingDeltaEvent(AgentContext context, String content) {
+        if (context != null && context.getEventPublisher() != null) {
+            context.getEventPublisher().accept(
+                AgentEventData.builder()
+                    .event(AgentConstants.EVENT_AGENT_THINKING_DELTA)
+                    .content(content)
+                    .build()
+            );
+        }
+    }
+
+    private String sanitizeThinkingDelta(String delta) {
+        if (StringUtils.isEmpty(delta)) {
+            return "";
+        }
+        String cleaned = delta;
+        cleaned = cleaned.replace("<thinking>", "");
+        cleaned = cleaned.replace("</thinking>", "");
+        cleaned = cleaned.replace("<THINKING_DONE>", "");
+        cleaned = cleaned.replace("</thinking", "");
+        cleaned = cleaned.replace("<thinking", "");
+        cleaned = cleaned.replace("</THINKING_DONE", "");
+        cleaned = cleaned.replace("<THINKING_DONE", "");
+        return cleaned.trim().isEmpty() ? "" : cleaned;
+    }
+
+    private void sendDecidedActionsEvent(AgentContext context, List<AgentAction> actions) {
+        if (context == null || context.getEventPublisher() == null || actions == null || actions.isEmpty()) {
+            return;
+        }
+        String names = actions.stream().map(AgentAction::getName).collect(Collectors.joining(", "));
+        context.getEventPublisher().accept(
+            AgentEventData.builder()
+                .event(AgentConstants.EVENT_AGENT_THINKING)
+                .message("已决定执行动作: " + names)
+                .build()
+        );
+    }
+
+    private String extractActionsJson(String response) {
+        if (StringUtils.isEmpty(response)) {
+            return response;
+        }
+        String text = removeControlChars(response);
+        int startIdx = text.indexOf("<actions>");
+        int endIdx = text.indexOf("</actions>");
+        if (startIdx >= 0 && endIdx > startIdx) {
+            int jsonStart = startIdx + "<actions>".length();
+            return text.substring(jsonStart, endIdx);
+        }
+        if (startIdx >= 0) {
+            int jsonStart = startIdx + "<actions>".length();
+            return text.substring(jsonStart);
+        }
+        return text;
+    }
+
+    private static class ThinkingStreamState {
+        StringBuilder fullText = new StringBuilder();
+        boolean thinkingStarted;
+        boolean thinkingClosed;
+        boolean thinkingDoneMarked;
+        int thinkingContentSentIndex;
     }
 
     /**
@@ -463,6 +699,15 @@ public class ThinkingEngine {
      */
     private AgentAction buildDirectResponseAction(ActionInputDTO dto, String reasoning) {
         DirectResponseParams params = dto.getDirectResponseParams();
+        if (params == null && dto.getToolCallParams() != null && dto.getToolCallParams().getToolParams() != null) {
+            Object contentObj = dto.getToolCallParams().getToolParams().get("content");
+            if (contentObj instanceof String content && StringUtils.isNotEmpty(content)) {
+                params = DirectResponseParams.builder()
+                    .content(content)
+                    .streaming(true)
+                    .build();
+            }
+        }
         if (params == null) {
             log.warn("DIRECT_RESPONSEAction缺少directResponseParams");
             return null;
@@ -663,4 +908,3 @@ public class ThinkingEngine {
     }
     
 }
-

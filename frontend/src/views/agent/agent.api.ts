@@ -303,6 +303,10 @@ function dispatchEvent(event: AgentEvent, callbacks: AgentEventCallbacks) {
       logger.debug('[Agent] AI 思考中:', event.message);
       callbacks.onThinking?.(event);
       break;
+    case 'agent:thinking_delta':
+      logger.debug('[Agent] AI 思考片段:', event.content?.substring(0, 20));
+      callbacks.onThinkingDelta?.(event);
+      break;
 
     case 'agent:planning':
       logger.debug('[Agent] 正在规划:', event.message);

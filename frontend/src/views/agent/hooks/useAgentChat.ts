@@ -83,7 +83,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       name,
       status,
       startTime: status === 'running' ? Date.now() : undefined,
-      expanded: false,
+      expanded: type === 'thinking',
       metadata: metadata || {},
     };
   };
@@ -303,8 +303,13 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           logger.debug('AI 思考中:', event);
           updateConversationId(event);
           assistantMessage.status = 'thinking';
-          assistantMessage.statusText = event.message || '思考中...';
-          currentStatus.value = event.message || '思考中...';
+          if (event.message) {
+            assistantMessage.statusText = event.message;
+            currentStatus.value = event.message;
+          } else if (!assistantMessage.statusText) {
+            assistantMessage.statusText = '思考中...';
+            currentStatus.value = '思考中...';
+          }
 
           if (!currentIteration) return;
 
@@ -316,17 +321,38 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             currentIteration.steps.push(thinkingStep);
           }
 
-          // 添加子步骤
-          const subStep = {
-            id: `substep-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            message: event.message || '思考中...',
-            timestamp: Date.now(),
-          };
-          
+          // 思考完成后收起思考步骤
+          if (event.message && event.message.includes('思考完成')) {
+            thinkingStep.expanded = false;
+          }
+        },
+
+        onThinkingDelta: (event) => {
+          logger.debug('AI 思考片段:', event.content);
+          updateConversationId(event);
+          assistantMessage.status = 'thinking';
+          if (!currentIteration) return;
+
+          let thinkingStep = currentIteration.steps.find((s: any) => s.type === 'thinking');
+          if (!thinkingStep) {
+            thinkingStep = createStep('thinking', '思考与规划', 'running');
+            thinkingStep.subSteps = [];
+            currentIteration.steps.push(thinkingStep);
+          }
+
           if (!thinkingStep.subSteps) {
             thinkingStep.subSteps = [];
           }
-          thinkingStep.subSteps.push(subStep);
+          const lastStep = thinkingStep.subSteps[thinkingStep.subSteps.length - 1];
+          if (lastStep) {
+            lastStep.message = (lastStep.message || '') + (event.content || '');
+          } else {
+            thinkingStep.subSteps.push({
+              id: `substep-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              message: event.content || '',
+              timestamp: Date.now(),
+            });
+          }
         },
 
         onModelSelected: (event) => {
@@ -927,4 +953,3 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     resolvePendingTool,
   };
 }
-

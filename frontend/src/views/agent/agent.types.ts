@@ -86,6 +86,7 @@ export interface AgentRequest {
 export type AgentEventType =
   | 'agent:start'           // 任务开始
   | 'agent:thinking'        // AI 思考中
+  | 'agent:thinking_delta'  // 思考内容流式片段
   | 'agent:planning'        // 正在规划
   | 'agent:tool_executing'  // 正在执行工具
   | 'agent:rag_querying'    // 正在查询知识库
@@ -577,6 +578,7 @@ export interface AgentEventCallbacks {
   onStart?: (event: AgentEvent) => void;
   onIterationStart?: (event: AgentEvent) => void;
   onThinking?: (event: AgentEvent) => void;
+  onThinkingDelta?: (event: AgentEvent) => void;
   onModelSelected?: (event: AgentEvent) => void;
   onRagRetrieve?: (event: AgentEvent) => void;
   onToolCall?: (event: AgentEvent) => void;

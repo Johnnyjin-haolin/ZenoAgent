@@ -58,6 +58,7 @@ public class AgentConstants {
      */
     public static final String EVENT_AGENT_START = "agent:start";
     public static final String EVENT_AGENT_THINKING = "agent:thinking";
+    public static final String EVENT_AGENT_THINKING_DELTA = "agent:thinking_delta";
     public static final String EVENT_AGENT_PLANNING = "agent:planning";
     public static final String EVENT_AGENT_MODEL_SELECTED = "agent:model_selected";
     public static final String EVENT_AGENT_TOOL_CALL = "agent:tool_call";
@@ -102,5 +103,4 @@ public class AgentConstants {
     public static final String MESSAGE_TASK_COMPLETE = "任务完成";
     public static final String MESSAGE_RAG_QUERYING = "正在检索知识库...";
 }
-
 
