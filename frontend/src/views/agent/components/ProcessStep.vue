@@ -17,7 +17,7 @@
 
         <!-- 步骤进度标签（如"步骤 1/3"） -->
         <a-tag v-if="step.stepProgress" size="small" color="blue">
-          步骤 {{ step.stepProgress.current }}/{{ step.stepProgress.total }}
+          {{ t('agent.process.stepProgress', { current: step.stepProgress.current, total: step.stepProgress.total }) }}
         </a-tag>
 
         <!-- 工具名称标签 -->
@@ -27,12 +27,12 @@
 
         <!-- 检索数量标签 -->
         <a-tag v-if="step.type === 'rag_retrieve' && step.metadata?.retrieveCount" size="small" color="green">
-          {{ step.metadata.retrieveCount }}条知识
+          {{ t('agent.process.retrieveCount', { count: step.metadata.retrieveCount }) }}
         </a-tag>
 
         <!-- 子步骤数量提示 -->
         <span v-if="hasSubSteps && !step.expanded" class="substeps-count">
-          ({{ step.subSteps!.length }}条记录)
+          {{ t('agent.process.subStepsCount', { count: step.subSteps!.length }) }}
         </span>
       </div>
 
@@ -42,7 +42,7 @@
           {{ formatDuration(step.duration) }}
         </span>
         <span v-else-if="step.status === 'running'" class="step-duration running">
-          执行中...
+          {{ t('agent.process.running') }}
         </span>
 
         <!-- 展开图标 -->
@@ -59,14 +59,14 @@
       <div class="tool-confirm-left">
         <span class="tool-confirm-icon">🔧</span>
         <span class="tool-confirm-name">{{ step.metadata?.toolName }}</span>
-        <span class="tool-confirm-params">参数：{{ toolParamsSummary }}</span>
+        <span class="tool-confirm-params">{{ t('agent.process.toolParams', { params: toolParamsSummary }) }}</span>
       </div>
       <div class="tool-confirm-actions">
         <a-button type="primary" size="small" @click.stop="emitConfirm">
-          确认执行
+          {{ t('agent.process.confirmExecute') }}
         </a-button>
         <a-button size="small" danger @click.stop="emitReject">
-          取消
+          {{ t('agent.process.cancel') }}
         </a-button>
       </div>
     </div>
@@ -77,7 +77,7 @@
         <!-- 子步骤列表（思考步骤） -->
         <template v-if="hasSubSteps">
           <div class="detail-section">
-            <div class="detail-label">📋 执行过程</div>
+            <div class="detail-label">{{ t('agent.process.executionProcess') }}</div>
             <div class="substeps-list">
               <div v-for="(subStep, idx) in step.subSteps" :key="subStep.id" class="substep-item">
                 <div class="substep-message">{{ subStep.message }}</div>
@@ -85,7 +85,7 @@
                 <!-- 步骤进度信息 -->
                 <div v-if="subStep.stepProgress" class="substep-progress">
                   <a-tag size="small" color="blue">
-                    步骤 {{ subStep.stepProgress.current }}/{{ subStep.stepProgress.total }}: {{ subStep.stepProgress.description }}
+                    {{ t('agent.process.subStepProgress', { current: subStep.stepProgress.current, total: subStep.stepProgress.total, description: subStep.stepProgress.description }) }}
                   </a-tag>
                 </div>
               </div>
@@ -96,13 +96,13 @@
         <!-- 规划信息 -->
         <template v-if="step.planInfo && step.planInfo.steps">
           <div class="detail-section">
-            <div class="detail-label">📋 执行计划</div>
+            <div class="detail-label">{{ t('agent.process.executionPlan') }}</div>
             <div class="plan-info">
               <div v-if="step.planInfo.taskType" class="plan-type">
-                任务类型: <a-tag size="small">{{ step.planInfo.taskType }}</a-tag>
+                {{ t('agent.process.taskType') }} <a-tag size="small">{{ step.planInfo.taskType }}</a-tag>
               </div>
               <div v-if="step.planInfo.planId" class="plan-id">
-                规划ID: <span class="plan-id-text">{{ step.planInfo.planId }}</span>
+                {{ t('agent.process.planId') }} <span class="plan-id-text">{{ step.planInfo.planId }}</span>
               </div>
               <div class="plan-steps">
                 <div
@@ -125,13 +125,13 @@
         <template v-if="step.type === 'tool_call'">
           <!-- 参数 -->
           <div v-if="step.metadata?.toolParams" class="detail-section">
-            <div class="detail-label">📝 调用参数</div>
+            <div class="detail-label">{{ t('agent.process.callParams') }}</div>
             <pre class="detail-code">{{ formatJson(step.metadata.toolParams) }}</pre>
           </div>
 
           <!-- 结果 -->
           <div v-if="step.metadata?.toolResult" class="detail-section">
-            <div class="detail-label">📊 执行结果</div>
+            <div class="detail-label">{{ t('agent.process.executionResult') }}</div>
             <pre class="detail-code">{{ formatResult(step.metadata.toolResult) }}</pre>
           </div>
 
@@ -144,15 +144,15 @@
         <!-- RAG 检索详情 -->
         <template v-if="step.type === 'rag_retrieve' && step.metadata?.ragResults">
           <div class="detail-section">
-            <div class="detail-label">📚 检索结果</div>
+            <div class="detail-label">{{ t('agent.process.ragResults') }}</div>
             <div class="rag-results-list">
               <div v-for="(item, idx) in step.metadata.ragResults" :key="idx" class="rag-result-item">
                 <div class="rag-content">{{ item.content }}</div>
                 <div class="rag-meta">
                   <a-tag v-if="item.score" size="small" color="green">
-                    相似度: {{ (item.score * 100).toFixed(1) }}%
+                    {{ t('agent.process.similarity', { score: (item.score * 100).toFixed(1) }) }}
                   </a-tag>
-                  <span v-if="item.source" class="rag-source">来源: {{ item.source }}</span>
+                  <span v-if="item.source" class="rag-source">{{ t('agent.process.source', { source: item.source }) }}</span>
                 </div>
               </div>
             </div>
@@ -170,8 +170,11 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Icon } from '@/components/Icon';
 import type { ProcessStep } from '../agent.types';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   step: ProcessStep;
@@ -286,7 +289,7 @@ const formatResult = (result: any) => {
     top: 28px;
     bottom: -12px;
     width: 1px;
-    background: #e8e8e8;
+    background: rgba(255, 255, 255, 0.1);
   }
 
   &:last-child::before {
@@ -299,20 +302,22 @@ const formatResult = (result: any) => {
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  background: #fafafa;
+  background: rgba(255, 255, 255, 0.03);
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
+  border: 1px solid transparent;
 
   &:hover {
-    background: #f0f0f0;
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(59, 130, 246, 0.2);
   }
 }
 
 .step-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
   min-width: 0;
 }
@@ -324,42 +329,51 @@ const formatResult = (result: any) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 14px;
   position: absolute;
   left: 0;
-  background: #fff;
+  background: #0f172a;
   border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 2;
 
   &.waiting {
-    color: #d9d9d9;
+    color: #64748b;
+    border-color: #64748b;
   }
 
   &.running {
-    color: #1890ff;
+    color: #60A5FA;
+    border-color: #60A5FA;
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
   }
 
   &.success {
-    color: #52c41a;
+    color: #10B981;
+    border-color: #10B981;
   }
 
   &.error {
-    color: #ff4d4f;
+    color: #EF4444;
+    border-color: #EF4444;
   }
 
   &.skipped {
-    color: #faad14;
+    color: #F59E0B;
+    border-color: #F59E0B;
   }
 }
 
 .step-name {
   font-size: 13px;
-  color: #262626;
+  color: #e2e8f0;
   font-weight: 500;
+  font-family: 'JetBrains Mono', monospace;
 }
 
 .substeps-count {
-  font-size: 12px;
-  color: #8c8c8c;
+  font-size: 11px;
+  color: #64748b;
   margin-left: 4px;
 }
 
@@ -371,25 +385,26 @@ const formatResult = (result: any) => {
 }
 
 .step-duration {
-  font-size: 12px;
-  color: #8c8c8c;
+  font-size: 11px;
+  color: #64748b;
+  font-family: 'JetBrains Mono', monospace;
 
   &.running {
-    color: #1890ff;
+    color: #60A5FA;
   }
 }
 
 .expand-icon {
-  font-size: 12px;
-  color: #8c8c8c;
+  font-size: 10px;
+  color: #64748b;
   transition: transform 0.2s;
 }
 
 .tool-confirm-row {
   margin-top: 8px;
   padding: 8px 10px;
-  background: #fffbe6;
-  border: 1px solid #ffe58f;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.2);
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -407,15 +422,17 @@ const formatResult = (result: any) => {
 
   .tool-confirm-name {
     font-weight: 600;
-    color: #262626;
+    color: #FBBF24;
     flex-shrink: 0;
+    font-family: 'JetBrains Mono', monospace;
   }
 
   .tool-confirm-params {
-    color: #8c8c8c;
+    color: #94a3b8;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-family: 'JetBrains Mono', monospace;
   }
 }
 
@@ -428,8 +445,8 @@ const formatResult = (result: any) => {
 .step-details {
   margin-top: 8px;
   padding: 12px;
-  background: #fff;
-  border: 1px solid #f0f0f0;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 6px;
 }
 
@@ -442,23 +459,26 @@ const formatResult = (result: any) => {
 }
 
 .detail-label {
-  font-size: 12px;
-  color: #8c8c8c;
+  font-size: 11px;
+  color: #64748b;
   margin-bottom: 6px;
   font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .detail-code {
-  padding: 8px 12px;
-  background: #fafafa;
-  border: 1px solid #f0f0f0;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 4px;
-  font-size: 12px;
-  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
   margin: 0;
   overflow-x: auto;
   max-height: 300px;
   overflow-y: auto;
+  color: #94a3b8;
 }
 
 .rag-results-list {
@@ -469,14 +489,14 @@ const formatResult = (result: any) => {
 
 .rag-result-item {
   padding: 8px 12px;
-  background: #fafafa;
-  border: 1px solid #f0f0f0;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 4px;
 }
 
 .rag-content {
-  font-size: 13px;
-  color: #262626;
+  font-size: 12px;
+  color: #cbd5e1;
   line-height: 1.6;
   margin-bottom: 6px;
 }
@@ -485,11 +505,11 @@ const formatResult = (result: any) => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .rag-source {
-  color: #8c8c8c;
+  color: #64748b;
 }
 
 // 子步骤列表
@@ -501,14 +521,14 @@ const formatResult = (result: any) => {
 
 .substep-item {
   padding: 6px 10px;
-  background: #fafafa;
-  border-left: 2px solid #e8e8e8;
+  background: rgba(255, 255, 255, 0.02);
+  border-left: 2px solid rgba(255, 255, 255, 0.1);
   border-radius: 4px;
 }
 
 .substep-message {
   font-size: 12px;
-  color: #595959;
+  color: #94a3b8;
   line-height: 1.5;
   margin-bottom: 4px;
 }
@@ -520,20 +540,20 @@ const formatResult = (result: any) => {
 // 规划信息
 .plan-info {
   padding: 8px;
-  background: #fafafa;
+  background: rgba(255, 255, 255, 0.02);
   border-radius: 4px;
 }
 
 .plan-type,
 .plan-id {
-  font-size: 12px;
-  color: #595959;
+  font-size: 11px;
+  color: #64748b;
   margin-bottom: 8px;
 }
 
 .plan-id-text {
-  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-  color: #1890ff;
+  font-family: 'JetBrains Mono', monospace;
+  color: #60A5FA;
 }
 
 .plan-steps {
@@ -546,23 +566,24 @@ const formatResult = (result: any) => {
   display: flex;
   gap: 10px;
   padding: 8px;
-  background: #fff;
-  border: 1px solid #f0f0f0;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 4px;
 }
 
 .plan-step-number {
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #1890ff;
-  color: #fff;
+  background: rgba(59, 130, 246, 0.2);
+  color: #60A5FA;
   border-radius: 50%;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
+  border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
 .plan-step-content {
@@ -573,8 +594,8 @@ const formatResult = (result: any) => {
 }
 
 .plan-step-desc {
-  font-size: 13px;
-  color: #262626;
+  font-size: 12px;
+  color: #e2e8f0;
   flex: 1;
 }
 

@@ -1,9 +1,10 @@
 <template>
   <a-modal
     v-model:open="visible"
-    :title="isEdit ? '编辑知识库' : '创建知识库'"
+    :title="isEdit ? t('knowledgeBase.form.editTitle') : t('knowledgeBase.form.createTitle')"
     :width="600"
     :confirm-loading="loading"
+    class="tech-modal"
     @ok="handleSubmit"
     @cancel="handleCancel"
   >
@@ -11,35 +12,39 @@
       ref="formRef"
       :model="formData"
       :rules="rules"
-      :label-col="{ span: 6 }"
-      :wrapper-col="{ span: 18 }"
+      layout="vertical"
+      class="tech-form"
     >
-      <a-form-item label="知识库名称" name="name">
+      <a-form-item :label="t('knowledgeBase.form.name')" name="name">
         <a-input
           v-model:value="formData.name"
-          placeholder="请输入知识库名称（1-100字符）"
+          :placeholder="t('knowledgeBase.form.namePlaceholder')"
           :maxlength="100"
           show-count
+          class="tech-input"
         />
       </a-form-item>
 
-      <a-form-item label="描述" name="description">
+      <a-form-item :label="t('knowledgeBase.form.desc')" name="description">
         <a-textarea
           v-model:value="formData.description"
-          placeholder="请输入描述信息（可选，最多500字符）"
+          :placeholder="t('knowledgeBase.form.descPlaceholder')"
           :rows="4"
           :maxlength="500"
           show-count
+          class="tech-textarea"
         />
       </a-form-item>
 
-      <a-form-item label="向量模型" name="embeddingModelId" :required="!isEdit">
+      <a-form-item :label="t('knowledgeBase.form.embeddingModel')" name="embeddingModelId" :required="!isEdit">
         <a-select
           v-model:value="formData.embeddingModelId"
           :disabled="isEdit"
           :loading="loadingModels"
-          placeholder="请选择向量模型"
-          :not-found-content="loadingModels ? undefined : '暂无可用向量模型'"
+          :placeholder="t('knowledgeBase.form.embeddingModelPlaceholder')"
+          :not-found-content="loadingModels ? undefined : t('knowledgeBase.form.noModel')"
+          class="tech-select"
+          :dropdown-class-name="'tech-select-dropdown'"
         >
           <a-select-option
             v-for="model in embeddingModels"
@@ -55,7 +60,8 @@
           </a-select-option>
         </a-select>
         <div v-if="isEdit" class="form-hint">
-          向量模型创建后不可修改
+          <Icon icon="ant-design:info-circle-outlined" />
+          {{ t('knowledgeBase.form.embeddingModelHint') }}
         </div>
       </a-form-item>
     </a-form>
@@ -64,7 +70,9 @@
 
 <script setup lang="ts">
 import { ref, reactive, watch, computed, nextTick, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { message } from 'ant-design-vue';
+import { Icon } from '@/components/Icon';
 import type { FormInstance, Rule } from 'ant-design-vue/es/form';
 import {
   createKnowledgeBase,
@@ -94,6 +102,7 @@ const emit = defineEmits<{
   (e: 'success'): void;
 }>();
 
+const { t } = useI18n();
 const formRef = ref<FormInstance>();
 const loading = ref(false);
 
@@ -118,15 +127,15 @@ const visible = computed({
 });
 
 // 表单验证规则
-const rules: Record<string, Rule[]> = {
+const rules = computed<Record<string, Rule[]>>(() => ({
   name: [
-    { required: true, message: '请输入知识库名称', trigger: 'blur' },
-    { min: 1, max: 100, message: '名称长度在1-100个字符之间', trigger: 'blur' },
+    { required: true, message: t('knowledgeBase.form.namePlaceholder'), trigger: 'blur' },
+    { min: 1, max: 100, message: t('knowledgeBase.form.nameError'), trigger: 'blur' },
   ],
   embeddingModelId: [
-    { required: true, message: '请选择向量模型', trigger: 'change' },
+    { required: true, message: t('knowledgeBase.form.embeddingModelPlaceholder'), trigger: 'change' },
   ],
-};
+}));
 
 // 加载 Embedding 模型列表
 const loadEmbeddingModels = async () => {
@@ -147,7 +156,7 @@ const loadEmbeddingModels = async () => {
     }
   } catch (error) {
     console.error('获取向量模型列表失败:', error);
-    message.error('获取向量模型列表失败，请刷新重试');
+    message.error(t('knowledgeBase.form.loadModelError'));
     // 降级处理：使用空列表
     embeddingModels.value = [];
   } finally {
@@ -181,10 +190,8 @@ const resetForm = async () => {
 // 填充表单数据（编辑模式）
 const fillForm = (kb: KnowledgeBase) => {
   if (!kb) {
-    console.warn('fillForm: knowledgeBase is null');
     return;
   }
-  console.log('fillForm called with:', kb);
   // 直接设置表单数据
   formData.name = kb.name || '';
   formData.description = kb.description || '';
@@ -204,7 +211,6 @@ onMounted(() => {
 watch(
   [() => props.open, () => props.knowledgeBase],
   async ([open, kb], [oldOpen, oldKb]) => {
-    console.log('Watch triggered - open:', open, 'oldOpen:', oldOpen, 'kb:', kb, 'oldKb:', oldKb);
     if (open) {
       // 确保模型列表已加载
       await loadEmbeddingModels();
@@ -212,19 +218,15 @@ watch(
       // 弹窗打开时，使用 nextTick 确保 DOM 和 props 都已更新
       await nextTick();
       const currentKb = props.knowledgeBase;
-      console.log('Modal opened, current knowledgeBase:', currentKb);
       if (currentKb && currentKb.id) {
         // 编辑模式：填充表单数据
-        console.log('Filling form with knowledgeBase:', currentKb);
         fillForm(currentKb);
       } else {
         // 创建模式：重置表单
-        console.log('Resetting form for create mode');
         await resetForm();
       }
     } else if (oldOpen && !open) {
       // 弹窗从打开变为关闭时，重置表单（确保下次打开时数据正确）
-      console.log('Modal closed, resetting form');
       await resetForm();
     }
   },
@@ -244,7 +246,7 @@ const handleSubmit = async () => {
         description: formData.description || undefined,
       };
       await updateKnowledgeBase(props.knowledgeBase.id, updateData);
-      message.success('更新成功');
+      message.success(t('common.updateSuccess'));
     } else {
       // 创建模式
       const createData: CreateKnowledgeBaseRequest = {
@@ -253,7 +255,7 @@ const handleSubmit = async () => {
         embeddingModelId: formData.embeddingModelId!,
       };
       await createKnowledgeBase(createData);
-      message.success('创建成功');
+      message.success(t('common.createSuccess'));
     }
 
     emit('success');
@@ -263,7 +265,7 @@ const handleSubmit = async () => {
       // 表单验证错误
       return;
     }
-    message.error('操作失败: ' + (error?.message || '未知错误'));
+    message.error(`${t('common.operationFailed')}: ` + (error?.message || 'Unknown error'));
   } finally {
     loading.value = false;
   }
@@ -276,7 +278,143 @@ const handleCancel = () => {
 };
 </script>
 
+<style lang="less">
+/* Global styles for Tech Modal */
+.tech-modal {
+  .ant-modal-content {
+    background-color: rgba(15, 23, 42, 0.95) !important;
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+    border-radius: 12px;
+  }
+  
+  .ant-modal-header {
+    background: transparent;
+    border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+    
+    .ant-modal-title {
+      color: #60A5FA;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      letter-spacing: 1px;
+    }
+  }
+  
+  .ant-modal-close {
+    color: rgba(148, 163, 184, 0.8);
+    
+    &:hover {
+      color: #fff;
+    }
+  }
+  
+  .ant-modal-body {
+    padding: 24px;
+  }
+  
+  .ant-modal-footer {
+    background: transparent;
+    border-top: 1px solid rgba(59, 130, 246, 0.2);
+    padding: 16px 24px;
+    
+    .ant-btn-default {
+      background: transparent;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      color: #94a3b8;
+      
+      &:hover {
+        border-color: #60A5FA;
+        color: #60A5FA;
+      }
+    }
+    
+    .ant-btn-primary {
+      background: rgba(59, 130, 246, 0.2);
+      border: 1px solid rgba(59, 130, 246, 0.5);
+      color: #60A5FA;
+      text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+      
+      &:hover {
+        background: rgba(59, 130, 246, 0.3);
+        border-color: #60A5FA;
+        color: #fff;
+      }
+    }
+  }
+}
+
+.tech-select-dropdown {
+  background-color: #0f172a !important;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  
+  .ant-select-item {
+    color: #e2e8f0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    
+    &-option-active {
+      background-color: rgba(59, 130, 246, 0.1) !important;
+    }
+    
+    &-option-selected {
+      background-color: rgba(59, 130, 246, 0.2) !important;
+      color: #60A5FA;
+    }
+  }
+}
+</style>
+
 <style scoped lang="less">
+.tech-form {
+  :deep(.ant-form-item-label > label) {
+    color: #e2e8f0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+  }
+  
+  .tech-input, .tech-textarea {
+    background: rgba(0, 0, 0, 0.2) !important;
+    border: 1px solid rgba(59, 130, 246, 0.2) !important;
+    border-radius: 4px;
+    color: #fff !important;
+    font-family: 'Inter', sans-serif;
+    
+    &:hover, &:focus {
+      border-color: #60A5FA !important;
+      box-shadow: 0 0 8px rgba(59, 130, 246, 0.2);
+    }
+    
+    &::placeholder {
+      color: rgba(148, 163, 184, 0.4);
+    }
+
+    /* Fix for show-count wrapper */
+    :deep(.ant-input), :deep(textarea) {
+      background-color: transparent !important;
+      color: #fff !important;
+      border: none;
+    }
+  }
+  
+  :deep(.ant-input-show-count-suffix) {
+    color: rgba(148, 163, 184, 0.5);
+  }
+  
+  .tech-select {
+    :deep(.ant-select-selector) {
+      background-color: rgba(0, 0, 0, 0.2) !important;
+      border-color: rgba(59, 130, 246, 0.2) !important;
+      color: #fff !important;
+      font-family: 'Inter', sans-serif;
+    }
+    
+    :deep(.ant-select-arrow) {
+      color: rgba(96, 165, 250, 0.6);
+    }
+  }
+}
+
 .model-option {
   display: flex;
   align-items: center;
@@ -284,18 +422,30 @@ const handleCancel = () => {
 
   .model-name {
     font-weight: 500;
+    color: #e2e8f0;
   }
 
   .model-desc {
-    color: #8c8c8c;
+    color: rgba(148, 163, 184, 0.6);
     font-size: 12px;
   }
 }
 
 .form-hint {
-  color: #8c8c8c;
+  color: #94a3b8;
   font-size: 12px;
-  margin-top: 4px;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(59, 130, 246, 0.05);
+  border-radius: 4px;
+  border: 1px solid rgba(59, 130, 246, 0.1);
+  
+  .anticon {
+    color: #60A5FA;
+  }
 }
 </style>
 

@@ -75,6 +75,11 @@ public class AgentConstants {
     public static final String EVENT_AGENT_ERROR = "agent:error";
     public static final String EVENT_ITERATION_START = "agent:iteration_start";
     public static final String EVENT_ITERATION_END = "agent:iteration_end";
+
+    // Detailed status events for i18n
+    public static final String EVENT_STATUS_THINKING_PROCESS = "agent:status:thinking_process";
+    public static final String EVENT_STATUS_TOOL_EXECUTING_SINGLE = "agent:status:tool_executing_single";
+    public static final String EVENT_STATUS_TOOL_EXECUTING_BATCH = "agent:status:tool_executing_batch";
     
     /**
      * Redis缓存前缀

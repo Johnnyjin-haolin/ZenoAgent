@@ -1,7 +1,7 @@
 <template>
   <a-modal
     v-model:open="visible"
-    title="上传文档"
+    :title="t('knowledgeBase.upload.title')"
     :width="600"
     :confirm-loading="uploading"
     @ok="handleUpload"
@@ -9,7 +9,7 @@
   >
     <a-tabs v-model:activeKey="uploadType">
       <!-- 单文件上传 -->
-      <a-tab-pane key="single" tab="单文件上传">
+      <a-tab-pane key="single" :tab="t('knowledgeBase.upload.single')">
         <a-upload-dragger
           v-model:fileList="fileList"
           :before-upload="beforeUpload"
@@ -20,15 +20,15 @@
           <p class="ant-upload-drag-icon">
             <Icon icon="ant-design:inbox-outlined" />
           </p>
-          <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
+          <p class="ant-upload-text">{{ t('knowledgeBase.upload.dragText') }}</p>
           <p class="ant-upload-hint">
-            支持：txt, md, pdf, docx, doc, xlsx, xls, pptx, ppt（最大150MB）
+            {{ t('knowledgeBase.upload.hint') }}
           </p>
         </a-upload-dragger>
       </a-tab-pane>
 
       <!-- ZIP批量导入 -->
-      <a-tab-pane key="zip" tab="ZIP批量导入">
+      <a-tab-pane key="zip" :tab="t('knowledgeBase.upload.zip')">
         <a-upload-dragger
           v-model:fileList="zipFileList"
           :before-upload="beforeZipUpload"
@@ -39,9 +39,9 @@
           <p class="ant-upload-drag-icon">
             <Icon icon="ant-design:file-zip-outlined" />
           </p>
-          <p class="ant-upload-text">上传ZIP压缩包</p>
+          <p class="ant-upload-text">{{ t('knowledgeBase.upload.zipText') }}</p>
           <p class="ant-upload-hint">
-            将自动解压并导入所有支持的文件
+            {{ t('knowledgeBase.upload.zipHint') }}
           </p>
         </a-upload-dragger>
       </a-tab-pane>
@@ -56,6 +56,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { message } from 'ant-design-vue';
 import type { UploadFile } from 'ant-design-vue';
 import { Icon } from '@/components/Icon';
@@ -70,6 +71,8 @@ const emit = defineEmits<{
   (e: 'update:open', value: boolean): void;
   (e: 'success'): void;
 }>();
+
+const { t } = useI18n();
 
 const visible = computed({
   get: () => props.open || false,
@@ -105,13 +108,13 @@ const beforeUpload = (file: File) => {
     /\.(txt|md|pdf|docx|doc|xlsx|xls|pptx|ppt)$/i.test(file.name);
 
   if (!isValidType) {
-    message.error('不支持的文件类型');
+    message.error(t('knowledgeBase.upload.errorType'));
     return false;
   }
 
   // 验证文件大小
   if (file.size > MAX_FILE_SIZE) {
-    message.error('文件大小不能超过150MB');
+    message.error(t('knowledgeBase.upload.errorSize'));
     return false;
   }
 
@@ -122,13 +125,13 @@ const beforeUpload = (file: File) => {
 // ZIP文件上传前验证
 const beforeZipUpload = (file: File) => {
   if (!file.name.toLowerCase().endsWith('.zip')) {
-    message.error('请上传ZIP格式的压缩包');
+    message.error(t('knowledgeBase.upload.errorZipType'));
     return false;
   }
 
   if (file.size > MAX_FILE_SIZE * 10) {
     // ZIP文件可以稍大一些
-    message.error('ZIP文件大小不能超过1.5GB');
+    message.error(t('knowledgeBase.upload.errorZipSize'));
     return false;
   }
 
@@ -151,13 +154,13 @@ const handleUpload = async () => {
   if (uploadType.value === 'single') {
     // 单文件上传
     if (fileList.value.length === 0) {
-      message.warning('请选择要上传的文件');
+      message.warning(t('knowledgeBase.upload.warningNoFile'));
       return;
     }
 
     const file = fileList.value[0].originFileObj;
     if (!file) {
-      message.error('文件不存在');
+      message.error(t('knowledgeBase.upload.errorNoFile'));
       return;
     }
 
@@ -166,12 +169,12 @@ const handleUpload = async () => {
 
     try {
       await uploadDocument(props.knowledgeBaseId, file);
-      message.success('文件上传成功，正在处理中');
+      message.success(t('knowledgeBase.upload.successSingle'));
       emit('success');
       visible.value = false;
       fileList.value = [];
     } catch (error: any) {
-      message.error('上传失败: ' + (error?.message || '未知错误'));
+      message.error(`${t('knowledgeBase.upload.errorSingle')}: ` + (error?.message || 'Unknown error'));
     } finally {
       uploading.value = false;
       uploadProgress.value = 0;
@@ -179,13 +182,13 @@ const handleUpload = async () => {
   } else {
     // ZIP批量导入
     if (zipFileList.value.length === 0) {
-      message.warning('请选择要上传的ZIP文件');
+      message.warning(t('knowledgeBase.upload.warningNoZip'));
       return;
     }
 
     const zipFile = zipFileList.value[0].originFileObj;
     if (!zipFile) {
-      message.error('文件不存在');
+      message.error(t('knowledgeBase.upload.errorNoFile'));
       return;
     }
 
@@ -194,12 +197,12 @@ const handleUpload = async () => {
 
     try {
       const documents = await importDocumentsFromZip(props.knowledgeBaseId, zipFile);
-      message.success(`ZIP导入成功，共导入 ${documents.length} 个文件，正在处理中`);
+      message.success(t('knowledgeBase.upload.successZip', { count: documents.length }));
       emit('success');
       visible.value = false;
       zipFileList.value = [];
     } catch (error: any) {
-      message.error('ZIP导入失败: ' + (error?.message || '未知错误'));
+      message.error(`${t('knowledgeBase.upload.errorZip')}: ` + (error?.message || 'Unknown error'));
     } finally {
       uploading.value = false;
       uploadProgress.value = 0;

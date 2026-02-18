@@ -4,12 +4,14 @@
  */
 
 import { ref, Ref, computed, reactive, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { message } from 'ant-design-vue';
 import logger from '@/utils/logger';
 import { executeAgent, getConversationMessages, confirmToolExecution, stopAgent } from '../agent.api';
 import type {
   AgentMessage,
   AgentRequest,
+  AgentEvent,
   ToolCall,
   RagResult,
   ProcessStep,
@@ -36,6 +38,7 @@ export interface UseAgentChatOptions {
  * Agent 聊天逻辑封装
  */
 export function useAgentChat(options: UseAgentChatOptions = {}) {
+  const { t } = useI18n();
   const {
     conversationId,
     defaultModelId,
@@ -202,17 +205,17 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     } = {}
   ) => {
     if (loading.value) {
-      message.warning('请等待当前消息处理完成');
+      message.warning(t('agent.chat.waitCurrent'));
       return;
     }
 
     if (!content.trim()) {
-      message.warning('请输入消息内容');
+      message.warning(t('agent.chat.inputMsg'));
       return;
     }
 
     loading.value = true;
-    currentStatus.value = '准备发送...';
+    currentStatus.value = t('agent.chat.preparing');
 
     const updateConversationId = (event: AgentEvent) => {
       const newConversationId = event.conversationId || (event.data && event.data.conversationId);
@@ -238,7 +241,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       content: '',
       datetime: new Date().toLocaleString(),
       status: 'thinking',
-      statusText: '准备中...',
+      statusText: t('agent.chat.preparing'),
       loading: true,
       toolCalls: [],
       ragResults: [],
@@ -274,8 +277,8 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           // 【新增】保存 requestId 用于停止功能
           currentRequestId = event.requestId || null;
           assistantMessage.status = 'thinking';
-          assistantMessage.statusText = '开始处理...';
-          currentStatus.value = '任务已启动';
+          assistantMessage.statusText = t('agent.chat.processing');
+          currentStatus.value = t('agent.chat.started');
         },
 
         onIterationStart: (event) => {
@@ -299,6 +302,34 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           logger.debug(`🔁 创建第 ${iterationNumber} 轮迭代（展开）`);
         },
 
+        onStatusUpdate: (event) => {
+          logger.debug('状态更新:', event);
+          updateConversationId(event);
+          assistantMessage.status = event.event;
+          assistantMessage.data = event.data;
+          
+          // 清空 statusText，让 AgentMessage 组件根据 status 使用国际化文案
+          assistantMessage.statusText = undefined;
+          
+          // 更新全局状态文本（手动处理国际化）
+          let statusText = '';
+          if (event.event === 'agent:status:thinking_process') {
+            statusText = t('agent.status.thinking_process');
+          } else if (event.event === 'agent:status:tool_executing_single') {
+            statusText = t('agent.status.tool_executing_single', { 
+              toolName: event.data?.toolName || 'Tool' 
+            });
+          } else if (event.event === 'agent:status:tool_executing_batch') {
+            statusText = t('agent.status.tool_executing_batch', { 
+              count: event.data?.count || 0 
+            });
+          }
+          
+          if (statusText) {
+            currentStatus.value = statusText;
+          }
+        },
+
         onThinking: (event) => {
           logger.debug('AI 思考中:', event);
           updateConversationId(event);
@@ -307,8 +338,8 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             assistantMessage.statusText = event.message;
             currentStatus.value = event.message;
           } else if (!assistantMessage.statusText) {
-            assistantMessage.statusText = '思考中...';
-            currentStatus.value = '思考中...';
+            assistantMessage.statusText = t('agent.chat.thinking');
+            currentStatus.value = t('agent.chat.thinking');
           }
 
           if (!currentIteration) return;
@@ -316,7 +347,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           // 在当前迭代添加或更新思考步骤
           let thinkingStep = currentIteration.steps.find((s: any) => s.type === 'thinking');
           if (!thinkingStep) {
-            thinkingStep = createStep('thinking', '思考与规划', 'running');
+            thinkingStep = createStep('thinking', t('agent.chat.thinkingProcess'), 'running');
             thinkingStep.subSteps = [];
             currentIteration.steps.push(thinkingStep);
           }
@@ -335,7 +366,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
           let thinkingStep = currentIteration.steps.find((s: any) => s.type === 'thinking');
           if (!thinkingStep) {
-            thinkingStep = createStep('thinking', '思考与规划', 'running');
+            thinkingStep = createStep('thinking', t('agent.chat.thinkingProcess'), 'running');
             thinkingStep.subSteps = [];
             currentIteration.steps.push(thinkingStep);
           }
@@ -361,15 +392,15 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           if (event.data) {
             assistantMessage.model = event.data.name || event.data.id;
           }
-          currentStatus.value = `使用模型: ${event.data?.name || ''}`;
+          currentStatus.value = t('agent.chat.usingModel', { model: event.data?.name || '' });
         },
 
         onRagRetrieve: (event) => {
           logger.debug('RAG 检索:', event);
           updateConversationId(event);
           assistantMessage.status = 'retrieving';
-          assistantMessage.statusText = '正在检索知识库...';
-          currentStatus.value = '检索知识库中...';
+          assistantMessage.statusText = t('agent.chat.retrievingKb');
+          currentStatus.value = t('agent.chat.retrievingKbProcess');
 
           if (!currentIteration) return;
 
@@ -394,7 +425,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
               retrieveCount = event.data.resultCount || 0;
               avgScore = event.data.avgScore || 0;
               ragResults.push({
-                content: `检索到 ${retrieveCount} 条相关知识，平均分数: ${avgScore}`,
+                content: t('agent.chat.retrievedInfo', { count: retrieveCount, score: avgScore }),
                 score: avgScore,
                 source: event.data.query,
               });
@@ -404,7 +435,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           }
 
           // 添加检索步骤
-          const step = createStep('rag_retrieve', '检索知识库', 'running', {
+          const step = createStep('rag_retrieve', t('agent.chat.retrieveKbStep'), 'running', {
             retrieveCount,
             avgScore,
             ragResults,
@@ -418,8 +449,8 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           const requiresConfirmation = Boolean(event.data?.requiresConfirmation);
           assistantMessage.status = 'calling_tool';
           assistantMessage.statusText = requiresConfirmation
-            ? `等待确认: ${event.data?.toolName || ''}`
-            : `调用工具: ${event.data?.toolName || ''}`;
+            ? t('agent.chat.waitingConfirm', { tool: event.data?.toolName || '' })
+            : t('agent.chat.callingToolStep', { tool: event.data?.toolName || '' });
           currentStatus.value = assistantMessage.statusText || '';
 
           if (!currentIteration) return;
@@ -443,7 +474,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
             // 添加工具调用步骤
             const stepStatus: ProcessStepStatus = requiresConfirmation ? 'waiting' : 'running';
-            const step = createStep('tool_call', `调用工具: ${event.data.toolName}`, stepStatus, {
+            const step = createStep('tool_call', t('agent.chat.callingToolStep', { tool: event.data.toolName }), stepStatus, {
               toolName: event.data.toolName,
               toolParams: event.data.params || {},
               requiresConfirmation,
@@ -464,7 +495,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         onToolResult: (event) => {
           logger.debug('工具结果:', event);
           updateConversationId(event);
-          currentStatus.value = '工具执行完成';
+          currentStatus.value = t('agent.chat.toolExecDone');
 
           // 更新最后一个工具调用的结果
           if (event.data && assistantMessage.toolCalls && assistantMessage.toolCalls.length > 0) {
@@ -513,11 +544,11 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           }
           
           assistantMessage.status = 'generating';
-          assistantMessage.statusText = '';
+          assistantMessage.statusText = t('agent.chat.generating');
           assistantMessage.loading = true;
           assistantMessage.content += event.content || '';
           
-          currentStatus.value = '';
+          currentStatus.value = t('agent.chat.generating');
 
           if (!currentIteration) return;
 
@@ -533,7 +564,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           // 添加生成回答步骤（只添加一次）
           const generatingStep = currentIteration.steps.find((s: any) => s.type === 'generating');
           if (!generatingStep) {
-            const step = createStep('generating', '生成回答', 'running');
+            const step = createStep('generating', t('agent.chat.generateAnswer'), 'running');
             currentIteration.steps.push(step);
           }
         },
@@ -613,7 +644,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           }
           
           assistantMessage.status = 'done';
-          assistantMessage.statusText = '';
+          assistantMessage.statusText = t('agent.chat.finish');
           assistantMessage.loading = false;
           assistantMessage.tokens = event.totalTokens;
           assistantMessage.duration = event.duration;
@@ -625,7 +656,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           ).length;
 
           loading.value = false;
-          currentStatus.value = '';
+          currentStatus.value = t('agent.chat.finish');
           currentController = null;
 
           // 更新会话ID（如果返回了新的会话ID）
@@ -633,17 +664,35 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             conversationId.value = event.data.conversationId;
           }
 
-          message.success('回答完成');
+          message.success(t('agent.chat.finish'));
+        },
+
+        onInferenceEnd: (event) => {
+          logger.debug('推理结束:', event);
+          updateConversationId(event);
+          assistantMessage.statusText = t('agent.chat.inferenceEnd');
+          currentStatus.value = t('agent.chat.continueNext');
+        },
+
+        onExecuteError: (event) => {
+          logger.error('执行出错:', event);
+          updateConversationId(event);
+          loading.value = false;
+          assistantMessage.status = 'error';
+          assistantMessage.statusText = t('agent.chat.execError', { msg: event.error });
+          currentStatus.value = t('agent.chat.processFailed');
+          
+          message.error(event.message || t('agent.chat.processFailed'));
         },
 
         onError: (event) => {
           logger.error('发生错误:', event);
           updateConversationId(event);
           assistantMessage.status = 'error';
-          assistantMessage.statusText = '';
+          assistantMessage.statusText = event.error || t('agent.chat.error');
           assistantMessage.loading = false;
           assistantMessage.error = true;
-          assistantMessage.content = event.message || '处理失败，请稍后重试';
+          assistantMessage.content = event.message || t('agent.chat.processFailed');
           
           // 将当前迭代的所有运行中的步骤标记为错误
           if (currentIteration && currentIteration.steps.length > 0) {
@@ -657,20 +706,20 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             });
             
             // 标记迭代完成
-            currentIteration.status = 'completed';
+            currentIteration.status = 'error';
             currentIteration.endTime = Date.now();
             currentIteration.totalDuration = currentIteration.endTime - currentIteration.startTime;
             currentIteration.shouldContinue = false;
             currentIteration.terminationReason = 'EXCEPTION';
-            currentIteration.terminationMessage = `执行出错: ${event.message || '未知错误'}`;
+            currentIteration.terminationMessage = t('agent.chat.execError', { msg: event.message || t('agent.chat.error') });
             currentIteration.collapsed = true;
           }
 
           loading.value = false;
-          currentStatus.value = '';
+          currentStatus.value = t('agent.chat.processFailed');
           currentController = null;
 
-          message.error(event.message || '处理失败');
+          message.error(event.message || t('agent.chat.sendFailed'));
         },
       });
     } catch (error: any) {
@@ -678,13 +727,12 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       assistantMessage.status = 'error';
       assistantMessage.loading = false;
       assistantMessage.error = true;
-      assistantMessage.content = '发送失败，请稍后重试';
+      assistantMessage.content = t('agent.chat.sendFailed');
       
       loading.value = false;
-      currentStatus.value = '';
-      currentController = null;
-
-      message.error('发送失败，请稍后重试');
+      currentStatus.value = t('agent.chat.sendFailed');
+      
+      message.error(t('agent.chat.sendFailed'));
     }
   };
 
@@ -712,17 +760,17 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         currentController = null;
         currentRequestId = null;
         loading.value = false;
-        currentStatus.value = '';
+        currentStatus.value = t('agent.chat.stopGen');
         
         // 更新最后一条助手消息状态
         const lastMessage = messages.value[messages.value.length - 1];
         if (lastMessage && lastMessage.role === 'assistant') {
           lastMessage.status = 'done';
           lastMessage.loading = false;
-          lastMessage.statusText = '';
+          lastMessage.statusText = t('agent.chat.stopGen');
         }
         
-        message.info('已停止生成');
+        message.info(t('agent.chat.stopGen'));
       }
     }
   };
@@ -736,7 +784,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
     const success = await confirmToolExecution(current.toolExecutionId, approve, current.requestId);
     if (!success) {
-      message.error('工具确认失败，请重试');
+      message.error(t('agent.chat.confirmFailed'));
       return;
     }
 
@@ -751,7 +799,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             updateToolStepStatus(currentIter.steps, current.toolName, 'running');
           } else {
             updateToolStepStatus(currentIter.steps, current.toolName, 'error', {
-              toolError: '用户拒绝执行',
+              toolError: t('agent.chat.userRejected'),
             });
           }
         }
@@ -789,7 +837,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       logger.debug(`已加载 ${messages.value.length} 条历史消息`);
     } catch (error) {
       logger.error('加载历史消息失败:', error);
-      message.error('加载历史消息失败');
+      message.error(t('agent.chat.loadHistoryFailed'));
       messages.value = [];
     } finally {
       loading.value = false;
@@ -906,7 +954,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     // 找到最后一条用户消息
     const userMessages = messages.value.filter((msg) => msg.role === 'user');
     if (userMessages.length === 0) {
-      message.warning('没有可重新生成的消息');
+      message.warning(t('agent.chat.noRegenMsg'));
       return;
     }
 

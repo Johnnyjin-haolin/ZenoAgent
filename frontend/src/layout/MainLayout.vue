@@ -1,21 +1,21 @@
 <template>
   <a-layout class="main-layout">
+    <!-- Global Tech Background -->
+    <TechBackground class="layout-bg" />
+
     <!-- Sidebar -->
     <a-layout-sider
       v-model:collapsed="collapsed"
       :trigger="null"
       collapsible
-      class="google-sidebar"
-      theme="light"
-      :width="240"
-      :collapsedWidth="60"
+      class="glass-sidebar"
+      theme="dark"
+      :width="260"
+      :collapsedWidth="72"
     >
-      <div class="logo-container" :class="{ 'collapsed': collapsed }">
+      <div class="logo-container" :class="{ 'collapsed': collapsed }" @click="goHome">
         <div class="logo-icon">
-          <!-- Placeholder for Logo -->
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" fill="#1A73E8"/>
-          </svg>
+          <span class="logo-emoji">✨</span>
         </div>
         <span class="logo-text" v-show="!collapsed">Zeno Agent</span>
       </div>
@@ -23,33 +23,24 @@
       <a-menu
         v-model:selectedKeys="selectedKeys"
         mode="inline"
-        class="google-menu"
+        class="glass-menu"
       >
         <a-menu-item key="agent">
+          <template #icon>
+            <message-outlined />
+          </template>
           <router-link to="/agent">
-            <template #icon>
-              <message-outlined />
-            </template>
-            <span>智能对话</span>
+            <span>{{ t('menu.agent') }}</span>
           </router-link>
         </a-menu-item>
         
         <a-menu-item key="knowledge-bases">
-          <router-link to="/knowledge-bases">
-            <template #icon>
-              <book-outlined />
-            </template>
-            <span>知识库</span>
-          </router-link>
-        </a-menu-item>
-        
-        <a-menu-divider />
-        
-        <a-menu-item key="settings">
           <template #icon>
-            <setting-outlined />
+            <book-outlined />
           </template>
-          <span>设置</span>
+          <router-link to="/knowledge-bases">
+            <span>{{ t('menu.knowledgeBase') }}</span>
+          </router-link>
         </a-menu-item>
       </a-menu>
       
@@ -60,19 +51,28 @@
     </a-layout-sider>
 
     <!-- Main Content -->
-    <a-layout>
+    <a-layout class="content-layout">
       <!-- Top Header -->
-      <a-layout-header class="google-header">
+      <a-layout-header class="glass-header">
         <div class="header-left">
-          <h2 class="page-title">{{ currentRouteTitle }}</h2>
+          <h2 class="page-title">{{ t('layout.title') }}</h2>
         </div>
         <div class="header-right">
-          <a-avatar src="https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff" />
+          <a-tooltip :title="currentLocale === 'zh-CN' ? 'Switch to English' : '切换为中文'">
+            <a-button type="text" class="lang-btn" @click="toggleLanguage">
+              <template #icon>
+                <translation-outlined />
+              </template>
+            </a-button>
+          </a-tooltip>
+          <TechBorder class="avatar-border">
+            <a-avatar src="https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff" />
+          </TechBorder>
         </div>
       </a-layout-header>
 
       <!-- Content -->
-      <a-layout-content class="google-content">
+      <a-layout-content class="glass-content">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
             <component :is="Component" />
@@ -85,18 +85,29 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import {
   MessageOutlined,
   BookOutlined,
   SettingOutlined,
   MenuFoldOutlined,
-  MenuUnfoldOutlined
+  MenuUnfoldOutlined,
+  TranslationOutlined
 } from '@ant-design/icons-vue';
+import TechBackground from '@/components/TechBackground.vue';
+import TechBorder from '@/components/TechBorder.vue';
 
+const { t, locale } = useI18n();
 const collapsed = ref(false);
+const router = useRouter();
 const route = useRoute();
 const selectedKeys = ref<string[]>([]);
+
+// Go Home
+const goHome = () => {
+  router.push('/');
+};
 
 // Sync menu selection with route
 watch(
@@ -115,21 +126,41 @@ const currentRouteTitle = computed(() => {
   return route.meta.title || 'Zeno Agent';
 });
 
+const currentLocale = computed(() => locale.value);
+
 const toggleCollapse = () => {
   collapsed.value = !collapsed.value;
+};
+
+const toggleLanguage = () => {
+  const newLocale = locale.value === 'en-US' ? 'zh-CN' : 'en-US';
+  locale.value = newLocale;
+  localStorage.setItem('locale', newLocale);
 };
 </script>
 
 <style lang="less" scoped>
 .main-layout {
   min-height: 100vh;
-  background: var(--color-background);
+  background: transparent;
+  position: relative;
+  overflow: hidden;
 }
 
-.google-sidebar {
-  background: #FFFFFF;
-  border-right: 1px solid rgba(0,0,0,0.08);
-  box-shadow: 2px 0 8px rgba(0,0,0,0.02);
+.layout-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+}
+
+/* Glass Sidebar */
+.glass-sidebar {
+  background: rgba(15, 23, 42, 0.6); /* Cyber Surface */
+  border-right: 1px solid rgba(59, 130, 246, 0.1);
+  backdrop-filter: blur(12px);
   z-index: 10;
   
   :deep(.ant-layout-sider-children) {
@@ -139,122 +170,175 @@ const toggleCollapse = () => {
 }
 
 .logo-container {
-  height: 60px;
+  height: 72px;
   display: flex;
   align-items: center;
-  padding: 0 18px;
+  padding: 0 24px;
   overflow: hidden;
   white-space: nowrap;
-  transition: all 0.2s;
-  border-bottom: 1px solid transparent;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
   
   &.collapsed {
-    padding: 0 18px;
+    padding: 0;
     justify-content: center;
   }
   
   .logo-icon {
-    width: 24px;
-    height: 24px;
+    width: 32px;
+    height: 32px;
     margin-right: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
+    font-size: 20px;
   }
   
   .logo-text {
-    font-family: 'Google Sans', sans-serif;
+    font-family: 'Inter', sans-serif;
     font-size: 18px;
-    font-weight: 500;
-    color: #5F6368;
+    font-weight: 700;
+    background: linear-gradient(90deg, #F8FAFC, #94A3B8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.5px;
   }
 }
 
-.google-menu {
+/* Glass Menu */
+.glass-menu {
   flex: 1;
   border-right: none;
-  padding-top: 8px;
+  background: transparent;
+  padding-top: 16px;
+  
+  .menu-spacer {
+    flex: 1;
+  }
   
   :deep(.ant-menu-item) {
-    height: 40px;
-    line-height: 40px;
-    margin: 4px 8px;
+    height: 44px;
+    line-height: 44px;
+    margin: 4px 12px;
     width: auto;
-    border-radius: 0 20px 20px 0; /* Google style rounded selection */
-    border-radius: 20px;
+    border-radius: 8px;
+    color: var(--color-text-secondary);
+    transition: all 0.2s;
     
-    &.ant-menu-item-selected {
-      background-color: #E8F0FE;
-      color: #1967D2;
-      font-weight: 500;
-      
-      .anticon {
-        color: #1967D2;
-      }
+    &:hover {
+      color: var(--color-text-primary);
+      background: rgba(255, 255, 255, 0.05);
     }
     
-    &:not(.ant-menu-item-selected):hover {
-      color: #202124;
-      background-color: #F1F3F4;
+    &.ant-menu-item-selected {
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--google-blue);
+      font-weight: 500;
+      box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.2);
+      
+      .anticon {
+        color: var(--google-blue);
+      }
     }
     
     .anticon {
       font-size: 18px;
+      transition: color 0.2s;
     }
   }
 }
 
 .sidebar-footer {
-  height: 48px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: #5F6368;
-  border-top: 1px solid rgba(0,0,0,0.06);
-  transition: background 0.2s;
+  color: var(--color-text-disabled);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.2s;
   
   &:hover {
-    background: #F1F3F4;
+    color: var(--color-text-primary);
+    background: rgba(255, 255, 255, 0.05);
   }
 }
 
-.google-header {
-  background: #FFFFFF;
-  height: 60px;
-  padding: 0 24px;
+/* Content Layout */
+.content-layout {
+  background: transparent;
+  z-index: 1;
+}
+
+.glass-header {
+  background: rgba(5, 11, 20, 0.6);
+  backdrop-filter: blur(12px);
+  height: 72px;
+  padding: 0 32px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid rgba(0,0,0,0.06);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.1);
   
   .page-title {
     margin: 0;
-    font-size: 18px;
-    font-weight: 400;
-    color: #202124;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    letter-spacing: -0.5px;
+  }
+  
+  .header-right {
+    display: flex;
+    align-items: center;
+    height: 100%;
+  }
+  
+  .lang-btn {
+    color: var(--color-text-secondary);
+    margin-right: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    &:hover {
+      color: var(--color-text-primary);
+      background: rgba(255, 255, 255, 0.1);
+    }
+  }
+  
+  .avatar-border {
+    padding: 2px;
+    border-radius: 50%;
+    
+    :deep(.content-wrapper) {
+      border-radius: 50%;
+      padding: 2px;
+      background: transparent;
+    }
   }
 }
 
-.google-content {
+.glass-content {
   margin: 0;
   padding: 0;
-  background: var(--color-background);
-  overflow: hidden; /* Prevent double scrollbar */
+  background: transparent;
+  overflow: hidden;
   position: relative;
-  height: calc(100vh - 60px); /* Ensure fixed height for inner scrolling */
+  height: calc(100vh - 72px);
   display: flex;
   flex-direction: column;
-}
-
-:deep(.ant-layout) {
-  background: var(--color-background);
 }
 
 /* Transitions */
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .fade-enter-from,

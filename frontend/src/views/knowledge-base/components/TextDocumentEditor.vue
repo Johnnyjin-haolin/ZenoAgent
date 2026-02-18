@@ -1,7 +1,7 @@
 <template>
   <a-modal
     v-model:open="visible"
-    title="创建文本文档"
+    :title="t('knowledgeBase.text.title')"
     :width="800"
     :confirm-loading="loading"
     @ok="handleSubmit"
@@ -14,19 +14,19 @@
       :label-col="{ span: 4 }"
       :wrapper-col="{ span: 20 }"
     >
-      <a-form-item label="文档标题" name="title">
+      <a-form-item :label="t('knowledgeBase.text.docTitle')" name="title">
         <a-input
           v-model:value="formData.title"
-          placeholder="请输入文档标题（必填）"
+          :placeholder="t('knowledgeBase.text.titlePlaceholder')"
           :maxlength="200"
           show-count
         />
       </a-form-item>
 
-      <a-form-item label="文档内容" name="content">
+      <a-form-item :label="t('knowledgeBase.text.content')" name="content">
         <a-textarea
           v-model:value="formData.content"
-          placeholder="请输入文档内容（支持Markdown格式）"
+          :placeholder="t('knowledgeBase.text.contentPlaceholder')"
           :rows="15"
           :maxlength="100000"
           show-count
@@ -38,6 +38,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { message } from 'ant-design-vue';
 import type { FormInstance, Rule } from 'ant-design-vue/es/form';
 import { createTextDocument } from '@/api/knowledge-base.api';
@@ -53,6 +54,7 @@ const emit = defineEmits<{
   (e: 'success'): void;
 }>();
 
+const { t } = useI18n();
 const formRef = ref<FormInstance>();
 const loading = ref(false);
 
@@ -69,16 +71,16 @@ const visible = computed({
 });
 
 // 表单验证规则
-const rules: Record<string, Rule[]> = {
+const rules = computed<Record<string, Rule[]>>(() => ({
   title: [
-    { required: true, message: '请输入文档标题', trigger: 'blur' },
-    { min: 1, max: 200, message: '标题长度在1-200个字符之间', trigger: 'blur' },
+    { required: true, message: t('knowledgeBase.text.titleError'), trigger: 'blur' },
+    { min: 1, max: 200, message: t('knowledgeBase.text.titleLengthError'), trigger: 'blur' },
   ],
   content: [
-    { required: true, message: '请输入文档内容', trigger: 'blur' },
-    { min: 1, max: 100000, message: '内容长度在1-100000个字符之间', trigger: 'blur' },
+    { required: true, message: t('knowledgeBase.text.contentError'), trigger: 'blur' },
+    { min: 1, max: 100000, message: t('knowledgeBase.text.contentLengthError'), trigger: 'blur' },
   ],
-};
+}));
 
 // 提交表单
 const handleSubmit = async () => {
@@ -91,7 +93,7 @@ const handleSubmit = async () => {
       content: formData.content,
     });
 
-    message.success('文本文档创建成功，正在处理中');
+    message.success(t('knowledgeBase.text.success'));
     emit('success');
     visible.value = false;
   } catch (error: any) {
@@ -99,7 +101,7 @@ const handleSubmit = async () => {
       // 表单验证错误
       return;
     }
-    message.error('创建失败: ' + (error?.message || '未知错误'));
+    message.error(`${t('knowledgeBase.text.error')}: ` + (error?.message || 'Unknown error'));
   } finally {
     loading.value = false;
   }

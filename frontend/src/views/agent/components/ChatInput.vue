@@ -1,9 +1,9 @@
 <template>
   <div class="chat-footer">
-    <div v-if="currentStatus" class="status-bar">
-      <a-spin size="small" />
-      <span>{{ currentStatus }}</span>
-    </div>
+<!--    <div v-if="currentStatus" class="status-bar">-->
+<!--      <a-spin size="small" />-->
+<!--      <span>{{ currentStatus }}</span>-->
+<!--    </div>-->
 
     <div class="input-container">
       <div class="input-wrapper">
@@ -21,7 +21,7 @@
           <AgentModelSelector
             v-model="modelId"
             :compact="true"
-            placeholder="选择模型"
+            :placeholder="t('agent.selectModel')"
             @change="handleModelChange"
           />
         </div>
@@ -33,7 +33,7 @@
             danger
             size="small"
             @click="emit('stop')"
-            title="停止生成"
+            :title="t('agent.stopGeneration')"
             class="action-button"
           >
             <template #icon>
@@ -45,7 +45,7 @@
             type="text"
             :disabled="!inputValue.trim()"
             @click="emit('send')"
-            title="发送消息"
+            :title="t('agent.sendMessage')"
             class="action-button send-button"
           >
             <template #icon>
@@ -60,9 +60,12 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Icon } from '@/components/Icon';
 import AgentModelSelector from './AgentModelSelector.vue';
 import type { ModelInfo } from '../agent.types';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   modelValue: string;
@@ -117,6 +120,8 @@ defineExpose({ focusInput });
   background: transparent;
   padding: 0 24px 24px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 10;
 
   .status-bar {
     padding: 6px 12px;
@@ -124,33 +129,56 @@ defineExpose({ focusInput });
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 13px;
-    color: var(--color-text-secondary);
+    font-size: 12px;
+    color: rgba(59, 130, 246, 0.7);
     margin-bottom: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    
+    :deep(.ant-spin) {
+      color: #3B82F6;
+    }
   }
 
   .input-container {
     padding: 0;
-    max-width: 800px;
+    max-width: 900px;
     margin: 0 auto;
     width: 100%;
   }
 
   .input-wrapper {
     position: relative;
-    background: var(--color-surface-hover); /* #F1F3F4 */
-    border-radius: 24px; /* More rounded */
-    border: 1px solid transparent;
-    transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
-    padding: 12px 16px;
-    min-height: 56px;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(20px);
+    border-radius: 16px;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+    padding: 16px 20px;
+    min-height: 60px;
     display: flex;
     flex-direction: column;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 
     &:focus-within {
-      background: #FFFFFF;
-      border-color: rgba(0,0,0,0.1);
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      background: rgba(15, 23, 42, 0.8);
+      border-color: rgba(59, 130, 246, 0.6);
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
+    }
+    
+    &::before {
+      content: '';
+      position: absolute;
+      top: -1px;
+      left: 20px;
+      right: 20px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.5), transparent);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    
+    &:focus-within::before {
+      opacity: 1;
     }
 
     :deep(.ant-input) {
@@ -159,11 +187,12 @@ defineExpose({ focusInput });
       box-shadow: none;
       padding: 0;
       resize: none;
-      font-size: 16px;
-      line-height: 1.5;
+      font-size: 15px;
+      line-height: 1.6;
       min-height: 24px;
-      margin-bottom: 32px; /* Space for bottom actions */
-      color: var(--color-text-primary);
+      margin-bottom: 36px;
+      color: #e2e8f0;
+      font-family: 'Inter', sans-serif;
 
       &:focus,
       &:hover {
@@ -172,43 +201,49 @@ defineExpose({ focusInput });
       }
 
       &::placeholder {
-        color: var(--color-text-secondary);
+        color: rgba(148, 163, 184, 0.5);
       }
     }
 
     .input-bottom-left {
       position: absolute;
-      bottom: 8px;
-      left: 16px;
+      bottom: 12px;
+      left: 20px;
       z-index: 10;
 
       :deep(.agent-model-selector) {
         .ant-select {
           .ant-select-selector {
-            background: transparent !important;
-            border: none !important;
+            background: rgba(59, 130, 246, 0.1) !important;
+            border: 1px solid rgba(59, 130, 246, 0.2) !important;
             box-shadow: none !important;
-            padding: 0 20px 0 0;
-            min-height: auto;
-            height: auto;
+            padding: 0 12px;
+            border-radius: 6px;
+            height: 28px; // 保持紧凑高度
+            display: flex;
+            align-items: center;
+            transition: all 0.2s ease;
           }
 
           .ant-select-selection-item {
             padding: 0;
-            line-height: 1.5;
-            font-size: 13px;
-            color: var(--color-text-secondary);
+            line-height: 26px; // 匹配高度 (28px - 2px border)
+            font-size: 12px;
+            color: #93c5fd;
             font-weight: 500;
+            font-family: 'JetBrains Mono', monospace;
+            position: static !important; // 确保不飘飞
           }
 
           .ant-select-arrow {
-            right: 0;
-            font-size: 12px;
-            color: var(--color-text-secondary);
+            right: 8px;
+            font-size: 10px;
+            color: #60A5FA;
           }
 
-          &:hover .ant-select-selection-item {
-            color: var(--color-text-primary);
+          &:hover .ant-select-selector {
+            background: rgba(59, 130, 246, 0.2) !important;
+            border-color: rgba(59, 130, 246, 0.4) !important;
           }
         }
       }
@@ -216,44 +251,51 @@ defineExpose({ focusInput });
 
     .input-bottom-right {
       position: absolute;
-      bottom: 8px;
-      right: 12px;
+      bottom: 12px;
+      right: 16px;
       z-index: 10;
 
       .action-button {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 32px;
-        height: 32px;
+        width: 36px;
+        height: 36px;
         padding: 0;
         border: none;
-        border-radius: 50%;
+        border-radius: 8px;
         transition: all 0.2s;
         cursor: pointer;
         background: transparent;
-        color: var(--color-text-secondary);
+        color: rgba(148, 163, 184, 0.6);
 
         &:hover:not(:disabled) {
-          background: rgba(0,0,0,0.05);
-          color: var(--color-text-primary);
+          background: rgba(255, 255, 255, 0.05);
+          color: #e2e8f0;
         }
 
         &.send-button {
           &:not(:disabled) {
-            background: var(--google-blue);
-            color: #fff;
+            background: rgba(59, 130, 246, 0.2);
+            color: #60A5FA;
+            border: 1px solid rgba(59, 130, 246, 0.3);
 
             &:hover {
-              background: var(--google-blue-hover);
-              box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+              background: rgba(59, 130, 246, 0.4);
+              box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+              transform: translateY(-1px);
+            }
+            
+            &:active {
+              transform: translateY(0);
             }
           }
 
           &:disabled {
-            color: rgba(0,0,0,0.2);
+            color: rgba(148, 163, 184, 0.2);
             background: transparent;
-            cursor: default;
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            cursor: not-allowed;
           }
         }
       }

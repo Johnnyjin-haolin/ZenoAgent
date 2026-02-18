@@ -10,11 +10,16 @@
         @update="handleUpdateConversation"
         @delete="handleDeleteConversation"
       />
-      
-      <!-- 折叠按钮 -->
-      <div class="slide-toggle-btn" @click="toggleSlide">
-        <Icon :icon="slideCollapsed ? 'ant-design:menu-unfold-outlined' : 'ant-design:menu-fold-outlined'" />
-      </div>
+    </div>
+
+    <!-- 折叠按钮 (Moved outside) -->
+    <div 
+      v-if="showSlide"
+      class="slide-toggle-btn" 
+      :class="{ collapsed: slideCollapsed }"
+      @click="toggleSlide"
+    >
+      <Icon :icon="slideCollapsed ? 'ant-design:menu-unfold-outlined' : 'ant-design:menu-fold-outlined'" />
     </div>
 
     <!-- 右侧聊天区域 -->
@@ -72,6 +77,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { Icon } from '@/components/Icon';
 import { message } from 'ant-design-vue';
 import logger from '@/utils/logger';
@@ -97,6 +103,7 @@ declare global {
   }
 }
 
+const { t } = useI18n();
 const router = useRouter();
 
 type BrandLink = {
@@ -165,40 +172,40 @@ const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 // 输入框占位符
 const inputPlaceholder = computed(() => {
   if (loading.value) {
-    return 'AI 正在回复中...';
+    return t('common.loading');
   }
-  return '请输入您的问题...（Shift + Enter 换行，Enter 发送）';
+  return t('agent.inputPlaceholder');
 });
 
-const capabilityItems = [
+const capabilityItems = computed(() => [
   {
     icon: '📚',
-    title: 'RAG 知识检索',
-    desc: '连接企业知识库，检索并引用来源',
+    title: t('home.capabilities.rag.title'),
+    desc: t('home.capabilities.rag.desc'),
   },
   {
     icon: '🧰',
-    title: 'MCP 工具调用',
-    desc: '调用企业系统工具，支持审批/确认',
+    title: t('home.capabilities.mcp.title'),
+    desc: t('home.capabilities.mcp.desc'),
   },
   {
     icon: '⚡',
-    title: '流式过程可视化',
-    desc: '实时展示思考、检索、调用过程',
+    title: t('home.capabilities.context.title'),
+    desc: t('home.capabilities.context.desc'),
   },
   {
     icon: '🧠',
-    title: '多模型选择',
-    desc: '按任务选择合适模型，支持自定义',
+    title: t('home.capabilities.agent.title'),
+    desc: t('home.capabilities.agent.desc'),
   },
-];
+]);
 
-const scenarioPrompts = [
-  '查询设备近7天异常并分析原因',
-  '根据知识库输出规范合规检查项',
-  '调用工具查询资产信息并总结',
-  '检索合同条款并输出风险点',
-];
+const scenarioPrompts = computed(() => [
+  t('agent.scenarios.deviceCheck'),
+  t('agent.scenarios.compliance'),
+  t('agent.scenarios.assetQuery'),
+  t('agent.scenarios.riskCheck'),
+]);
 
 const applyScenarioPrompt = (prompt: string) => {
   userInput.value = prompt;
@@ -361,10 +368,10 @@ const handleRejectTool = async () => {
 // 配置变更处理
 const handleModelChange = (modelId: string, model: ModelInfo | null) => {
   logger.debug('模型变更:', modelId, model);
-  // 状态已经通过 v-model 双向绑定了，这里只需要处理额外的逻辑
-  if (model) {
-    message.success(`已切换到模型: ${model.displayName}`);
-  }
+  // // 状态已经通过 v-model 双向绑定了，这里只需要处理额外的逻辑
+  // if (model) {
+  //   message.success(`已切换到模型: ${model.displayName}`);
+  // }
 };
 
 const handleKnowledgeChange = (knowledgeIds: string[], knowledgeList: KnowledgeInfo[]) => {
@@ -404,48 +411,58 @@ watch(
 .agent-chat-container {
   display: flex;
   height: 100%;
-  background: var(--color-background);
+  background: transparent;
   overflow: hidden;
+  position: relative; /* Added relative positioning for absolute child */
   --brand-primary: var(--google-blue);
 }
 
 .left-slide {
-  width: 280px;
-  height: 100%;
-  background: var(--color-surface);
-  border-right: 1px solid var(--color-border);
-  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
-  position: relative;
+    width: 280px;
+    height: 100%;
+    background: rgba(15, 23, 42, 0.4); /* Glass effect */
+    border-right: 1px solid rgba(59, 130, 246, 0.1);
+    backdrop-filter: blur(12px);
+    transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+    position: relative;
 
-  &.collapsed {
-    width: 0;
-    overflow: hidden;
-    border-right: none;
+    &.collapsed {
+      width: 0;
+      overflow: hidden;
+      border-right: none;
+    }
   }
 
   .slide-toggle-btn {
     position: absolute;
     top: 50%;
-    right: -12px;
+    left: 280px; /* Default expanded position */
     transform: translateY(-50%);
     width: 24px;
     height: 48px;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(59, 130, 246, 0.2);
     border-radius: 0 8px 8px 0;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     z-index: 10;
-    transition: all 0.2s;
-    box-shadow: 2px 0 4px rgba(0,0,0,0.05);
+    transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+    box-shadow: 2px 0 4px rgba(0,0,0,0.2);
+    color: var(--color-text-secondary);
 
     &:hover {
-      background: var(--color-surface-hover);
+      background: rgba(59, 130, 246, 0.2);
+      color: var(--color-text-primary);
+    }
+    
+    &.collapsed {
+      left: 0;
+      border-radius: 0 8px 8px 0; /* Maintain border radius */
+      border-left: none; /* Optional: might look better */
     }
   }
-}
 
 .right-chat-area {
   flex: 1;
@@ -454,7 +471,7 @@ watch(
   height: 100%;
   min-width: 0;
   overflow: hidden;
-  background: var(--color-background);
+  background: transparent;
 
   &.expanded {
     margin-left: 0;

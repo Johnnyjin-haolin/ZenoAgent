@@ -1,7 +1,7 @@
 <template>
-  <a-tag :color="statusColor">
+  <a-tag :color="statusColor" class="tech-status-tag">
     <template #icon>
-      <Icon :icon="statusIcon" />
+      <Icon :icon="statusIcon" :spin="status === 'BUILDING'" />
     </template>
     {{ statusText }}
   </a-tag>
@@ -24,23 +24,23 @@ const statusConfig = computed(() => {
   > = {
     DRAFT: {
       color: 'default',
-      icon: 'ant-design:file-outlined',
-      text: '草稿',
+      icon: 'ant-design:edit-outlined',
+      text: 'DRAFT',
     },
     BUILDING: {
       color: 'processing',
-      icon: 'ant-design:loading-outlined',
-      text: '处理中',
+      icon: 'ant-design:sync-outlined',
+      text: 'PROCESSING',
     },
     COMPLETE: {
       color: 'success',
       icon: 'ant-design:check-circle-outlined',
-      text: '完成',
+      text: 'INDEXED',
     },
     FAILED: {
       color: 'error',
       icon: 'ant-design:close-circle-outlined',
-      text: '失败',
+      text: 'FAILED',
     },
   };
   return configs[props.status] || configs.DRAFT;
@@ -50,4 +50,14 @@ const statusColor = computed(() => statusConfig.value.color);
 const statusIcon = computed(() => statusConfig.value.icon);
 const statusText = computed(() => statusConfig.value.text);
 </script>
+
+<style scoped>
+.tech-status-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+</style>
 

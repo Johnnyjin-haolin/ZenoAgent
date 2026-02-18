@@ -1,9 +1,9 @@
 <template>
   <div class="agent-tool-config">
     <div class="selector-label">
-      <Icon icon="ant-design:tool-outlined" />
-      <span>可用工具</span>
-      <a-tooltip title="从配置的MCP服务器获取工具列表">
+      <Icon icon="ant-design:tool-outlined" class="label-icon" />
+      <span>{{ t('agent.toolConfig.label') }}</span>
+      <a-tooltip :title="t('agent.toolConfig.tooltip')">
         <Icon icon="ant-design:question-circle-outlined" class="help-icon" />
       </a-tooltip>
       <a-button
@@ -11,8 +11,8 @@
         size="small"
         @click="loadData"
         :loading="loading"
-        style="margin-left: 8px; padding: 0; height: auto;"
-        title="刷新工具列表"
+        class="refresh-btn"
+        :title="t('agent.toolConfig.refresh')"
       >
         <Icon icon="ant-design:reload-outlined" />
       </a-button>
@@ -22,7 +22,7 @@
     <div class="tool-selector-trigger" @click="showToolModal = true">
       <div v-if="selectedTools.length === 0" class="trigger-placeholder">
         <Icon icon="ant-design:plus-circle-outlined" />
-        <span>点击选择工具</span>
+        <span>{{ t('agent.toolConfig.selectPlaceholder') }}</span>
       </div>
       <div v-else class="trigger-tags">
         <a-tag
@@ -30,38 +30,39 @@
           :key="tool"
           closable
           @close.stop="removeTool(tool)"
-          color="blue"
+          class="tech-tag"
         >
           {{ tool }}
         </a-tag>
-        <a-tag v-if="selectedTools.length > maxVisibleTags" color="default">
+        <a-tag v-if="selectedTools.length > maxVisibleTags" class="tech-tag-more">
           +{{ selectedTools.length - maxVisibleTags }}
         </a-tag>
         <a-button
           type="link"
           size="small"
           @click.stop="showToolModal = true"
-          style="padding: 0 4px; height: auto;"
+          class="edit-btn"
         >
-          编辑
+          {{ t('common.edit') }}
         </a-button>
-          </div>
-        </div>
+      </div>
+    </div>
 
     <div v-if="showHint" class="tool-hint">
       <Icon icon="ant-design:info-circle-outlined" />
-      <span>提示：留空表示允许所有工具，支持通配符（如 device-*）</span>
-      <span v-if="serverGroups.length === 0 && !loading" style="color: #ff4d4f; margin-left: 8px;">
-        （未找到MCP服务器，请检查配置）
+      <span>{{ t('agent.toolConfig.hint') }}</span>
+      <span v-if="serverGroups.length === 0 && !loading" style="color: #F87171; margin-left: 8px;">
+        {{ t('agent.toolConfig.noServer') }}
       </span>
     </div>
 
     <!-- 工具选择Modal -->
     <a-modal
       v-model:open="showToolModal"
-      title="选择工具"
+      :title="t('agent.toolConfig.modalTitle')"
       :width="900"
       :footer="null"
+      class="tech-modal"
       @open="handleToolModalOpen"
     >
       <div class="tool-selector-modal">
@@ -69,8 +70,9 @@
         <div class="search-bar">
           <a-input
             v-model:value="searchKeyword"
-            placeholder="搜索服务器或工具..."
+            :placeholder="t('agent.toolConfig.searchPlaceholder')"
             allow-clear
+            class="tech-input"
           >
             <template #prefix>
               <Icon icon="ant-design:search-outlined" />
@@ -83,7 +85,7 @@
           <!-- 左侧：服务器列表 -->
           <div class="server-list">
             <div class="list-header">
-              <span>MCP服务器</span>
+              <span>{{ t('agent.toolConfig.serverList') }}</span>
               <span class="count-badge">{{ filteredServers.length }}</span>
             </div>
             <div v-if="loading" class="loading-container">
@@ -91,7 +93,7 @@
             </div>
             <div v-else-if="filteredServers.length === 0" class="empty-container">
               <Icon icon="ant-design:info-circle-outlined" />
-              <div>未找到服务器</div>
+              <div>{{ t('agent.toolConfig.noServerFound') }}</div>
             </div>
             <div v-else class="server-items">
               <div
@@ -106,10 +108,8 @@
                   <div class="server-details">
                     <div class="server-name">{{ server.name || server.id }}</div>
                     <div class="server-meta">
-                      <a-tag :color="server.enabled ? 'green' : 'default'" size="small">
-                        {{ server.enabled ? '已启用' : '已禁用' }}
-                      </a-tag>
-                      <span class="tool-count">{{ server.toolCount }} 个工具</span>
+                      <span class="status-dot" :class="{ active: server.enabled }"></span>
+                      <span class="tool-count">{{ server.toolCount }} tools</span>
                     </div>
                   </div>
                 </div>
@@ -120,34 +120,36 @@
           <!-- 右侧：工具列表 -->
           <div class="tool-list">
             <div class="list-header">
-              <span>工具方法</span>
+              <span>{{ t('agent.toolConfig.toolList') }}</span>
               <span class="count-badge">{{ filteredTools.length }}</span>
-              <a-button
-                type="link"
-                size="small"
-                @click="selectAllTools"
-                :disabled="filteredTools.length === 0"
-                style="margin-left: auto; padding: 0 4px;"
-              >
-                全选
-              </a-button>
-              <a-button
-                type="link"
-                size="small"
-                @click="clearAllTools"
-                :disabled="filteredTools.length === 0"
-                style="padding: 0 4px;"
-              >
-                清空
-              </a-button>
+              <div class="header-actions">
+                <a-button
+                  type="link"
+                  size="small"
+                  @click="selectAllTools"
+                  :disabled="filteredTools.length === 0"
+                  class="action-btn"
+                >
+                  {{ t('common.selectAll') }}
+                </a-button>
+                <a-button
+                  type="link"
+                  size="small"
+                  @click="clearAllTools"
+                  :disabled="filteredTools.length === 0"
+                  class="action-btn"
+                >
+                  {{ t('common.clear') }}
+                </a-button>
+              </div>
             </div>
             <div v-if="!activeServerId" class="empty-container">
               <Icon icon="ant-design:arrow-left-outlined" />
-              <div>请先选择左侧的MCP服务器</div>
+              <div>{{ t('agent.toolConfig.selectServerFirst') }}</div>
             </div>
             <div v-else-if="filteredTools.length === 0" class="empty-container">
               <Icon icon="ant-design:tool-outlined" />
-              <div>该服务器暂无工具</div>
+              <div>{{ t('agent.toolConfig.noToolsInServer') }}</div>
             </div>
             <div v-else class="tool-items">
               <div
@@ -159,6 +161,7 @@
                 <a-checkbox
                   :checked="isToolSelected(tool.name)"
                   @change="toggleTool(tool.name)"
+                  class="tech-checkbox"
                 >
                   <div class="tool-content">
                     <div class="tool-name">{{ tool.name }}</div>
@@ -176,7 +179,7 @@
                         @click.stop="toggleToolDesc(tool.name)"
                         class="expand-btn"
                       >
-                        {{ isToolDescExpanded(tool.name) ? '收起' : '展开' }}
+                        {{ isToolDescExpanded(tool.name) ? 'Collapse' : 'Expand' }}
                         <Icon
                           :icon="isToolDescExpanded(tool.name) ? 'ant-design:up-outlined' : 'ant-design:down-outlined'"
                           style="margin-left: 2px;"
@@ -193,14 +196,15 @@
         <!-- 底部：已选工具显示 -->
         <div class="selected-tools-bar">
           <div class="selected-header">
-            <span>已选工具 ({{ tempSelectedTools.length }})</span>
+            <span>{{ t('agent.toolConfig.selectedTools') }} ({{ tempSelectedTools.length }})</span>
             <a-button
               type="link"
               size="small"
               @click="clearTempSelection"
               :disabled="tempSelectedTools.length === 0"
+              class="clear-btn"
             >
-              清空
+              {{ t('common.clear') }}
             </a-button>
           </div>
           <div class="selected-tags">
@@ -209,42 +213,42 @@
               :key="tool"
               closable
               @close="removeTempTool(tool)"
-              color="blue"
+              class="tech-tag"
             >
               {{ tool }}
             </a-tag>
-            <span v-if="tempSelectedTools.length === 0" class="empty-hint">未选择任何工具</span>
+            <span v-if="tempSelectedTools.length === 0" class="empty-hint">{{ t('agent.toolConfig.noToolSelected') }}</span>
           </div>
         </div>
 
         <!-- 底部操作按钮 -->
         <div class="modal-footer">
-          <a-button @click="handleCancel">取消</a-button>
-          <a-button type="primary" @click="handleConfirm">确认</a-button>
+          <a-button @click="handleCancel" class="tech-btn-default">{{ t('common.cancel') }}</a-button>
+          <a-button type="primary" @click="handleConfirm" class="tech-btn-primary">{{ t('common.confirm') }}</a-button>
         </div>
       </div>
     </a-modal>
 
-    <!-- MCP服务器查看Modal（保留原有功能） -->
+    <!-- MCP服务器查看Modal -->
     <a-modal
       v-model:open="showServerModal"
-      title="MCP服务器配置"
+      :title="t('agent.toolConfig.serverConfigTitle')"
       :width="800"
       :footer="null"
+      class="tech-modal"
       @open="handleServerModalOpen"
     >
       <div class="mcp-server-view">
         <div v-if="serverLoading" style="text-align: center; padding: 40px;">
           <a-spin size="large" />
-          <div style="margin-top: 16px; color: #8c8c8c;">加载中...</div>
+          <div style="margin-top: 16px; color: #94a3b8;">{{ t('common.loading') }}</div>
         </div>
-        <div v-else-if="serverGroups.length === 0" style="text-align: center; padding: 40px; color: #8c8c8c;">
+        <div v-else-if="serverGroups.length === 0" style="text-align: center; padding: 40px; color: #94a3b8;">
           <Icon icon="ant-design:info-circle-outlined" style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;" />
-          <div>未配置MCP服务器</div>
-          <div style="margin-top: 8px; font-size: 12px;">请在后端配置文件 mcp.json 中配置MCP服务器</div>
+          <div>{{ t('agent.toolConfig.noServer') }}</div>
         </div>
         <div v-else>
-          <a-collapse v-model:activeKey="activeServerKeys" :bordered="false">
+          <a-collapse v-model:activeKey="activeServerKeys" :bordered="false" class="tech-collapse">
             <a-collapse-panel
               v-for="server in serverGroups"
               :key="server.serverId || server.id"
@@ -252,30 +256,30 @@
             >
               <div class="server-info">
                 <div class="info-item">
-                  <span class="info-label">服务器ID:</span>
+                  <span class="info-label">ID:</span>
                   <span class="info-value">{{ server.serverId || server.id }}</span>
                 </div>
                 <div class="info-item" v-if="server.connectionType">
-                  <span class="info-label">连接类型:</span>
+                  <span class="info-label">{{ t('common.connectionType') }}:</span>
                   <span class="info-value">{{ server.connectionType }}</span>
                 </div>
                 <div class="info-item" v-if="server.description">
-                  <span class="info-label">描述:</span>
+                  <span class="info-label">{{ t('common.description') }}:</span>
                   <span class="info-value">{{ server.description }}</span>
                 </div>
                 <div class="info-item">
-                  <span class="info-label">状态:</span>
-                  <a-tag :color="server.enabled ? 'green' : 'default'" size="small">
-                    {{ server.enabled ? '已启用' : '已禁用' }}
+                  <span class="info-label">{{ t('common.status') }}:</span>
+                  <a-tag :color="server.enabled ? 'green' : 'default'" size="small" class="status-tag">
+                    {{ server.enabled ? t('common.enabled') : t('common.disabled') }}
                   </a-tag>
                 </div>
               </div>
               <div class="tools-list">
                 <div class="tools-header">
-                  <span>工具列表 ({{ getServerTools(server.serverId || server.id).length }})</span>
+                  <span>{{ t('agent.toolConfig.toolListTitle') }} ({{ getServerTools(server.serverId || server.id).length }})</span>
                 </div>
                 <div v-if="getServerTools(server.serverId || server.id).length === 0" class="no-tools">
-                  该服务器暂无工具
+                  {{ t('agent.toolConfig.noToolsInServer') }}
                 </div>
                 <div v-else class="tools-items">
                   <div
@@ -285,8 +289,8 @@
                   >
                     <div class="tool-header">
                       <span class="tool-name">{{ tool.name }}</span>
-                      <a-tag v-if="tool.enabled" color="green" size="small">启用</a-tag>
-                      <a-tag v-else color="default" size="small">禁用</a-tag>
+                      <a-tag v-if="tool.enabled" color="green" size="small" class="status-tag">{{ t('common.enable') }}</a-tag>
+                      <a-tag v-else color="default" size="small" class="status-tag">{{ t('common.disable') }}</a-tag>
                     </div>
                     <div v-if="tool.description" class="tool-desc-wrapper">
                       <div
@@ -302,7 +306,7 @@
                         @click="toggleServerToolDesc(tool.name)"
                         class="expand-btn"
                       >
-                        {{ isServerToolDescExpanded(tool.name) ? '收起' : '展开' }}
+                        {{ isServerToolDescExpanded(tool.name) ? 'Collapse' : 'Expand' }}
                         <Icon
                           :icon="isServerToolDescExpanded(tool.name) ? 'ant-design:up-outlined' : 'ant-design:down-outlined'"
                           style="margin-left: 2px;"
@@ -322,10 +326,13 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Icon } from '@/components/Icon';
 import { getMcpTools, getMcpGroups } from '../agent.api.adapted';
 import { message } from 'ant-design-vue';
 import type { McpGroupInfo, McpToolInfo } from '../agent.types';
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{
@@ -334,7 +341,6 @@ const props = withDefaults(
     showHint?: boolean;
   }>(),
   {
-    placeholder: '选择或输入工具名称',
     showHint: true,
   }
 );
@@ -387,11 +393,11 @@ const loadData = async () => {
     }
     
     if (groups.length === 0) {
-      message.warning('未找到MCP服务器，请检查配置');
+      // message.warning(t('agent.toolConfig.noServer')); // Optional: suppress warning on load
     }
   } catch (error) {
     console.error('加载数据失败:', error);
-    message.error('加载数据失败，请检查后端服务');
+    message.error(t('agent.toolConfig.loadingError'));
     serverGroups.value = [];
     allTools.value = [];
   } finally {
@@ -510,7 +516,7 @@ const handleConfirm = () => {
   selectedTools.value = [...tempSelectedTools.value];
   handleChange(selectedTools.value);
   showToolModal.value = false;
-  message.success(`已选择 ${selectedTools.value.length} 个工具`);
+  message.success(t('agent.toolConfig.selectedCount', { count: selectedTools.value.length }));
 };
 
 // 取消选择
@@ -557,7 +563,7 @@ const loadServerGroups = async () => {
     }
   } catch (error) {
     console.error('加载服务器列表失败:', error);
-    message.error('加载服务器列表失败');
+    message.error(t('agent.toolConfig.loadingError'));
     serverGroups.value = [];
     allTools.value = [];
   } finally {
@@ -615,43 +621,99 @@ onMounted(() => {
 });
 </script>
 
+<style lang="less">
+/* Global styles for Tech Modal in Tool Config */
+.tech-modal {
+  .ant-modal-content {
+    background-color: rgba(15, 23, 42, 0.95) !important;
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+    border-radius: 12px;
+  }
+  
+  .ant-modal-header {
+    background: transparent;
+    border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+    
+    .ant-modal-title {
+      color: #60A5FA;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      letter-spacing: 1px;
+    }
+  }
+  
+  .ant-modal-close {
+    color: rgba(148, 163, 184, 0.8);
+    
+    &:hover {
+      color: #fff;
+    }
+  }
+  
+  .ant-modal-body {
+    padding: 24px;
+  }
+}
+</style>
+
 <style scoped lang="less">
 .agent-tool-config {
   .selector-label {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-bottom: 8px;
+    gap: 8px;
+    margin-bottom: 10px;
     font-size: 13px;
-    font-weight: 500;
-    color: #262626;
+    font-family: 'JetBrains Mono', monospace;
+    color: #e2e8f0;
+
+    .label-icon {
+      color: #60A5FA;
+    }
 
     .help-icon {
-      color: #8c8c8c;
-      font-size: 14px;
+      color: rgba(148, 163, 184, 0.6);
+      font-size: 12px;
       cursor: help;
+      transition: color 0.2s;
+
+      &:hover {
+        color: #60A5FA;
+      }
+    }
+    
+    .refresh-btn {
+      color: rgba(148, 163, 184, 0.6);
+      &:hover {
+        color: #60A5FA;
+      }
     }
   }
 
   .tool-selector-trigger {
-    min-height: 32px;
+    min-height: 36px;
     padding: 4px 11px;
-    border: 1px solid #d9d9d9;
-      border-radius: 6px;
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 4px;
     cursor: pointer;
     transition: all 0.3s;
-    background: #fff;
+    background: rgba(0, 0, 0, 0.2);
 
     &:hover {
-      border-color: #40a9ff;
+      border-color: #60A5FA;
+      box-shadow: 0 0 8px rgba(59, 130, 246, 0.2);
     }
 
     .trigger-placeholder {
       display: flex;
       align-items: center;
-      gap: 6px;
-      color: #bfbfbf;
-      font-size: 14px;
+      gap: 8px;
+      color: rgba(148, 163, 184, 0.4);
+      font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
+      height: 26px;
     }
 
     .trigger-tags {
@@ -659,33 +721,87 @@ onMounted(() => {
       align-items: center;
       gap: 6px;
       flex-wrap: wrap;
+      
+      .tech-tag {
+        background: rgba(59, 130, 246, 0.15);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        color: #e2e8f0;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        
+        :deep(.anticon-close) {
+          color: rgba(148, 163, 184, 0.8);
+          &:hover {
+            color: #fff;
+          }
+        }
+      }
+      
+      .tech-tag-more {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #94a3b8;
+      }
+      
+      .edit-btn {
+        color: #60A5FA;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+      }
     }
   }
 
   .tool-hint {
     display: flex;
     align-items: flex-start;
-    gap: 6px;
-    margin-top: 8px;
+    gap: 8px;
+    margin-top: 10px;
     padding: 8px 12px;
-    background: #f0f2f5;
-    border-radius: 6px;
+    background: rgba(59, 130, 246, 0.05);
+    border: 1px solid rgba(59, 130, 246, 0.1);
+    border-radius: 4px;
     font-size: 12px;
-    color: #595959;
+    color: #94a3b8;
     line-height: 1.5;
 
     .anticon {
-      color: #1890ff;
+      color: #60A5FA;
       margin-top: 2px;
       flex-shrink: 0;
     }
   }
 }
 
-// 工具选择Modal样式
+// Modal Content Styles
 .tool-selector-modal {
   .search-bar {
     margin-bottom: 16px;
+    
+    .tech-input {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      border-radius: 4px;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      
+      :deep(.ant-input) {
+        background: transparent;
+        color: #fff;
+        
+        &::placeholder {
+          color: rgba(148, 163, 184, 0.4);
+        }
+      }
+      
+      &:hover, &:focus, &:focus-within {
+        border-color: #60A5FA;
+        box-shadow: 0 0 8px rgba(59, 130, 246, 0.2);
+      }
+      
+      .anticon {
+        color: rgba(148, 163, 184, 0.6);
+      }
+    }
   }
 
   .selector-content {
@@ -693,9 +809,10 @@ onMounted(() => {
     gap: 16px;
     min-height: 400px;
     max-height: 500px;
-    border: 1px solid #e8e8e8;
+    border: 1px solid rgba(59, 130, 246, 0.2);
     border-radius: 6px;
     overflow: hidden;
+    background: rgba(0, 0, 0, 0.2);
 
     .server-list,
     .tool-list {
@@ -708,20 +825,37 @@ onMounted(() => {
         align-items: center;
         gap: 8px;
         padding: 12px 16px;
-        background: #fafafa;
-        border-bottom: 1px solid #e8e8e8;
-        font-weight: 500;
-        color: #262626;
-        font-size: 14px;
+        background: rgba(59, 130, 246, 0.1);
+        border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+        font-weight: 600;
+        color: #e2e8f0;
+        font-size: 13px;
+        font-family: 'JetBrains Mono', monospace;
 
         .count-badge {
           padding: 2px 8px;
-          background: #e6f7ff;
-          color: #1890ff;
+          background: rgba(59, 130, 246, 0.2);
+          color: #60A5FA;
           border-radius: 12px;
-          font-size: 12px;
+          font-size: 11px;
           font-weight: normal;
         }
+        
+        .header-actions {
+            margin-left: auto;
+            display: flex;
+            gap: 8px;
+          }
+          
+          .action-btn {
+            padding: 0;
+            height: auto;
+            color: #60A5FA;
+            
+            &:hover {
+              color: #93C5FD;
+            }
+          }
       }
 
       .loading-container,
@@ -731,68 +865,81 @@ onMounted(() => {
         align-items: center;
         justify-content: center;
         padding: 60px 20px;
-        color: #8c8c8c;
-        font-size: 14px;
+        color: #94a3b8;
+        font-size: 13px;
 
         .anticon {
           font-size: 48px;
           margin-bottom: 12px;
           opacity: 0.5;
+          color: #60A5FA;
         }
       }
     }
 
     .server-list {
-      width: 300px;
-      border-right: 1px solid #e8e8e8;
-      background: #fafafa;
+      width: 280px;
+      border-right: 1px solid rgba(59, 130, 246, 0.2);
+      background: rgba(0, 0, 0, 0.1);
 
       .server-items {
         flex: 1;
         overflow-y: auto;
         padding: 8px;
+        
+        &::-webkit-scrollbar {
+          width: 4px;
+        }
+        &::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.02);
+        }
+        &::-webkit-scrollbar-thumb {
+          background: rgba(59, 130, 246, 0.2);
+          border-radius: 2px;
+        }
 
         .server-item {
           padding: 12px;
           margin-bottom: 8px;
-          border-radius: 6px;
+          border-radius: 4px;
           cursor: pointer;
           transition: all 0.2s;
-          background: #fff;
+          background: rgba(255, 255, 255, 0.02);
           border: 1px solid transparent;
 
           &:hover {
-            background: #e6f7ff;
-            border-color: #91d5ff;
+            background: rgba(59, 130, 246, 0.05);
+            border-color: rgba(59, 130, 246, 0.3);
           }
 
           &.active {
-            background: #bae7ff;
-            border-color: #40a9ff;
-            box-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
+            background: rgba(59, 130, 246, 0.15);
+            border-color: #60A5FA;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.1);
           }
 
           .server-info {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
 
             .server-icon {
-    font-size: 20px;
-              color: #1890ff;
+              font-size: 18px;
+              color: #60A5FA;
               margin-top: 2px;
-    flex-shrink: 0;
-  }
+              flex-shrink: 0;
+            }
 
             .server-details {
-    flex: 1;
-    min-width: 0;
+              flex: 1;
+              min-width: 0;
 
               .server-name {
                 font-weight: 500;
-                color: #262626;
-                margin-bottom: 6px;
-                font-size: 14px;
+                color: #e2e8f0;
+                margin-bottom: 4px;
+                font-size: 13px;
+                font-family: 'JetBrains Mono', monospace;
               }
 
               .server-meta {
@@ -800,9 +947,21 @@ onMounted(() => {
                 align-items: center;
                 gap: 8px;
                 font-size: 12px;
+                
+                .status-dot {
+                  width: 6px;
+                  height: 6px;
+                  border-radius: 50%;
+                  background: #475569;
+                  
+                  &.active {
+                    background: #10B981;
+                    box-shadow: 0 0 5px #10B981;
+                  }
+                }
 
                 .tool-count {
-                  color: #8c8c8c;
+                  color: #94a3b8;
                 }
               }
             }
@@ -813,46 +972,73 @@ onMounted(() => {
 
     .tool-list {
       flex: 1;
-      background: #fff;
+      background: transparent;
 
       .tool-items {
         flex: 1;
         overflow-y: auto;
         padding: 8px;
+        
+        &::-webkit-scrollbar {
+          width: 4px;
+        }
+        &::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.02);
+        }
+        &::-webkit-scrollbar-thumb {
+          background: rgba(59, 130, 246, 0.2);
+          border-radius: 2px;
+        }
 
         .tool-item {
           padding: 12px;
           margin-bottom: 8px;
-          border-radius: 6px;
-          border: 1px solid #e8e8e8;
+          border-radius: 4px;
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          background: rgba(255, 255, 255, 0.02);
           transition: all 0.2s;
 
           &:hover {
-            border-color: #91d5ff;
-            background: #f0f7ff;
+            border-color: rgba(59, 130, 246, 0.3);
+            background: rgba(59, 130, 246, 0.05);
           }
 
           &.selected {
-            border-color: #40a9ff;
-            background: #e6f7ff;
+            border-color: #60A5FA;
+            background: rgba(59, 130, 246, 0.1);
           }
 
-          :deep(.ant-checkbox-wrapper) {
+          .tech-checkbox {
             width: 100%;
-
-            .ant-checkbox {
-              margin-right: 12px;
+            
+            :deep(.ant-checkbox) {
+              top: 4px;
+            }
+            
+            :deep(.ant-checkbox-inner) {
+              background-color: transparent;
+              border-color: rgba(148, 163, 184, 0.5);
+            }
+            
+            :deep(.ant-checkbox-checked .ant-checkbox-inner) {
+              background-color: #60A5FA;
+              border-color: #60A5FA;
+            }
+            
+            :deep(span) {
+              color: #e2e8f0;
             }
           }
 
           .tool-content {
             flex: 1;
 
-    .tool-name {
+            .tool-name {
               font-weight: 500;
-              color: #262626;
+              color: #e2e8f0;
               margin-bottom: 4px;
-              font-size: 14px;
+              font-size: 13px;
+              font-family: 'JetBrains Mono', monospace;
             }
 
             .tool-desc-wrapper {
@@ -860,10 +1046,9 @@ onMounted(() => {
 
               .tool-desc {
                 font-size: 12px;
-                color: #8c8c8c;
+                color: #94a3b8;
                 line-height: 1.5;
                 word-break: break-word;
-                // 默认显示2行，超出省略
                 display: -webkit-box;
                 -webkit-line-clamp: 2;
                 -webkit-box-orient: vertical;
@@ -881,12 +1066,12 @@ onMounted(() => {
                 margin-top: 4px;
                 padding: 0;
                 height: auto;
-                font-size: 12px;
-                color: #1890ff;
+                font-size: 11px;
+                color: #60A5FA;
                 line-height: 1.5;
 
                 &:hover {
-                  color: #40a9ff;
+                  color: #93C5FD;
                 }
               }
             }
@@ -899,18 +1084,26 @@ onMounted(() => {
   .selected-tools-bar {
     margin-top: 16px;
     padding: 12px;
-    background: #f5f5f5;
-    border-radius: 6px;
-    border: 1px solid #e8e8e8;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    border: 1px solid rgba(59, 130, 246, 0.2);
 
     .selected-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 8px;
-      font-weight: 500;
-      color: #262626;
-      font-size: 14px;
+      font-weight: 600;
+      color: #e2e8f0;
+      font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
+      
+      .clear-btn {
+        color: rgba(148, 163, 184, 0.6);
+        &:hover {
+          color: #F87171;
+        }
+      }
     }
 
     .selected-tags {
@@ -918,10 +1111,26 @@ onMounted(() => {
       flex-wrap: wrap;
       gap: 6px;
       min-height: 24px;
+      
+      .tech-tag {
+        background: rgba(59, 130, 246, 0.15);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        color: #e2e8f0;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        
+        :deep(.anticon-close) {
+          color: rgba(148, 163, 184, 0.8);
+          &:hover {
+            color: #fff;
+          }
+        }
+      }
 
       .empty-hint {
-        color: #8c8c8c;
+        color: #64748b;
         font-size: 12px;
+        font-style: italic;
       }
     }
   }
@@ -929,20 +1138,44 @@ onMounted(() => {
   .modal-footer {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: 12px;
     margin-top: 16px;
     padding-top: 16px;
-    border-top: 1px solid #e8e8e8;
+    border-top: 1px solid rgba(59, 130, 246, 0.2);
+    
+    .tech-btn-default {
+      background: transparent;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      color: #94a3b8;
+      
+      &:hover {
+        border-color: #60A5FA;
+        color: #60A5FA;
+      }
+    }
+    
+    .tech-btn-primary {
+      background: rgba(59, 130, 246, 0.2);
+      border: 1px solid rgba(59, 130, 246, 0.5);
+      color: #60A5FA;
+      
+      &:hover {
+        background: rgba(59, 130, 246, 0.3);
+        border-color: #60A5FA;
+        color: #fff;
+      }
+    }
   }
 }
 
-// MCP服务器查看Modal样式
+// MCP Server View Styles
 .mcp-server-view {
   .server-info {
     margin-bottom: 16px;
-    padding: 12px;
-    background: #f5f5f5;
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.02);
     border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
 
     .info-item {
       margin-bottom: 8px;
@@ -955,15 +1188,42 @@ onMounted(() => {
 
       .info-label {
         font-weight: 500;
-        color: #666;
+        color: #94a3b8;
         margin-right: 8px;
-        min-width: 80px;
+        min-width: 100px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13px;
       }
 
       .info-value {
-        color: #262626;
+        color: #e2e8f0;
         flex: 1;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13px;
       }
+      
+      .status-tag {
+        font-family: 'JetBrains Mono', monospace;
+      }
+    }
+  }
+
+  .tech-collapse {
+    background: transparent;
+    
+    :deep(.ant-collapse-item) {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    :deep(.ant-collapse-header) {
+      color: #e2e8f0 !important;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    
+    :deep(.ant-collapse-content) {
+      background: transparent;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      color: #94a3b8;
     }
   }
 
@@ -971,35 +1231,33 @@ onMounted(() => {
     margin-top: 16px;
 
     .tools-header {
-      font-weight: 500;
+      font-weight: 600;
       margin-bottom: 12px;
-      color: #262626;
-      font-size: 14px;
+      color: #e2e8f0;
+      font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
     }
 
     .no-tools {
       text-align: center;
       padding: 20px;
-      color: #999;
+      color: #64748b;
       font-size: 13px;
+      font-style: italic;
     }
 
     .tools-items {
       .tool-item {
         padding: 12px;
         margin-bottom: 8px;
-        border: 1px solid #e8e8e8;
+        border: 1px solid rgba(255, 255, 255, 0.05);
         border-radius: 4px;
-        background: #fafafa;
+        background: rgba(255, 255, 255, 0.02);
         transition: all 0.2s;
 
         &:hover {
-          border-color: #1890ff;
-          background: #f0f7ff;
-        }
-
-        &:last-child {
-          margin-bottom: 0;
+          border-color: rgba(59, 130, 246, 0.3);
+          background: rgba(59, 130, 246, 0.05);
         }
 
         .tool-header {
@@ -1010,20 +1268,24 @@ onMounted(() => {
 
           .tool-name {
             font-weight: 500;
-            color: #262626;
-            font-size: 14px;
+            color: #e2e8f0;
+            font-size: 13px;
+            font-family: 'JetBrains Mono', monospace;
+          }
+          
+          .status-tag {
+            font-family: 'JetBrains Mono', monospace;
           }
         }
 
         .tool-desc-wrapper {
           margin-top: 4px;
 
-    .tool-desc {
-      font-size: 12px;
-      color: #8c8c8c;
+          .tool-desc {
+            font-size: 12px;
+            color: #94a3b8;
             line-height: 1.5;
             word-break: break-word;
-            // 默认显示2行，超出省略
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
@@ -1041,12 +1303,12 @@ onMounted(() => {
             margin-top: 4px;
             padding: 0;
             height: auto;
-            font-size: 12px;
-            color: #1890ff;
+            font-size: 11px;
+            color: #60A5FA;
             line-height: 1.5;
 
             &:hover {
-              color: #40a9ff;
+              color: #93C5FD;
             }
           }
         }

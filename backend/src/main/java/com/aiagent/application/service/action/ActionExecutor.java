@@ -173,11 +173,15 @@ public class ActionExecutor {
             
             log.info("执行工具调用: name={}, params={}", toolName, toolCallParams);
             
-            // 发送工具执行进度事件
-            sendProgressEvent(context, AgentConstants.EVENT_AGENT_TOOL_EXECUTING,
-                "正在执行工具: " + toolInfo.getName() + "...");
+            // Structured event for single tool execution
+            java.util.Map<String, Object> data = new java.util.HashMap<>();
+            data.put("toolName", toolInfo.getName());
             
-            // 使用McpToolExecutor执行工具
+            sendProgressEvent(context, AgentConstants.EVENT_STATUS_TOOL_EXECUTING_SINGLE,
+                "正在执行工具: " + toolInfo.getName() + "...", data);
+            
+            // Execute tool
+            long start = System.currentTimeMillis();
             ToolExecutionResult toolResult = mcpToolExecutor.execute(toolInfo, toolCallParams.getToolParams());
 
             sendProgressEvent(context, AgentConstants.EVENT_AGENT_TOOL_EXECUTING,
@@ -384,8 +388,12 @@ public class ActionExecutor {
         long startTime = System.currentTimeMillis();
         
         // 发送并行执行开始事件
-        sendProgressEvent(context, AgentConstants.EVENT_AGENT_TOOL_EXECUTING, 
-            "正在并行执行 " + actions.size() + " 个操作...");
+        // Structured event for batch execution
+        java.util.Map<String, Object> data = new java.util.HashMap<>();
+        data.put("count", actions.size());
+        
+        sendProgressEvent(context, AgentConstants.EVENT_STATUS_TOOL_EXECUTING_BATCH,
+            "正在并行执行 " + actions.size() + " 个操作...", data);
 
         Map<String,CompletableFuture<ActionResult>> actionResultMap=new HashMap<>();
         for (AgentAction action:actions){
@@ -486,11 +494,19 @@ public class ActionExecutor {
      * 发送进度事件到前端
      */
     private void sendProgressEvent(AgentContext context, String event, String message) {
+        sendProgressEvent(context, event, message, null);
+    }
+
+    /**
+     * 发送进度事件到前端（带数据）
+     */
+    private void sendProgressEvent(AgentContext context, String event, String message, java.util.Map<String, Object> data) {
         if (context != null && context.getEventPublisher() != null) {
             context.getEventPublisher().accept(
                 AgentEventData.builder()
                     .event(event)
                     .message(message)
+                    .data(data)
                     .build()
             );
         }

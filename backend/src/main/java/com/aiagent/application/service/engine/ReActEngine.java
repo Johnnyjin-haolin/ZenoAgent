@@ -267,24 +267,10 @@ public class ReActEngine {
                     : null;
                 data.put("terminationReason", terminationReason);
                 
-                switch (observationResult.getTerminationReason()) {
-                    case COMPLETED:
-                        message = "任务完成，结束推理";
-                        break;
-                    case MAX_ITERATIONS:
-                        message = "达到最大迭代次数";
-                        break;
-                    case NO_ACTIONS:
-                        message = "未产生有效动作";
-                        break;
-                    case EXCEPTION:
-                        message = "发生异常";
-                        break;
-                    default:
-                        message = "推理结束";
-                }
+                // 将 terminationReason 作为消息发送给前端，由前端进行国际化处理
+                message = terminationReason != null ? terminationReason : "UNKNOWN";
             } else {
-                message = "观察结果，决定继续推理";
+                message = "CONTINUE";
             }
             
             data.put("message", message);

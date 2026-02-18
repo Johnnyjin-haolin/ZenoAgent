@@ -1,38 +1,54 @@
 <template>
   <div class="knowledge-base-detail" v-if="knowledgeBase">
-    <!-- 返回按钮 -->
-    <div class="back-button">
-      <a-button type="link" @click="handleBack">
-        <template #icon>
-          <Icon icon="ant-design:arrow-left-outlined" />
-        </template>
-        返回列表
-      </a-button>
+    <!-- 头部导航栏 -->
+    <div class="detail-header">
+      <div class="header-left">
+        <a-button type="link" @click="handleBack" class="back-btn">
+          <template #icon>
+            <Icon icon="ant-design:arrow-left-outlined" />
+          </template>
+          {{ t('common.return') }}
+        </a-button>
+        <div class="kb-title-wrapper">
+          <h1 class="kb-title">{{ knowledgeBase.name }}</h1>
+          <a-tag class="kb-id-tag">{{ knowledgeBase.id }}</a-tag>
+        </div>
+      </div>
+      <div class="header-right">
+        <a-button class="tech-btn" @click="handleEdit">
+          <template #icon>
+            <Icon icon="ant-design:setting-outlined" />
+          </template>
+          {{ t('agent.config') }}
+        </a-button>
+      </div>
     </div>
 
     <!-- 基本信息卡片 -->
-    <a-card title="基本信息" class="info-card">
-      <template #extra>
-        <a-button @click="handleEdit">编辑</a-button>
-      </template>
-      <a-descriptions :column="2" bordered>
-        <a-descriptions-item label="名称">
-          {{ knowledgeBase.name }}
-        </a-descriptions-item>
-        <a-descriptions-item label="向量模型">
-          <a-tag color="blue">{{ knowledgeBase.embeddingModelId }}</a-tag>
-        </a-descriptions-item>
-        <a-descriptions-item label="描述" :span="2">
-          {{ knowledgeBase.description || '-' }}
-        </a-descriptions-item>
-        <a-descriptions-item label="创建时间">
-          {{ formatTime(knowledgeBase.createTime) }}
-        </a-descriptions-item>
-        <a-descriptions-item label="更新时间">
-          {{ formatTime(knowledgeBase.updateTime) }}
-        </a-descriptions-item>
-      </a-descriptions>
-    </a-card>
+    <div class="tech-card info-card">
+      <div class="card-header">
+        <Icon icon="ant-design:info-circle-outlined" class="header-icon" />
+        <span class="header-title">{{ t('knowledgeBase.detail.systemParams') }}</span>
+      </div>
+      <div class="info-grid">
+        <div class="info-item">
+          <span class="label">{{ t('knowledgeBase.form.embeddingModel') }}</span>
+          <span class="value highlight">{{ knowledgeBase.embeddingModelId }}</span>
+        </div>
+        <div class="info-item">
+          <span class="label">{{ t('common.created') }}</span>
+          <span class="value">{{ formatTime(knowledgeBase.createTime) }}</span>
+        </div>
+        <div class="info-item">
+          <span class="label">{{ t('knowledgeBase.detail.lastUpdated') }}</span>
+          <span class="value">{{ formatTime(knowledgeBase.updateTime) }}</span>
+        </div>
+        <div class="info-item full-width">
+          <span class="label">{{ t('knowledgeBase.form.desc') }}</span>
+          <span class="value">{{ knowledgeBase.description || t('common.noDesc') }}</span>
+        </div>
+      </div>
+    </div>
 
     <!-- 统计信息卡片 -->
     <KnowledgeBaseStats
@@ -40,30 +56,37 @@
       @refresh="loadKnowledgeBase"
     />
 
-    <!-- 文档列表卡片 -->
-    <a-card title="文档管理" class="document-card">
-      <template #extra>
-        <a-space>
-          <a-button @click="showUploadModal = true">
+    <!-- 文档管理卡片 -->
+    <div class="tech-card document-card">
+      <div class="card-header">
+        <div class="header-left">
+          <Icon icon="ant-design:folder-open-outlined" class="header-icon" />
+          <span class="header-title">{{ t('knowledgeBase.document.title') }}</span>
+        </div>
+        <div class="header-actions">
+          <a-button class="tech-btn primary" @click="showUploadModal = true">
             <template #icon>
               <Icon icon="ant-design:upload-outlined" />
             </template>
-            上传文档
+            {{ t('knowledgeBase.document.upload') }}
           </a-button>
-          <a-button @click="showTextEditor = true">
+          <a-button class="tech-btn" @click="showTextEditor = true">
             <template #icon>
               <Icon icon="ant-design:file-text-outlined" />
             </template>
-            创建文本
+            {{ t('knowledgeBase.document.createText') }}
           </a-button>
-        </a-space>
-      </template>
-      <DocumentList
-        ref="documentListRef"
-        :knowledge-base-id="knowledgeBaseId"
-        @refresh="handleDocumentRefresh"
-      />
-    </a-card>
+        </div>
+      </div>
+      
+      <div class="document-list-container">
+        <DocumentList
+          ref="documentListRef"
+          :knowledge-base-id="knowledgeBaseId"
+          @refresh="handleDocumentRefresh"
+        />
+      </div>
+    </div>
 
     <!-- 编辑表单弹窗 -->
     <KnowledgeBaseForm
@@ -89,13 +112,17 @@
 
   <!-- 加载中 -->
   <div v-else class="loading-container">
-    <a-spin size="large" tip="加载中..." />
+    <div class="tech-loader">
+      <div class="loader-ring"></div>
+      <div class="loader-text">{{ t('common.loading') }}</div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { message } from 'ant-design-vue';
 import { Icon } from '@/components/Icon';
 import KnowledgeBaseForm from './KnowledgeBaseForm.vue';
@@ -108,6 +135,7 @@ import type { KnowledgeBase } from '@/types/knowledge-base.types';
 
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 
 const knowledgeBaseId = computed(() => route.params.id as string);
 const knowledgeBase = ref<KnowledgeBase | null>(null);
@@ -128,7 +156,7 @@ const loadKnowledgeBase = async () => {
     const kb = await getKnowledgeBase(knowledgeBaseId.value);
     knowledgeBase.value = kb;
   } catch (error: any) {
-    message.error('加载知识库详情失败: ' + (error?.message || '未知错误'));
+    message.error('Failed to load details: ' + (error?.message || 'Unknown error'));
     router.push('/knowledge-bases');
   } finally {
     loading.value = false;
@@ -183,56 +211,220 @@ onMounted(() => {
 
 <style scoped lang="less">
 .knowledge-base-detail {
-  padding: 24px;
-  background: #f0f2f5;
-  min-height: 100vh;
+  padding: 24px 40px;
+  background: transparent;
   height: 100%;
   overflow-y: auto;
-  overflow-x: hidden;
-  box-sizing: border-box;
-  position: relative;
-
-  // 滚动条样式优化
+  font-family: 'Inter', sans-serif;
+  
+  /* Custom Scrollbar */
   &::-webkit-scrollbar {
-    width: 8px;
+    width: 6px;
   }
-
+  
   &::-webkit-scrollbar-track {
-    background: #f0f0f0;
+    background: rgba(255, 255, 255, 0.02);
   }
-
+  
   &::-webkit-scrollbar-thumb {
-    background: #bfbfbf;
-    border-radius: 4px;
-
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    
     &:hover {
-      background: #999;
+      background: rgba(255, 255, 255, 0.2);
     }
   }
+}
 
-  .back-button {
-    margin-bottom: 16px;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    background: #f0f2f5;
-    padding: 8px 0;
-  }
-
-  .info-card,
-  .document-card {
-    margin-bottom: 16px;
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  }
-
-  .loading-container {
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  
+  .header-left {
     display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: calc(100vh - 64px);
+    flex-direction: column;
+    gap: 8px;
+    
+    .back-btn {
+      color: rgba(96, 165, 250, 0.6);
+      padding: 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      height: auto;
+      justify-content: flex-start;
+      
+      &:hover {
+        color: #60A5FA;
+      }
+    }
+    
+    .kb-title-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      
+      .kb-title {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 24px;
+        font-weight: 700;
+        color: #fff;
+        margin: 0;
+        letter-spacing: 1px;
+      }
+      
+      .kb-id-tag {
+        background: rgba(59, 130, 246, 0.1);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        color: #60A5FA;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+      }
+    }
   }
+}
+
+.tech-btn {
+  height: 32px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+  
+  &.primary {
+    background: rgba(59, 130, 246, 0.2);
+    border: 1px solid rgba(59, 130, 246, 0.5);
+    color: #60A5FA;
+    
+    &:hover {
+      background: rgba(59, 130, 246, 0.3);
+      border-color: #60A5FA;
+      color: #fff;
+      box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+    }
+  }
+}
+
+.tech-card {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 24px;
+  backdrop-filter: blur(10px);
+  
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+    
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .header-icon {
+      color: #60A5FA;
+      font-size: 18px;
+    }
+    
+    .header-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      font-weight: 600;
+      color: #e2e8f0;
+      letter-spacing: 1px;
+    }
+    
+    .header-actions {
+      display: flex;
+      gap: 12px;
+    }
+  }
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  
+  .info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    
+    &.full-width {
+      grid-column: span 3;
+    }
+    
+    .label {
+      font-size: 11px;
+      color: rgba(148, 163, 184, 0.6);
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.5px;
+    }
+    
+    .value {
+      font-size: 14px;
+      color: #e2e8f0;
+      font-family: 'Inter', sans-serif;
+      
+      &.highlight {
+        color: #60A5FA;
+        font-family: 'JetBrains Mono', monospace;
+      }
+    }
+  }
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100vh - 64px);
+  
+  .tech-loader {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    
+    .loader-ring {
+      width: 40px;
+      height: 40px;
+      border: 2px solid rgba(59, 130, 246, 0.3);
+      border-top-color: #60A5FA;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    .loader-text {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #60A5FA;
+      letter-spacing: 2px;
+    }
+  }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>
 

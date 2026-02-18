@@ -141,54 +141,60 @@ const handleDelete = (conversation: ConversationInfo) => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--color-surface);
+  background: transparent;
 }
 
 .slide-header {
   padding: 16px;
-  background: var(--color-surface);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid transparent;
+  border-bottom: 1px solid rgba(59, 130, 246, 0.1);
 
   .slide-title {
     margin: 0;
     font-size: 16px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--color-text-primary);
+    letter-spacing: -0.5px;
   }
 }
 
 .slide-content {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 12px;
+  padding: 12px;
 }
 
 .conversation-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
-  margin-bottom: 4px;
-  background: transparent;
-  border-radius: 20px; /* Google rounded style */
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
-  border: 1px solid transparent;
-  min-height: 44px;
+  min-height: 48px;
+  color: var(--color-text-secondary);
 
   &:hover {
-    background: var(--color-surface-hover); /* #F1F3F4 */
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.1);
+    transform: translateY(-1px);
   }
 
   &.active {
-    background: #E8F0FE;
-    color: #1967D2;
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.5);
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.15);
+    color: #fff;
 
     .conversation-title {
-      color: #1967D2;
+      color: #fff;
       font-weight: 500;
     }
   }
@@ -203,7 +209,7 @@ const handleDelete = (conversation: ConversationInfo) => {
     align-items: center;
     gap: 8px;
     font-size: 14px;
-    color: var(--color-text-primary);
+    color: inherit;
     
     span:first-child {
       flex: 1;
@@ -216,19 +222,32 @@ const handleDelete = (conversation: ConversationInfo) => {
 
   .conversation-temp-tag {
     flex-shrink: 0;
-    font-size: 11px;
-    color: var(--color-text-secondary);
-    background: rgba(0,0,0,0.05);
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.1);
     border-radius: 4px;
     padding: 0 6px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
   .conversation-actions {
     display: flex;
-    gap: 2px;
+    gap: 4px;
     opacity: 0;
     transition: opacity 0.2s;
     margin-left: 8px;
+    
+    :deep(.ant-btn) {
+      color: var(--color-text-secondary);
+      &:hover {
+        color: var(--color-text-primary);
+        background: rgba(255, 255, 255, 0.1);
+      }
+      &.ant-btn-dangerous:hover {
+        color: #ff4d4f;
+        background: rgba(255, 77, 79, 0.1);
+      }
+    }
   }
 
   &:hover .conversation-actions {
@@ -238,16 +257,16 @@ const handleDelete = (conversation: ConversationInfo) => {
 
 /* Scrollbar */
 .slide-content::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
 }
 .slide-content::-webkit-scrollbar-track {
   background: transparent;
 }
 .slide-content::-webkit-scrollbar-thumb {
-  background: rgba(0,0,0,0.2);
-  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
   &:hover {
-    background: rgba(0,0,0,0.3);
+    background: rgba(255, 255, 255, 0.2);
   }
 }
 </style>

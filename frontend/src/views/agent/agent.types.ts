@@ -98,6 +98,11 @@ export type AgentEventType =
   | 'agent:tool_call'       // 工具调用中
   | 'agent:tool_result'     // 工具执行结果
   | 'agent:message'         // 流式内容
+  | 'agent:iteration_start' // 迭代开始
+  | 'agent:iteration_end'   // 迭代结束
+  | 'agent:status:thinking_process'     // 思考过程
+  | 'agent:status:tool_executing_single' // 单个工具执行
+  | 'agent:status:tool_executing_batch'  // 批量工具执行
   | 'agent:stream_complete' // 流式输出完成
   | 'agent:complete'        // 任务完成
   | 'agent:error';          // 错误发生
@@ -176,6 +181,8 @@ export interface KnowledgeInfo {
  * 工具调用记录
  */
 export interface ToolCall {
+  /** 调用ID */
+  id?: string;
   /** 工具名称 */
   name: string;
   /** 调用参数 */
@@ -186,6 +193,8 @@ export interface ToolCall {
   status?: 'pending' | 'success' | 'error';
   /** 错误信息 */
   error?: string;
+  /** 耗时 */
+  duration?: number;
 }
 
 /**
@@ -386,11 +395,13 @@ export interface AgentMessage {
   /** 时间 */
   datetime: string;
   /** 消息状态 */
-  status?: 'thinking' | 'retrieving' | 'calling_tool' | 'generating' | 'done' | 'error' | 'success';
+  status?: 'thinking' | 'retrieving' | 'calling_tool' | 'generating' | 'done' | 'error' | 'success' | string;
   /** 状态名称 */
   statusName?: string;
   /** 状态文本 */
   statusText?: string;
+  /** 附加数据 */
+  data?: any;
   /** 工具调用记录 */
   toolCalls?: ToolCall[];
   /** RAG 检索结果 */
@@ -586,6 +597,10 @@ export interface AgentEventCallbacks {
   onMessage?: (event: AgentEvent) => void;
   onStreamComplete?: (event: AgentEvent) => void;
   onIterationEnd?: (event: AgentEvent) => void;
+  onInferenceEnd?: (event: AgentEvent) => void;
+  onExecuteError?: (event: AgentEvent) => void;
+  onFinish?: (event: AgentEvent) => void;
+  onStatusUpdate?: (event: AgentEvent) => void;
   onComplete?: (event: AgentEvent) => void;
   onError?: (event: AgentEvent) => void;
 }

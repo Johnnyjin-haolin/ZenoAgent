@@ -38,6 +38,9 @@
       <ProcessCard
         v-if="showProcessCard"
         :process="message.process!"
+        :loading="message.loading"
+        :status-text="getStatusText"
+        :status="message.status"
         @toggle-step-expand="handleToggleStepExpand"
         @confirm-tool="handleConfirmTool"
         @reject-tool="handleRejectTool"
@@ -46,7 +49,7 @@
       <!-- RAG 检索结果 -->
       <div v-if="showRagResults" class="rag-results">
         <a-collapse ghost>
-          <a-collapse-panel key="rag" header="📚 检索到的知识">
+          <a-collapse-panel key="rag" :header="t('agent.rag.title')">
             <div v-for="(item, idx) in message.ragResults" :key="idx" class="rag-item">
               <div class="rag-content">
                 <a-tooltip :title="item.content">
@@ -54,7 +57,7 @@
                 </a-tooltip>
               </div>
               <div v-if="item.score" class="rag-score">
-                <a-tag color="green">相似度: {{ (item.score * 100).toFixed(1) }}%</a-tag>
+                <a-tag color="green">{{ t('agent.rag.similarity') }} {{ (item.score * 100).toFixed(1) }}%</a-tag>
               </div>
             </div>
           </a-collapse-panel>
@@ -64,7 +67,7 @@
       <!-- 工具调用 -->
       <div v-if="showToolCalls" class="tool-calls">
         <a-collapse ghost>
-          <a-collapse-panel key="tools" header="🔧 工具调用">
+          <a-collapse-panel key="tools" :header="t('agent.tool.title')">
             <div v-for="(tool, idx) in message.toolCalls" :key="idx" class="tool-item">
               <div class="tool-header">
                 <span class="tool-name">{{ tool.name }}</span>
@@ -77,11 +80,11 @@
                 </a-tag>
               </div>
               <div class="tool-params">
-                <div class="tool-label">参数:</div>
+                <div class="tool-label">{{ t('agent.tool.params') }}</div>
                 <pre class="tool-data">{{ JSON.stringify(tool.params, null, 2) }}</pre>
               </div>
               <div v-if="tool.result" class="tool-result">
-                <div class="tool-label">结果:</div>
+                <div class="tool-label">{{ t('agent.tool.result') }}</div>
                 <pre class="tool-data">{{ formatToolResult(tool.result) }}</pre>
               </div>
               <div v-if="tool.error" class="tool-error">
@@ -120,6 +123,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Icon } from '@/components/Icon';
 import { useUserStore } from '@/store/modules/user';
 import { getFileAccessHttpUrl } from '@/utils/common/compUtils';
@@ -136,6 +140,8 @@ import type { AgentMessage } from '../agent.types';
 // 引入样式
 import '@/assets/less/github-markdown.less';
 import '@/assets/less/highlight.less';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   message: AgentMessage;
@@ -180,7 +186,7 @@ mdi.use(mdKatex, {
 
 // 代码高亮
 function highlightBlock(str: string, lang?: string) {
-  return `<pre class="code-block-wrapper"><div class="code-block-header"><span class="code-block-header__lang">${lang}</span><span class="code-block-header__copy">复制代码</span></div><code class="hljs code-block-body ${lang}">${str}</code></pre>`;
+  return `<pre class="code-block-wrapper"><div class="code-block-header"><span class="code-block-header__lang">${lang}</span><span class="code-block-header__copy">${t('common.copyCode')}</span></div><code class="hljs code-block-body ${lang}">${str}</code></pre>`;
 }
 
 // 渲染助手消息内容（Markdown）
@@ -240,6 +246,7 @@ const showStatusCard = computed(() => {
   return (
     props.message.role === 'assistant' &&
     props.message.loading &&
+    !showProcessCard.value &&
     (props.message.statusText || 
      (props.message.status && 
       ['thinking', 'retrieving', 'calling_tool'].includes(props.message.status)))
@@ -262,13 +269,20 @@ const getStatusText = computed(() => {
   
   // 默认状态文本
   const statusMap: Record<string, string> = {
-    thinking: '思考中...',
-    retrieving: '检索知识库...',
-    calling_tool: '调用工具中...',
-    generating: '正在生成...',
+    thinking: t('agent.status.thinking'),
+    retrieving: t('agent.status.retrieving'),
+    calling_tool: t('agent.status.calling_tool'),
+    generating: t('agent.status.generating'),
+    'agent:status:thinking_process': t('agent.status.thinking_process'),
+    'agent:status:tool_executing_single': t('agent.status.tool_executing_single', { 
+      toolName: props.message.data?.toolName || 'Tool' 
+    }),
+    'agent:status:tool_executing_batch': t('agent.status.tool_executing_batch', { 
+      count: props.message.data?.count || 0 
+    }),
   };
   
-  return statusMap[props.message.status || ''] || '处理中...';
+  return statusMap[props.message.status || ''] || props.message.statusText || t('agent.status.processing');
 });
 
 // 是否显示消息正文
@@ -310,9 +324,9 @@ function getToolStatusColor(status: string) {
 // 工具状态文本
 function getToolStatusText(status: string) {
   const textMap: Record<string, string> = {
-    pending: '执行中',
-    success: '成功',
-    error: '失败',
+    pending: t('agent.tool.status.pending'),
+    success: t('agent.tool.status.success'),
+    error: t('agent.tool.status.error'),
   };
   return textMap[status] || status;
 }
@@ -353,9 +367,12 @@ function handleToggleStepExpand(stepId: string) {
 <style scoped lang="less">
 .agent-message {
   display: flex;
-  gap: 10px;
-  margin-bottom: 16px;
+  gap: 16px;
+  margin-bottom: 24px;
   animation: fadeIn 0.3s ease-in;
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
 
   &.user {
     flex-direction: row-reverse;
@@ -365,38 +382,56 @@ function handleToggleStepExpand(stepId: string) {
     }
 
     .message-body {
-      background: #0052CC;
-      color: #fff;
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      color: #e2e8f0;
+      border-radius: 12px 0 12px 12px;
+      backdrop-filter: blur(5px);
 
       .user-text {
         line-height: 1.6;
+        font-family: 'Inter', sans-serif;
       }
     }
   }
 
   &.assistant {
     .message-body {
-      background: #f4f6f8;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 0 12px 12px 12px;
+      color: #cbd5e1;
+      backdrop-filter: blur(5px);
+    }
+    
+    .message-header {
+      justify-content: flex-start;
     }
   }
 
   &.has-error {
     .message-body {
-      background: #fff2f0;
-      border: 1px solid #ffccc7;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
     }
   }
 }
 
 .message-avatar {
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+  padding: 2px;
 
   img {
     width: 100%;
     height: 100%;
-    border-radius: 50%;
+    border-radius: 4px;
     object-fit: cover;
   }
 }
@@ -413,8 +448,10 @@ function handleToggleStepExpand(stepId: string) {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
-  color: #8c8c8c;
+  font-size: 11px;
+  color: rgba(148, 163, 184, 0.6);
+  font-family: 'JetBrains Mono', monospace;
+  margin-bottom: 2px;
 }
 
 .status-card {
@@ -423,30 +460,31 @@ function handleToggleStepExpand(stepId: string) {
   gap: 8px;
   padding: 8px 12px;
   border-radius: 6px;
-  background: #f0f2f5;
-  font-size: 13px;
-  animation: pulse 1.5s ease-in-out infinite;
-
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  font-size: 12px;
+  color: #94a3b8;
+  width: fit-content;
+  
   &.thinking {
-    background: #e6f7ff;
-    border: 1px solid #91d5ff;
+    border-color: rgba(96, 165, 250, 0.3);
+    background: rgba(59, 130, 246, 0.05);
   }
 
   &.retrieving {
-    background: #f6ffed;
-    border: 1px solid #b7eb8f;
+    border-color: rgba(52, 211, 153, 0.3);
+    background: rgba(16, 185, 129, 0.05);
   }
 
   &.calling_tool {
-    background: #fff7e6;
-    border: 1px solid #ffd591;
+    border-color: rgba(251, 191, 36, 0.3);
+    background: rgba(245, 158, 11, 0.05);
   }
 
   .status-text {
-    color: #595959;
+    font-family: 'JetBrains Mono', monospace;
   }
 }
-
 
 .message-images {
   display: flex;
@@ -459,6 +497,7 @@ function handleToggleStepExpand(stepId: string) {
     cursor: pointer;
     border-radius: 4px;
     overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
 
     img {
       width: 100%;
@@ -477,51 +516,58 @@ function handleToggleStepExpand(stepId: string) {
 .tool-calls {
   :deep(.ant-collapse) {
     background: transparent;
+    border: none;
 
     .ant-collapse-item {
-      border: none;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      margin-bottom: 8px;
+      background: rgba(15, 23, 42, 0.3);
+      overflow: hidden;
     }
 
     .ant-collapse-header {
       padding: 8px 12px;
-      background: #fafafa;
-      border-radius: 6px;
-      font-weight: 500;
-      font-size: 13px;
+      color: #94a3b8 !important;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
     }
 
     .ant-collapse-content {
       background: transparent;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      color: #cbd5e1;
+      
+      .ant-collapse-content-box {
+        padding: 12px;
+      }
     }
   }
 }
 
 .rag-item {
-  padding: 8px;
+  padding: 10px;
   margin-bottom: 8px;
-  background: #fff;
-  border: 1px solid #f0f0f0;
-  border-radius: 4px;
-
-  .rag-content {
-    margin-bottom: 4px;
-  }
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
 
   .rag-text {
     font-size: 13px;
-    color: #595959;
+    color: #cbd5e1;
     line-height: 1.6;
-    max-height: 100px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  }
+  
+  .rag-score {
+    margin-top: 6px;
   }
 }
 
 .tool-item {
   padding: 12px;
   margin-bottom: 12px;
-  background: #fff;
-  border: 1px solid #f0f0f0;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 6px;
 
   .tool-header {
@@ -532,60 +578,117 @@ function handleToggleStepExpand(stepId: string) {
   }
 
   .tool-name {
-    font-weight: 500;
-    color: #262626;
+    font-weight: 600;
+    color: #60A5FA;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
   }
 
   .tool-label {
-    font-size: 12px;
-    color: #8c8c8c;
+    font-size: 11px;
+    color: #64748b;
     margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
   .tool-data {
-    padding: 8px;
-    background: #fafafa;
-    border: 1px solid #f0f0f0;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 4px;
     font-size: 12px;
+    color: #94a3b8;
     margin: 0;
     overflow-x: auto;
+    font-family: 'JetBrains Mono', monospace;
   }
 
   .tool-params,
   .tool-result {
-    margin-top: 8px;
-  }
-
-  .tool-error {
-    margin-top: 8px;
+    margin-top: 12px;
   }
 }
 
 .message-body {
-  padding: 12px 16px;
-  border-radius: 8px;
-  font-size: 14px;
-  line-height: 1.6;
+  padding: 16px 20px;
+  font-size: 15px;
+  line-height: 1.7;
   word-break: break-word;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 
   .markdown-body {
     background: transparent;
+    color: inherit;
+    font-family: 'Inter', sans-serif;
+    
+    :deep(p) {
+      margin-bottom: 1em;
+      &:last-child {
+        margin-bottom: 0;
+      }
+    }
+    
+    :deep(code) {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9em;
+    }
+    
+    :deep(pre) {
+      background: #0d1117;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 12px;
+      margin: 16px 0;
+      overflow-x: auto;
+      
+      code {
+        background: transparent;
+        padding: 0;
+        border-radius: 0;
+        color: #e6edf3;
+      }
+    }
+    
+    :deep(a) {
+      color: #60A5FA;
+      text-decoration: none;
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+    
+    :deep(ul), :deep(ol) {
+      padding-left: 20px;
+      margin-bottom: 1em;
+    }
+    
+    :deep(h1), :deep(h2), :deep(h3), :deep(h4) {
+      color: #f1f5f9;
+      margin-top: 1.5em;
+      margin-bottom: 0.5em;
+      font-weight: 600;
+    }
   }
 
   .markdown-generating::after {
     content: '▋';
     animation: blink 1s steps(2) infinite;
     margin-left: 2px;
+    color: #60A5FA;
   }
 }
 
 .message-stats {
   display: flex;
   gap: 16px;
-  font-size: 12px;
-  color: #8c8c8c;
+  font-size: 11px;
+  color: rgba(148, 163, 184, 0.5);
   padding-top: 4px;
+  font-family: 'JetBrains Mono', monospace;
 
   .stat-item {
     display: flex;
@@ -602,15 +705,6 @@ function handleToggleStepExpand(stepId: string) {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.8;
   }
 }
 

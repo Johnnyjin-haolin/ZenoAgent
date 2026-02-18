@@ -1,34 +1,19 @@
 <template>
   <div class="home-container dark-theme">
+    <!-- Background Texture -->
     <TechBackground />
     
-    <!-- Navbar -->
-    <nav class="navbar">
-      <div class="logo">
-        <span class="logo-icon">✨</span>
-        <span class="logo-text">Zeno Agent</span>
-      </div>
-      <div class="nav-links">
-        <a href="https://github.com/zeno-agent" target="_blank">GitHub</a>
-        <a href="/docs">文档</a>
-        <router-link to="/agent" class="btn-ghost">进入控制台</router-link>
-      </div>
-    </nav>
-
     <!-- Hero Section -->
     <section class="hero">
       <div class="hero-content">
-        <h1 class="hero-title">Perceive. <br/>Reason. <br/><span class="highlight-text">Execute.</span></h1>
-        <p class="hero-subtitle">
-          A React-based autonomous agent. Powered by RAG & MCP. <br/>
-          Zeno understands your intent, orchestrates tools, and solves complex problems automatically.
-        </p>
+        <h1 class="hero-title">{{ t('home.hero.title.line1') }} <br/>{{ t('home.hero.title.line2') }} <br/><span class="highlight-text">{{ t('home.hero.title.line3') }}</span></h1>
+        <p class="hero-subtitle" style="white-space: pre-wrap">{{ t('home.hero.subtitle') }}</p>
         <div class="hero-actions">
           <router-link to="/agent" class="cta-button white-hole">
-            <span class="btn-text">Start Integration</span>
+            <span class="btn-text">{{ t('home.hero.start') }}</span>
             <div class="btn-glow"></div>
           </router-link>
-          <a href="#" class="cta-button link-text">View Documentation -></a>
+          <a href="https://github.com/Johnnyjin-haolin/ZenoAgent" class="cta-button link-text">{{ t('home.hero.docs') }}</a>
         </div>
       </div>
       <div class="hero-image">
@@ -40,103 +25,50 @@
     <section class="features">
       <div class="feature-card glass">
         <div class="icon-box blue">🧠</div>
-        <h3>Context Core</h3>
-        <p>Deep semantic understanding of code dependencies and logic flows.</p>
+        <h3>{{ t('home.capabilities.context.title') }}</h3>
+        <p>{{ t('home.capabilities.context.desc') }}</p>
       </div>
       
       <div class="feature-card glass">
         <div class="icon-box cyan">🔍</div>
-        <h3>RAG Matrix</h3>
-        <p>Real-time retrieval from documentation, API specs, and legacy modules.</p>
+        <h3>{{ t('home.capabilities.rag.title') }}</h3>
+        <p>{{ t('home.capabilities.rag.desc') }}</p>
       </div>
       
       <div class="feature-card glass">
         <div class="icon-box purple">⚡️</div>
-        <h3>MCP Satellites</h3>
-        <p>Seamless orchestration of databases, terminals, and cloud services.</p>
+        <h3>{{ t('home.capabilities.mcp.title') }}</h3>
+        <p>{{ t('home.capabilities.mcp.desc') }}</p>
       </div>
     </section>
 
     <!-- Footer -->
     <footer class="footer">
-      <p>© 2026 Zeno Agent. Next Generation Autonomous Agent Platform.</p>
+      <p>{{ t('home.footer') }}</p>
     </footer>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import ZenoTesseract from '@/components/ZenoTesseract.vue';
 import TechBackground from '@/components/TechBackground.vue';
+
+const { t } = useI18n();
 </script>
 
 <style lang="less" scoped>
-/* Force disable horizontal scroll globally for this page */
-:global(html),
-:global(body) {
+.home-container {
+  min-height: 100vh;
+  /* background removed - using global TechBackground */
+  font-family: 'Inter', 'Google Sans', sans-serif;
+  color: #F8FAFC;
+  position: relative;
   overflow-x: hidden;
   width: 100%;
 }
 
-.home-container {
-  min-height: 100vh;
-  /* background: radial-gradient(circle at 50% 0%, #0F1729 0%, #020408 100%);  Abyss Black - Replaced by TechBackground */
-  font-family: 'Inter', 'Google Sans', sans-serif;
-  color: #F8FAFC;
-  position: relative;
-  overflow-x: hidden; /* Fix horizontal scroll */
-  width: 100%;
-  max-width: 100vw;
-}
-
-/* Navbar */
-.navbar {
-  height: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 64px;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  background: transparent;
-  backdrop-filter: blur(10px);
-
-  .logo {
-    display: flex;
-    align-items: center;
-    font-size: 22px;
-    font-weight: 700;
-    color: #F8FAFC;
-    letter-spacing: -0.5px;
-    
-    .logo-icon { margin-right: 12px; }
-  }
-
-  .nav-links {
-    display: flex;
-    align-items: center;
-    gap: 32px;
-
-    a {
-      color: #94A3B8;
-      text-decoration: none;
-      font-weight: 500;
-      transition: color 0.2s;
-      font-size: 14px;
-      &:hover { color: #F8FAFC; }
-    }
-
-    .btn-ghost {
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      padding: 8px 20px;
-      border-radius: 20px;
-      &:hover {
-        background: rgba(255, 255, 255, 0.05);
-        border-color: rgba(255, 255, 255, 0.3);
-      }
-    }
-  }
-}
+/* Navbar removed - now in MainLayout */
 
 /* Hero */
 .hero {
@@ -148,12 +80,12 @@ import TechBackground from '@/components/TechBackground.vue';
   margin: 0 auto;
   position: relative;
   z-index: 1;
-  overflow: hidden; /* Prevent 3D elements from causing overflow */
+  overflow: hidden;
 
   .hero-content {
     flex: 1;
     padding-right: 80px;
-    z-index: 2; /* Ensure text is above 3D elements if they overlap */
+    z-index: 2;
 
     .hero-title {
       font-size: 80px;
@@ -274,9 +206,11 @@ import TechBackground from '@/components/TechBackground.vue';
 .footer {
   padding: 40px;
   text-align: center;
-  color: #475569;
+  color: #94A3B8;
   font-size: 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
+  position: relative;
+  z-index: 1;
 }
 
 @media (max-width: 1024px) {

@@ -10,37 +10,56 @@
       />
     </template>
 
-    <div v-else class="welcome-message">
-      <div class="welcome-icon">🤖</div>
-      <h3>欢迎使用 ZenoAgent</h3>
-      <p class="welcome-subtitle">企业级 AI Agent，支持 RAG / MCP / 多模型 / 流式过程</p>
-      <div class="welcome-capabilities">
-        <div v-for="item in capabilityItems" :key="item.title" class="capability-card">
-          <div class="capability-icon">{{ item.icon }}</div>
-          <div class="capability-title">{{ item.title }}</div>
-          <div class="capability-desc">{{ item.desc }}</div>
+    <div v-else class="welcome-container">
+      <div class="welcome-content">
+        <div class="holographic-core">
+          <div class="core-inner"></div>
+          <div class="core-outer"></div>
+        </div>
+        <h3 class="welcome-title">{{ t('home.title') }} <span class="version">{{ t('home.version') }}</span></h3>
+        <p class="welcome-subtitle">{{ t('home.subtitle') }}</p>
+        
+        <div class="capabilities-grid">
+          <div v-for="item in capabilityItems" :key="item.title" class="tech-card">
+            <div class="card-glow"></div>
+            <div class="card-icon">{{ item.icon }}</div>
+            <div class="card-title">{{ item.title }}</div>
+            <div class="card-desc">{{ item.desc }}</div>
+          </div>
+        </div>
+
+        <div class="scenarios-section">
+          <div class="section-header">
+            <span class="header-line"></span>
+            <span class="header-text">{{ t('home.initiate') }}</span>
+            <span class="header-line"></span>
+          </div>
+          <div class="scenario-chips">
+            <div
+              v-for="prompt in scenarioPrompts"
+              :key="prompt"
+              class="tech-chip"
+              @click="emit('apply-prompt', prompt)"
+            >
+              <span class="chip-bracket">[</span>
+              {{ prompt }}
+              <span class="chip-bracket">]</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="system-status">
+          <span class="status-dot"></span>
+          {{ t('home.systemReady') }}
         </div>
       </div>
-      <div class="welcome-scenarios">
-        <div class="section-title">场景示例</div>
-        <div class="scenario-tags">
-          <a-tag
-            v-for="prompt in scenarioPrompts"
-            :key="prompt"
-            class="scenario-tag"
-            @click="emit('apply-prompt', prompt)"
-          >
-            {{ prompt }}
-          </a-tag>
-        </div>
-      </div>
-      <p class="welcome-hint">选择模型 → 选择知识库 → 输入问题开始对话</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { nextTick, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AgentMessage from './AgentMessage.vue';
 import type { AgentMessage as AgentMessageType } from '../agent.types';
 
@@ -62,6 +81,7 @@ const emit = defineEmits<{
   (e: 'reject-tool'): void;
 }>();
 
+const { t } = useI18n();
 const scrollRef = ref<HTMLDivElement | null>(null);
 
 const scrollToBottom = async () => {
@@ -79,151 +99,267 @@ defineExpose({ scrollToBottom });
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 16px 20px;
-  background: #fff;
+  padding: 20px 24px;
+  background: transparent;
   min-height: 0;
+  scroll-behavior: smooth;
 
+  /* Custom Scrollbar */
   &::-webkit-scrollbar {
-    width: 8px;
+    width: 6px;
   }
-
+  
   &::-webkit-scrollbar-track {
-    background: #f5f5f5;
+    background: rgba(255, 255, 255, 0.02);
   }
-
+  
   &::-webkit-scrollbar-thumb {
-    background: #d9d9d9;
-    border-radius: 4px;
-
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    
     &:hover {
-      background: #bfbfbf;
+      background: rgba(255, 255, 255, 0.2);
     }
   }
 }
 
-.welcome-message {
-  max-width: 600px;
-  margin: 30px auto;
+.welcome-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100%;
+  padding: 40px 0;
+}
+
+.welcome-content {
+  max-width: 700px;
+  width: 100%;
   text-align: center;
+  position: relative;
+  z-index: 1;
+}
 
-  .welcome-icon {
-    font-size: 48px;
-    margin-bottom: 16px;
+/* Holographic Core Effect */
+.holographic-core {
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 24px;
+  position: relative;
+  
+  .core-inner {
+    position: absolute;
+    inset: 10px;
+    background: #3B82F6;
+    border-radius: 50%;
+    filter: blur(8px);
+    opacity: 0.8;
+    animation: pulse 2s infinite;
   }
-
-  h3 {
-    font-size: 20px;
-    font-weight: 600;
-    color: #262626;
-    margin-bottom: 12px;
-  }
-
-  p {
-    font-size: 14px;
-    color: #595959;
-    margin-bottom: 16px;
-  }
-
-  .welcome-subtitle {
-    color: #8c8c8c;
-    margin-bottom: 18px;
-  }
-
-  .welcome-capabilities {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    margin-bottom: 18px;
-  }
-
-  .capability-card {
-    text-align: left;
-    background: #f7f9fc;
-    border: 1px solid #edf1f7;
-    border-radius: 10px;
-    padding: 12px;
-    transition: all 0.2s;
-
-    &:hover {
-      border-color: #cfe3ff;
-      background: #ffffff;
-      box-shadow: 0 4px 12px rgba(24, 144, 255, 0.08);
+  
+  .core-outer {
+    position: absolute;
+    inset: 0;
+    border: 2px solid rgba(59, 130, 246, 0.5);
+    border-radius: 50%;
+    animation: spin 10s linear infinite;
+    
+    &::before, &::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 120%;
+      height: 120%;
+      border: 1px dashed rgba(59, 130, 246, 0.3);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
     }
   }
+}
 
-  .capability-icon {
-    font-size: 18px;
-    margin-bottom: 6px;
+.welcome-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 8px;
+  letter-spacing: -0.5px;
+  text-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+  
+  .version {
+    font-size: 12px;
+    color: #60A5FA;
+    background: rgba(59, 130, 246, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    vertical-align: middle;
+    border: 1px solid rgba(59, 130, 246, 0.3);
   }
+}
 
-  .capability-title {
+.welcome-subtitle {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 32px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.capabilities-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 40px;
+}
+
+.tech-card {
+  position: relative;
+  background: rgba(2, 4, 8, 0.6);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: left;
+  transition: all 0.3s ease;
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+  
+  .card-glow {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at top right, rgba(59, 130, 246, 0.1), transparent 60%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  
+  &:hover {
+    border-color: rgba(59, 130, 246, 0.4);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    
+    .card-glow {
+      opacity: 1;
+    }
+    
+    .card-title {
+      color: #60A5FA;
+    }
+  }
+  
+  .card-icon {
+    font-size: 20px;
+    margin-bottom: 12px;
+    color: #3B82F6;
+  }
+  
+  .card-title {
+    font-family: 'JetBrains Mono', monospace;
     font-size: 14px;
     font-weight: 600;
-    color: #262626;
-    margin-bottom: 4px;
+    color: #e2e8f0;
+    margin-bottom: 6px;
+    transition: color 0.3s ease;
   }
-
-  .capability-desc {
+  
+  .card-desc {
     font-size: 12px;
-    color: #8c8c8c;
+    color: #94a3b8;
     line-height: 1.5;
   }
+}
 
-  .welcome-scenarios {
+.scenarios-section {
+  margin-bottom: 32px;
+  
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     margin-bottom: 16px;
-    text-align: left;
-
-    .section-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: #262626;
-      margin-bottom: 8px;
+    
+    .header-line {
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
     }
-
-    .scenario-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-  }
-
-  .scenario-tag {
-    cursor: pointer;
-    border-radius: 16px;
-    padding: 2px 10px;
-    font-size: 12px;
-    color: #1d39c4;
-    background: #f0f5ff;
-    border: 1px solid #adc6ff;
-
-    &:hover {
-      color: #10239e;
-      border-color: #85a5ff;
+    
+    .header-text {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: rgba(59, 130, 246, 0.6);
+      letter-spacing: 2px;
     }
   }
+}
 
-  ul {
-    text-align: left;
-    list-style: none;
-    padding: 0;
-    margin-bottom: 20px;
+.scenario-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
 
-    li {
-      padding: 10px 12px;
-      margin-bottom: 6px;
-      background: #f5f5f5;
-      border-radius: 8px;
-      font-size: 13px;
-      color: #262626;
-      line-height: 1.5;
+.tech-chip {
+  cursor: pointer;
+  padding: 6px 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  
+  .chip-bracket {
+    color: rgba(59, 130, 246, 0.4);
+    transition: color 0.2s ease;
+  }
+  
+  &:hover {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.3);
+    color: #fff;
+    
+    .chip-bracket {
+      color: #60A5FA;
     }
   }
+}
 
-  .welcome-hint {
-    color: #8c8c8c;
-    font-style: italic;
-    font-size: 13px;
+.system-status {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: rgba(59, 130, 246, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    background: #10B981;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #10B981;
+    animation: blink 2s infinite;
   }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.9); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 </style>
 

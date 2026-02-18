@@ -1,31 +1,25 @@
 <template>
   <div class="agent-model-selector" :class="{ compact }">
     <div v-if="!compact" class="selector-label">
-      <Icon icon="ant-design:api-outlined" />
-      <span>AI 模型</span>
+      <Icon icon="ant-design:api-outlined" class="label-icon" />
+      <span>{{ t('agent.modelSelector.label') }}</span>
     </div>
     
     <!-- 下拉单选框 -->
     <a-select
       v-model:value="selectedModel"
-      :placeholder="placeholder"
+      :placeholder="placeholder || t('agent.modelSelector.auto')"
       :loading="loading"
       :allow-clear="allowClear"
       size="small"
-      class="model-select"
+      class="model-select tech-select"
       :dropdown-match-select-width="false"
-      dropdown-class-name="model-select-dropdown"
+      dropdown-class-name="model-select-dropdown tech-dropdown"
       @change="handleSelectChange"
     >
       <!-- 智能选择选项 -->
       <a-select-option value="">
-        <a-tooltip placement="right" :title="'根据任务类型自动选择最优模型'">
-          <div class="select-option-content">
-            <div class="option-main">
-              <span class="option-name">智能选择</span>
-            </div>
-          </div>
-        </a-tooltip>
+        <span class="option-name">{{ t('agent.modelSelector.auto') }}</span>
       </a-select-option>
 
       <!-- 模型列表选项 -->
@@ -34,18 +28,9 @@
         :key="model.id"
         :value="model.id"
       >
-        <a-tooltip 
-          placement="right" 
-          :title="model.description"
-        >
-          <div class="select-option-content">
-            <div class="option-main">
-              <span class="option-name" :title="model.displayName ">
-                {{ model.displayName}}
-              </span>
-            </div>
-          </div>
-        </a-tooltip>
+        <span class="option-name" :title="model.displayName || model.name">
+                {{ model.displayName || model.name }}
+        </span>
       </a-select-option>
     </a-select>
   </div>
@@ -53,11 +38,14 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Icon } from '@/components/Icon';
 import { message } from 'ant-design-vue';
 import { getAvailableModels } from '../agent.api';
 import { ModelType } from '@/types/model.types';
 import type { ModelInfo } from '../agent.types';
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{
@@ -67,7 +55,6 @@ const props = withDefaults(
     compact?: boolean; // 紧凑模式（不显示label，适合放在输入框旁边）
   }>(),
   {
-    placeholder: '智能选择',
     allowClear: false,
     compact: false,
   }
@@ -106,7 +93,7 @@ const loadModels = async () => {
       emit('change', '', null);
     }
   } catch (error) {
-    message.error('加载模型列表失败');
+    message.error(t('agent.modelSelector.loadingError'));
     console.error('加载模型列表失败:', error);
   } finally {
     loading.value = false;
@@ -134,17 +121,17 @@ const getModelTooltip = (model: ModelInfo): string => {
   
   // 添加模型名称
   if (model.displayName || model.name) {
-    parts.push(`模型: ${model.displayName || model.name}`);
+    parts.push(`${t('agent.modelSelector.model')}: ${model.displayName || model.name}`);
   }
   
   // 添加描述
   if (model.description) {
-    parts.push(`描述: ${model.description}`);
+    parts.push(`${t('agent.modelSelector.desc')}: ${model.description}`);
   }
   
   // 添加提供商
   if (model.provider) {
-    parts.push(`提供商: ${getProviderLabel(model.provider)}`);
+    parts.push(`${t('agent.modelSelector.provider')}: ${getProviderLabel(model.provider)}`);
   }
   
   return parts.join('\n');
@@ -177,11 +164,15 @@ defineExpose({
   .selector-label {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-bottom: 8px;
+    gap: 8px;
+    margin-bottom: 10px;
     font-size: 13px;
-    font-weight: 500;
-    color: #262626;
+    font-family: 'JetBrains Mono', monospace;
+    color: #e2e8f0;
+
+    .label-icon {
+      color: #60A5FA;
+    }
   }
 
   &.compact .selector-label {
@@ -191,34 +182,55 @@ defineExpose({
   // 下拉选择框样式
   .model-select {
     width: 100%;
-    max-width: 130px;
-    min-width: 100px;
+    // max-width: 130px; // Remove max-width constraint for better fit in drawer
     font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
 
     :deep(.ant-select-selector) {
-      border-radius: 6px;
-      font-size: 12px;
+      background-color: rgba(0, 0, 0, 0.2) !important;
+      border: 1px solid rgba(59, 130, 246, 0.2) !important;
+      border-radius: 4px;
+      color: #fff !important;
+      height: 32px;
       display: flex;
       align-items: center;
+      transition: all 0.3s;
+      padding: 0 11px !important; // 确保内边距一致
+      
+      &:hover {
+        border-color: #60A5FA !important;
+        box-shadow: 0 0 8px rgba(59, 130, 246, 0.2);
+      }
+    }
+    
+    :deep(.ant-select-selection-placeholder) {
+      color: rgba(148, 163, 184, 0.4);
+      line-height: 30px; // 确保 placeholder 垂直居中
     }
 
     // 选中后显示的文本（截断处理）
     :deep(.ant-select-selection-item) {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 500;
-      line-height: 1.5;
-      display: flex;
-      align-items: center;
-      max-width: 110px;
+      line-height: 30px; // 与高度接近，确保垂直居中
+      color: #fff;
+      padding-right: 10px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      position: static !important; // 覆盖可能的绝对定位
+      transform: none !important; // 覆盖可能的 transform
+      margin: 0 !important; // 清除 margin
+
+      // 修复选中后内容宽度溢出问题
+      .select-option-content {
+        min-width: 0;
+      }
     }
 
     // 下拉箭头图标
     :deep(.ant-select-arrow) {
-      display: flex;
-      align-items: center;
+      color: rgba(96, 165, 250, 0.6);
     }
   }
 
@@ -241,90 +253,53 @@ defineExpose({
 
     .option-name {
       flex: 1;
-      font-size: 14px;
-      color: #262626;
+      font-size: 13px;
+      color: #e2e8f0;
       font-weight: 500;
-      // 允许换行，但优先单行显示
+      font-family: 'JetBrains Mono', monospace;
       word-break: break-word;
-      line-height: 1.5;
-      min-width: 0; // 允许 flex 收缩
-    }
-
-    .option-provider {
-      flex-shrink: 0;
-      font-size: 11px;
-      color: #8c8c8c;
-      background: #f0f0f0;
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-weight: normal;
-    }
-
-    .option-desc {
-      font-size: 12px;
-      color: #8c8c8c;
-      line-height: 1.4;
-      margin-top: 2px;
-      // 描述最多显示2行
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      text-overflow: ellipsis;
     }
   }
 
   // 紧凑模式下的特殊样式
   &.compact {
     .model-select {
-      max-width: 100px;
-      min-width: 85px;
-      font-size: 15px;
-
-      :deep(.ant-select-selector) {
-        font-size: 15px;
-      }
-
-      :deep(.ant-select-selection-item) {
-        font-size: 15px;
-        max-width: 80px; // 紧凑模式下更小的最大宽度
-      }
-    }
-
-    .select-option-content {
-      min-width: 200px; // 下拉选项仍然保持最小宽度以确保内容完整显示
+      max-width: 180px;
+      min-width: 120px;
     }
   }
 }
+</style>
 
+<style lang="less">
 // 全局样式：下拉选项样式优化
-:deep(.ant-select-dropdown.model-select-dropdown) {
-  // 下拉菜单宽度自适应（最小200px，最大350px）
-  min-width: 200px !important;
-  max-width: 350px !important;
-  width: auto !important;
+.model-select-dropdown.tech-dropdown {
+  background-color: #0f172a !important;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  padding: 4px;
 
   .ant-select-item {
     padding: 8px 12px;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1.5;
+    color: #94a3b8;
+    border-radius: 4px;
+    margin-bottom: 2px;
+    font-family: 'JetBrains Mono', monospace;
 
     &:hover {
-      background: #f5f5f5;
+      background: rgba(59, 130, 246, 0.1);
+      color: #e2e8f0;
     }
 
     &.ant-select-item-option-selected {
-      background: #e6f7ff;
-      font-weight: 500;
-
+      background: rgba(59, 130, 246, 0.15);
+      color: #60A5FA;
+      font-weight: 600;
+      
       .option-name {
-        color: #1890ff;
-        font-weight: 600;
-      }
-
-      .option-provider {
-        background: #bae7ff;
-        color: #0958d9;
+        color: #60A5FA;
       }
     }
   }
