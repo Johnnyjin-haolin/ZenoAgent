@@ -71,31 +71,136 @@ public class ThinkingEngine {
      * 输出格式提示词
      * 先输出思考过程，再输出JSON动作决策
      */
-    private static final String OUTPUT_FORMAT_PROMPT = "## 输出阶段说明\n\n" +
-            "你必须严格按照以下顺序输出内容：\n\n" +
-            "1. 先输出思考过程，使用以下格式：\n" +
-            "<thinking>\n" +
-            "...你的详细分析过程...\n" +
-            "</thinking>\n\n" +
-            "2. 然后输出一行思考结束标记：\n" +
-            "<THINKING_DONE>\n\n" +
-            "3. 最后输出只包含JSON对象的动作决策，使用以下格式：\n" +
-            "<actions>\n" +
-            "{\"actions\":[{\"actionType\":\"TOOL_CALL\",\"actionName\":\"工具名\",\"reasoning\":\"原因\",\"toolCallParams\":{\"toolName\":\"工具名\",\"toolParams\":{}}}]}\n" +
-            "</actions>\n\n" +
-            "注意：\n" +
-            "- <thinking> 和 </thinking> 之间可以是自然语言思考过程；\n" +
-            "- 在 <THINKING_DONE> 之后，必须尽快输出最终动作决策JSON；\n" +
-            "- <actions> 标签内必须是合法JSON对象，只能包含 actions 数组，不要包含其他文字；\n" +
-            "- actionType 与参数字段必须一一对应：TOOL_CALL=toolCallParams，RAG_RETRIEVE=ragRetrieveParams，LLM_GENERATE=llmGenerateParams，DIRECT_RESPONSE=directResponseParams；\n" +
-            "- actions 数组中的 actionType 只能是 TOOL_CALL / RAG_RETRIEVE / LLM_GENERATE / DIRECT_RESPONSE / COMPLETE。\n\n" +
-            "示例（单个 Action）：\n" +
-            "{\"actions\":[{\"actionType\":\"DIRECT_RESPONSE\",\"actionName\":\"direct_response\",\"reasoning\":\"原因\",\"directResponseParams\":{\"content\":\"...\",\"streaming\":true}}]}\n\n" +
-            "示例（LLM_GENERATE）：\n" +
-            "{\"actions\":[{\"actionType\":\"LLM_GENERATE\",\"actionName\":\"llm_generate\",\"reasoning\":\"原因\",\"llmGenerateParams\":{\"prompt\":\"请根据上下文生成回复\"}}]}\n\n" +
-            "示例（多个 Action）：\n" +
-            "{\"actions\":[{\"actionType\":\"TOOL_CALL\",\"actionName\":\"工具名1\",\"reasoning\":\"原因1\",\"toolCallParams\":{\"toolName\":\"工具名1\",\"toolParams\":{}}},{\"actionType\":\"RAG_RETRIEVE\",\"actionName\":\"rag_retrieve\",\"reasoning\":\"原因2\",\"ragRetrieveParams\":{\"query\":\"检索词\",\"knowledgeIds\":[],\"maxResults\":10}}]}"
-            ;
+    private static final String OUTPUT_FORMAT_PROMPT = """
+            ## 输出协议与格式规范
+            
+            你必须严格遵守以下"两阶段"输出协议：
+            
+            ### 第一阶段：深度思考 (Thinking)
+            在做出决定前，必须先进行逻辑推演。
+            格式要求：
+            <thinking>
+            1. 分析用户意图...
+            2. 评估当前可用信息...
+            3. 规划后续步骤...
+            </thinking>
+            
+            ### 第二阶段：动作执行 (Execution)
+            思考结束后（即 `</thinking>` 闭合后），**立即**输出最终的动作指令 JSON，不要包含任何其他解释性文字。
+            格式要求：
+            <actions>
+            {
+              "actions": [
+                {
+                  "actionType": "...",
+                  "actionName": "...",
+                  "reasoning": "...",
+                  "...Params": { ... }
+                }
+              ]
+            }
+            </actions>
+            
+            ---
+            
+            ### 核心校验规则 (Critical Rules)
+            
+            1. **JSON 严格语法**
+               - `<actions>` 内部必须是纯粹的 JSON 文本，**严禁**包含 markdown 代码块标记（如 ```json）。
+               - 务必校验 `{}` 和 `[]` 的闭合性。
+               - 所有字段名必须使用双引号。
+            
+            2. **参数结构规范 (Schema Definitions)**
+               每个 `actionType` 对应唯一的参数对象，结构如下：
+            
+               **(A) TOOL_CALL (调用工具)**
+               - 必须包含 `toolCallParams`:
+                 ```json
+                 "toolCallParams": {
+                   "toolName": "工具名称(String, 必填)",
+                   "toolParams": { "key": "value" } // 工具具体参数对象(Map, 必填)
+                 }
+                 ```
+            
+               **(B) RAG_RETRIEVE (知识库检索)**
+               - 必须包含 `ragRetrieveParams`:
+                 ```json
+                 "ragRetrieveParams": {
+                   "query": "检索关键词(String, 必填)",
+                   "knowledgeIds": ["kb_id1"], // 知识库ID列表(List<String>, 可选)
+                   "maxResults": 5, // 最大结果数(Integer, 可选)
+                   "similarityThreshold": 0.7 // 相似度阈值(Double, 可选)
+                 }
+                 ```
+            
+               **(C) LLM_GENERATE (大模型生成)**
+               - 必须包含 `llmGenerateParams`:
+                 ```json
+                 "llmGenerateParams": {
+                   "prompt": "提示词(String, 必填)",
+                   "systemPrompt": "系统设定(String, 可选)",
+                   "temperature": 0.7 // 温度(Double, 可选)
+                 }
+                 ```
+            
+               **(D) DIRECT_RESPONSE (直接回复)**
+               - 必须包含 `directResponseParams`:
+                 ```json
+                 "directResponseParams": {
+                   "content": "回复内容(String, 必填)",
+                   "streaming": true // 是否流式(Boolean, 默认为true)
+                 }
+                 ```
+            
+            3. **禁止废话**
+               在 `</thinking>` 和 `<actions>` 之间，严禁输出任何自然语言过渡句。
+            
+            ---
+            
+            ### 标准范例 (Examples)
+            
+            #### 场景 1: 直接回复用户
+            <thinking>
+            用户在打招呼，无需调用工具。
+            </thinking>
+            <actions>
+            {
+              "actions": [
+                {
+                  "actionType": "DIRECT_RESPONSE",
+                  "actionName": "greet_user",
+                  "reasoning": "直接回复问候",
+                  "directResponseParams": {
+                    "content": "你好！有什么我可以帮你的吗？",
+                    "streaming": true
+                  }
+                }
+              ]
+            }
+            </actions>
+            
+            #### 场景 2: 调用工具查询
+            <thinking>
+            用户想查天气，我需要使用 get_weather 工具。
+            </thinking>
+            <actions>
+            {
+              "actions": [
+                {
+                  "actionType": "TOOL_CALL",
+                  "actionName": "search_weather",
+                  "reasoning": "用户询问天气，需要调用天气工具",
+                  "toolCallParams": {
+                    "toolName": "get_weather",
+                    "toolParams": {
+                      "city": "Hangzhou"
+                    }
+                  }
+                }
+              ]
+            }
+            </actions>
+            """;
     /**
      * 思考：分析目标、上下文和历史结果，决定下一步Action（支持返回多个Action）
      */
@@ -109,9 +214,11 @@ public class ThinkingEngine {
         PromptPair promptPair = buildThinkingPrompt(goal, context, lastResults);
         log.debug("系统提示词长度: {}, 用户提示词长度: {}", 
             promptPair.getSystemPrompt().length(), promptPair.getUserPrompt().length());
+        log.info("系统提示词: {}\n, 用户提示词: {}",
+                promptPair.getSystemPrompt(), promptPair.getUserPrompt());
         // 调用LLM进行思考
         String thinkingResult = callLLMForThinking(promptPair, context);
-        log.debug("思考结果: {}", thinkingResult);
+        log.info("思考结果: {}", thinkingResult);
         // 解析思考结果，生成Action列表
         List<AgentAction> actions = parseThinkingResult(thinkingResult, goal, context);
         
@@ -224,6 +331,7 @@ public class ThinkingEngine {
 
             Integer showIterations = config.getActionExecutionHistoryCount();
             int start = showIterations==null?0:totalIterations-showIterations;
+            start=Math.max(start,0);
 
             if (start < totalIterations) {
                 prompt.append("## 最近Action执行历史（最近").append(showIterations).append("轮迭代）\n\n");
@@ -274,10 +382,10 @@ public class ThinkingEngine {
             
             StreamingCallback callback = createThinkingStreamingCallback(context);
             String response = llmChatHandler.chatWithCallback(modelId, messages, callback);
-            log.debug("思考LLM请求完成，耗时 {} ms", java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs));
-            log.debug("LLM思考完整响应: {}", response);
+            log.info("思考LLM请求完成，耗时 {} ms", java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs));
+            log.info("LLM思考完整响应: {}", response);
             String actionsJson = extractActionsJson(response);
-            log.debug("LLM思考提取的动作JSON: {}", actionsJson);
+            log.info("LLM思考提取的动作JSON: {}", actionsJson);
             return actionsJson;
     }
 
@@ -516,7 +624,7 @@ public class ThinkingEngine {
 
             @Override
             public void onComplete(String fullText) {
-                if (!StringUtils.isEmpty(fullText) && state.fullText.length() == 0) {
+                if (!StringUtils.isEmpty(fullText) && state.fullText.isEmpty()) {
                     state.fullText.append(fullText);
                 }
                 String delta = handleThinkingStream(state, context);
@@ -558,12 +666,12 @@ public class ThinkingEngine {
             }
             if (thinkingEndIdx != -1 && !state.thinkingClosed) {
                 state.thinkingClosed = true;
+                // 思考结束即视为完成
+                if (!state.thinkingDoneMarked) {
+                    state.thinkingDoneMarked = true;
+                    sendProgressEvent(context, AgentConstants.EVENT_AGENT_THINKING, "思考完成，正在生成动作计划...");
+                }
             }
-        }
-        int doneIdx = text.indexOf("<THINKING_DONE>");
-        if (doneIdx != -1 && !state.thinkingDoneMarked) {
-            state.thinkingDoneMarked = true;
-            sendProgressEvent(context, AgentConstants.EVENT_AGENT_THINKING, "思考完成，正在生成动作计划...");
         }
         return delta;
     }
@@ -586,11 +694,8 @@ public class ThinkingEngine {
         String cleaned = delta;
         cleaned = cleaned.replace("<thinking>", "");
         cleaned = cleaned.replace("</thinking>", "");
-        cleaned = cleaned.replace("<THINKING_DONE>", "");
         cleaned = cleaned.replace("</thinking", "");
         cleaned = cleaned.replace("<thinking", "");
-        cleaned = cleaned.replace("</THINKING_DONE", "");
-        cleaned = cleaned.replace("<THINKING_DONE", "");
         return cleaned.trim().isEmpty() ? "" : cleaned;
     }
 

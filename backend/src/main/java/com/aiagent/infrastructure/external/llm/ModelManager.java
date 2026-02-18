@@ -236,6 +236,9 @@ public class ModelManager {
                     provider, modelDef.getId(), baseUrl);
                 int timeoutSeconds = resolveTimeoutSeconds(modelDef);
                 return OpenAiStreamingChatModel.builder()
+                    .httpClientBuilder(new JdkHttpClientBuilder()
+                        .httpClientBuilder(HttpClient.newBuilder()
+                            .version(HttpClient.Version.HTTP_1_1)))
                     .apiKey(modelDef.getApiKey())
                     .baseUrl(baseUrl)
                     .modelName(modelDef.getId())
