@@ -7,31 +7,41 @@ import type { RouteRecordRaw } from 'vue-router';
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    redirect: '/agent',
-  },
-  {
-    path: '/agent',
-    name: 'AgentChat',
-    component: () => import('@/views/agent/AgentChat.vue'),
+    name: 'Home',
+    component: () => import('@/views/Home.vue'),
     meta: {
-      title: 'AI Agent 智能助手',
+      title: 'Zeno Agent - Build Next-Gen AI',
     },
   },
   {
-    path: '/knowledge-bases',
-    name: 'KnowledgeBaseList',
-    component: () => import('@/views/knowledge-base/KnowledgeBaseList.vue'),
-    meta: {
-      title: '知识库管理',
-    },
-  },
-  {
-    path: '/knowledge-bases/:id',
-    name: 'KnowledgeBaseDetail',
-    component: () => import('@/views/knowledge-base/KnowledgeBaseDetail.vue'),
-    meta: {
-      title: '知识库详情',
-    },
+    path: '/',
+    component: () => import('@/layout/MainLayout.vue'),
+    children: [
+      {
+        path: 'agent',
+        name: 'AgentChat',
+        component: () => import('@/views/agent/AgentChat.vue'),
+        meta: {
+          title: '智能对话',
+        },
+      },
+      {
+        path: 'knowledge-bases',
+        name: 'KnowledgeBaseList',
+        component: () => import('@/views/knowledge-base/KnowledgeBaseList.vue'),
+        meta: {
+          title: '知识库管理',
+        },
+      },
+      {
+        path: 'knowledge-bases/:id',
+        name: 'KnowledgeBaseDetail',
+        component: () => import('@/views/knowledge-base/KnowledgeBaseDetail.vue'),
+        meta: {
+          title: '知识库详情',
+        },
+      },
+    ],
   },
 ];
 
@@ -49,4 +59,3 @@ router.beforeEach((to, from, next) => {
 });
 
 export default router;
-

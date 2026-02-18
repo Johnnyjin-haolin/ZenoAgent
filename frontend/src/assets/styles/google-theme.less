@@ -1,0 +1,129 @@
+/**
+ * Google Code Wiki 风格主题变量与全局样式
+ * 参照 Material Design 3 轻量版
+ */
+
+:root {
+  /* Google Color Palette */
+  --google-blue: #1A73E8;      /* Primary Action */
+  --google-blue-hover: #174EA6;
+  --google-red: #EA4335;       /* Error */
+  --google-yellow: #FBBC05;    /* Warning */
+  --google-green: #34A853;     /* Success */
+  
+  /* Neutral Colors */
+  --color-text-primary: #202124;
+  --color-text-secondary: #5F6368;
+  --color-border: #DADCE0;
+  --color-background: #F8F9FA;
+  --color-surface: #FFFFFF;
+  --color-surface-hover: #F1F3F4;
+  
+  /* Layout */
+  --header-height: 60px;
+  --sidebar-width: 240px;
+  --sidebar-width-collapsed: 60px;
+  
+  /* Components */
+  --border-radius-base: 4px;
+  --border-radius-lg: 8px;
+  --box-shadow-card: 0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+  --box-shadow-hover: 0 1px 3px 0 rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15);
+  
+  /* Animation */
+  --transition-base: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+/* Dark Theme Variables (Tech Style - Blue/Black) */
+:root[data-theme='dark'] {
+  /* Core Colors */
+  --google-blue: #3B82F6;      /* Neon Blue */
+  --google-blue-hover: #60A5FA;
+  --google-cyan: #06B6D4;      /* Electric Cyan */
+  --google-red: #F28B82;
+  --google-yellow: #FDD663;
+  --google-green: #81C995;
+  
+  /* Backgrounds */
+  --color-background: #050B14; /* Deep Void (Black-Blue) */
+  --color-surface: rgba(15, 23, 42, 0.6); /* Cyber Surface */
+  --color-surface-hover: rgba(30, 41, 59, 0.8);
+  --color-surface-translucent: rgba(5, 11, 20, 0.85);
+  
+  /* Text */
+  --color-text-primary: #F8FAFC;   /* Bright White */
+  --color-text-secondary: #94A3B8; /* Blue Grey */
+  --color-text-disabled: #475569;
+  
+  /* Borders */
+  --color-border: rgba(59, 130, 246, 0.2);
+  --color-border-hover: rgba(6, 182, 212, 0.5);
+  
+  /* Effects */
+  --glow-primary: 0 0 20px rgba(59, 130, 246, 0.3);
+  --glow-text: 0 0 10px rgba(248, 250, 252, 0.1);
+  --glass-effect: blur(20px) saturate(180%);
+}
+
+/* Typography */
+@font-face {
+  font-family: 'Google Sans';
+  font-style: normal;
+  font-weight: 400;
+  src: local('Google Sans Regular'), local('GoogleSans-Regular'), url(https://fonts.gstatic.com/s/googlesans/v14/4UaGrENHsxJlGDuGo1OIlL3Owp5eKQtG.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+body {
+  font-family: 'Google Sans', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  color: var(--color-text-primary);
+  background-color: var(--color-background);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Global Component Overrides */
+
+/* Buttons */
+.ant-btn-primary {
+  background-color: var(--google-blue);
+  border-color: var(--google-blue);
+  box-shadow: none;
+  font-weight: 500;
+  
+  &:hover, &:focus {
+    background-color: var(--google-blue-hover) !important;
+    border-color: var(--google-blue-hover) !important;
+  }
+}
+
+/* Cards */
+.google-card {
+  background: var(--color-surface);
+  border-radius: var(--border-radius-lg);
+  border: 1px solid transparent;
+  transition: var(--transition-base);
+  
+  &:hover {
+    box-shadow: var(--box-shadow-card);
+    transform: translateY(-1px);
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #DADCE0;
+  border-radius: 4px;
+  
+  &:hover {
+    background: #BDC1C6;
+  }
+}

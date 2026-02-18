@@ -1,30 +1,22 @@
 <template>
   <div class="chat-header">
     <div class="header-title">
-      <Icon icon="ant-design:robot-outlined" class="title-icon" />
-      <img v-if="brandConfig.logo" :src="brandConfig.logo" class="brand-logo" alt="brand" />
-      <h2 v-if="showBrandTitle">{{ brandConfig.name }}</h2>
+      <!-- Title Removed - Handled by Main Layout -->
     </div>
 
     <div class="header-actions">
-      <a-button size="small" @click="emit('navigate-knowledge')" style="margin-right: 8px;">
-        <template #icon>
-          <Icon icon="ant-design:book-outlined" />
-        </template>
-        知识库管理
-      </a-button>
-      <a-button size="small" @click="emit('open-config')">
+      <a-button type="text" @click="emit('open-config')" class="action-btn">
         <template #icon>
           <Icon icon="ant-design:setting-outlined" />
         </template>
         配置
       </a-button>
-      <a-dropdown v-if="brandLinks.length > 0" placement="bottomRight">
-        <a-button size="small" type="default" class="header-help-button">
+      
+      <a-dropdown v-if="brandLinks && brandLinks.length > 0" placement="bottomRight">
+        <a-button type="text" class="action-btn">
           <template #icon>
             <Icon icon="ant-design:question-circle-outlined" />
           </template>
-          帮助
         </a-button>
         <template #overlay>
           <a-menu>
@@ -34,7 +26,6 @@
           </a-menu>
         </template>
       </a-dropdown>
-      <a-tag v-if="brandVersion" class="header-version-tag">{{ brandVersion }}</a-tag>
     </div>
   </div>
 </template>
@@ -73,54 +64,32 @@ const emit = defineEmits<{
 
 <style scoped lang="less">
 .chat-header {
-  padding: 12px 20px;
-  background: #fff;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 8px 24px;
+  background: transparent;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
+  height: 48px;
 
   .header-title {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-
-    .title-icon {
-      font-size: 24px;
-      color: var(--brand-primary);
-    }
-
-    .brand-logo {
-      width: 24px;
-      height: 24px;
-      border-radius: 4px;
-      object-fit: contain;
-    }
-
-    h2 {
-      margin: 0;
-      font-size: 18px;
-      font-weight: 600;
-      color: #262626;
-    }
+    flex: 1;
   }
 
   .header-actions {
     display: flex;
     align-items: center;
-    gap: 6px;
-  }
-
-  .header-help-button {
-    padding: 0 8px;
-  }
-
-  .header-version-tag {
-    margin-left: 4px;
-    background: #f0f5ff;
-    color: #2f54eb;
-    border-color: #adc6ff;
+    gap: 8px;
+    
+    .action-btn {
+      color: #5F6368;
+      
+      &:hover {
+        background-color: rgba(0,0,0,0.04);
+        color: #202124;
+      }
+    }
   }
 }
 </style>

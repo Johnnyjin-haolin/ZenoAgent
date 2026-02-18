@@ -114,37 +114,43 @@ defineExpose({ focusInput });
 
 <style scoped lang="less">
 .chat-footer {
-  background: #fff;
-  border-top: 1px solid #f0f0f0;
+  background: transparent;
+  padding: 0 24px 24px;
   flex-shrink: 0;
 
   .status-bar {
-    padding: 6px 20px;
-    background: #f0f2f5;
+    padding: 6px 12px;
+    background: transparent;
     display: flex;
     align-items: center;
     gap: 8px;
     font-size: 13px;
-    color: #595959;
+    color: var(--color-text-secondary);
+    margin-bottom: 8px;
   }
 
   .input-container {
-    padding: 12px 20px;
+    padding: 0;
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
   }
 
   .input-wrapper {
     position: relative;
-    background: #f5f5f5;
-    border-radius: 12px;
-    border: 1px solid #e8e8e8;
-    transition: all 0.2s;
-    padding: 12px;
-    min-height: 120px;
+    background: var(--color-surface-hover); /* #F1F3F4 */
+    border-radius: 24px; /* More rounded */
+    border: 1px solid transparent;
+    transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+    padding: 12px 16px;
+    min-height: 56px;
+    display: flex;
+    flex-direction: column;
 
     &:focus-within {
-      border-color: #1890ff;
-      background: #fff;
-      box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1);
+      background: #FFFFFF;
+      border-color: rgba(0,0,0,0.1);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
 
     :deep(.ant-input) {
@@ -152,11 +158,12 @@ defineExpose({ focusInput });
       border: none;
       box-shadow: none;
       padding: 0;
-      padding-bottom: 40px;
       resize: none;
-      font-size: 14px;
-      line-height: 1.6;
-      min-height: 80px;
+      font-size: 16px;
+      line-height: 1.5;
+      min-height: 24px;
+      margin-bottom: 32px; /* Space for bottom actions */
+      color: var(--color-text-primary);
 
       &:focus,
       &:hover {
@@ -165,22 +172,22 @@ defineExpose({ focusInput });
       }
 
       &::placeholder {
-        color: #bfbfbf;
+        color: var(--color-text-secondary);
       }
     }
 
     .input-bottom-left {
       position: absolute;
       bottom: 8px;
-      left: 12px;
+      left: 16px;
       z-index: 10;
 
       :deep(.agent-model-selector) {
         .ant-select {
           .ant-select-selector {
-            background: transparent;
-            border: none;
-            box-shadow: none;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
             padding: 0 20px 0 0;
             min-height: auto;
             height: auto;
@@ -190,19 +197,18 @@ defineExpose({ focusInput });
             padding: 0;
             line-height: 1.5;
             font-size: 13px;
-            color: #595959;
+            color: var(--color-text-secondary);
+            font-weight: 500;
           }
 
           .ant-select-arrow {
             right: 0;
             font-size: 12px;
-            color: #8c8c8c;
+            color: var(--color-text-secondary);
           }
 
-          &:hover .ant-select-selector,
-          &.ant-select-focused .ant-select-selector {
-            border-color: transparent;
-            background: transparent;
+          &:hover .ant-select-selection-item {
+            color: var(--color-text-primary);
           }
         }
       }
@@ -222,33 +228,33 @@ defineExpose({ focusInput });
         height: 32px;
         padding: 0;
         border: none;
-        border-radius: 6px;
+        border-radius: 50%;
         transition: all 0.2s;
+        cursor: pointer;
+        background: transparent;
+        color: var(--color-text-secondary);
 
         &:hover:not(:disabled) {
-          background: #e6f7ff;
-          color: #1890ff;
+          background: rgba(0,0,0,0.05);
+          color: var(--color-text-primary);
         }
 
         &.send-button {
           &:not(:disabled) {
-            background: #1890ff;
+            background: var(--google-blue);
             color: #fff;
 
             &:hover {
-              background: #40a9ff;
+              background: var(--google-blue-hover);
+              box-shadow: 0 1px 3px rgba(0,0,0,0.2);
             }
           }
 
           &:disabled {
-            color: #bfbfbf;
+            color: rgba(0,0,0,0.2);
             background: transparent;
-            cursor: not-allowed;
+            cursor: default;
           }
-        }
-
-        .anticon {
-          font-size: 16px;
         }
       }
     }

@@ -24,7 +24,6 @@
         :show-brand-title="showBrandTitle"
         :brand-links="brandLinks"
         :brand-version="brandVersion"
-        @navigate-knowledge="handleNavigateToKnowledgeBases"
         @open-config="showConfigDrawer = true"
       />
 
@@ -111,11 +110,6 @@ const showConfigDrawer = ref(false);
 
 // 会话 ID（由会话列表与SSE更新）
 const currentConversationId = ref('');
-
-// 导航到知识库管理页面
-const handleNavigateToKnowledgeBases = () => {
-  router.push('/knowledge-bases');
-};
 
 // Agent 配置
 const selectedModelId = ref('');
@@ -410,22 +404,23 @@ watch(
 .agent-chat-container {
   display: flex;
   height: 100%;
-  background: #f5f5f5;
+  background: var(--color-background);
   overflow: hidden;
-  --brand-primary: #1890ff;
+  --brand-primary: var(--google-blue);
 }
 
 .left-slide {
   width: 280px;
   height: 100%;
-  background: #fff;
-  border-right: 1px solid #f0f0f0;
-  transition: all 0.3s;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
   position: relative;
 
   &.collapsed {
     width: 0;
     overflow: hidden;
+    border-right: none;
   }
 
   .slide-toggle-btn {
@@ -435,8 +430,8 @@ watch(
     transform: translateY(-50%);
     width: 24px;
     height: 48px;
-    background: #fff;
-    border: 1px solid #f0f0f0;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-radius: 0 8px 8px 0;
     display: flex;
     align-items: center;
@@ -444,9 +439,10 @@ watch(
     cursor: pointer;
     z-index: 10;
     transition: all 0.2s;
+    box-shadow: 2px 0 4px rgba(0,0,0,0.05);
 
     &:hover {
-      background: #f5f5f5;
+      background: var(--color-surface-hover);
     }
   }
 }
@@ -458,6 +454,7 @@ watch(
   height: 100%;
   min-width: 0;
   overflow: hidden;
+  background: var(--color-background);
 
   &.expanded {
     margin-left: 0;

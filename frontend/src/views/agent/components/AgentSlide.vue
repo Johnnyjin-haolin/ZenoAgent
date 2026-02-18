@@ -141,58 +141,54 @@ const handleDelete = (conversation: ConversationInfo) => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #fafafa;
+  background: var(--color-surface);
 }
 
 .slide-header {
   padding: 16px;
-  border-bottom: 1px solid #f0f0f0;
-  background: #fff;
+  background: var(--color-surface);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  border-bottom: 1px solid transparent;
 
   .slide-title {
     margin: 0;
     font-size: 16px;
-    font-weight: 600;
-    color: #262626;
+    font-weight: 500;
+    color: var(--color-text-primary);
   }
 }
 
 .slide-content {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 8px 12px;
 }
 
 .conversation-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px;
-  margin-bottom: 8px;
-  background: #fff;
-  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 4px;
+  background: transparent;
+  border-radius: 20px; /* Google rounded style */
   cursor: pointer;
-  transition: all 0.2s;
-  border: 2px solid transparent;
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+  border: 1px solid transparent;
+  min-height: 44px;
 
   &:hover {
-    background: #f5f5f5;
-    border-color: #d9d9d9;
-  }
-
-  &.temporary {
-    background: #fffbe6;
+    background: var(--color-surface-hover); /* #F1F3F4 */
   }
 
   &.active {
-    background: #e6f7ff;
-    border-color: #1890ff;
+    background: #E8F0FE;
+    color: #1967D2;
 
     .conversation-title {
-      color: #1890ff;
+      color: #1967D2;
       font-weight: 500;
     }
   }
@@ -205,34 +201,34 @@ const handleDelete = (conversation: ConversationInfo) => {
   .conversation-title {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     font-size: 14px;
-    color: #262626;
-  }
-
-  .conversation-title > span:first-child {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    color: var(--color-text-primary);
+    
+    span:first-child {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
   }
 
   .conversation-temp-tag {
     flex-shrink: 0;
     font-size: 11px;
-    color: #8c8c8c;
-    background: #f5f5f5;
+    color: var(--color-text-secondary);
+    background: rgba(0,0,0,0.05);
     border-radius: 4px;
     padding: 0 6px;
-    line-height: 18px;
   }
 
   .conversation-actions {
     display: flex;
-    gap: 4px;
+    gap: 2px;
     opacity: 0;
     transition: opacity 0.2s;
+    margin-left: 8px;
   }
 
   &:hover .conversation-actions {
@@ -240,21 +236,18 @@ const handleDelete = (conversation: ConversationInfo) => {
   }
 }
 
-// 滚动条样式
+/* Scrollbar */
 .slide-content::-webkit-scrollbar {
   width: 6px;
 }
-
 .slide-content::-webkit-scrollbar-track {
   background: transparent;
 }
-
 .slide-content::-webkit-scrollbar-thumb {
-  background: #d9d9d9;
+  background: rgba(0,0,0,0.2);
   border-radius: 3px;
-
   &:hover {
-    background: #bfbfbf;
+    background: rgba(0,0,0,0.3);
   }
 }
 </style>
