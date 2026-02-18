@@ -71,7 +71,7 @@ export default {
         desc: 'Autonomously plan tasks and call tools to solve complex problems.'
       }
     },
-    footer: '© 2026 Zeno Agent. Next Generation Autonomous Agent Platform.'
+    footer: '© 2026 Zeno Agent. Lightweight Agent.'
   },
   agent: {
     welcome: 'Zeno Cognitive Core',
