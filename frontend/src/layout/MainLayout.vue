@@ -65,9 +65,15 @@
               </template>
             </a-button>
           </a-tooltip>
-          <TechBorder class="avatar-border">
-            <a-avatar src="https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff" />
-          </TechBorder>
+          
+          <div class="user-profile-simple">
+            <a-avatar 
+              :size="36" 
+              class="user-avatar-simple"
+            >
+              <template #icon><UserOutlined /></template>
+            </a-avatar>
+          </div>
         </div>
       </a-layout-header>
 
@@ -93,7 +99,8 @@ import {
   SettingOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  TranslationOutlined
+  TranslationOutlined,
+  UserOutlined
 } from '@ant-design/icons-vue';
 import TechBackground from '@/components/TechBackground.vue';
 import TechBorder from '@/components/TechBorder.vue';
@@ -312,14 +319,24 @@ const toggleLanguage = () => {
     }
   }
   
-  .avatar-border {
-    padding: 2px;
-    border-radius: 50%;
+  .user-profile-simple {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     
-    :deep(.content-wrapper) {
-      border-radius: 50%;
-      padding: 2px;
-      background: transparent;
+    .user-avatar-simple {
+      background: rgba(59, 130, 246, 0.1);
+      color: #60A5FA;
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      transition: all 0.3s ease;
+      cursor: default;
+      
+      &:hover {
+        background: rgba(59, 130, 246, 0.2);
+        border-color: rgba(59, 130, 246, 0.4);
+        box-shadow: 0 0 12px rgba(59, 130, 246, 0.3);
+        color: #93C5FD;
+      }
     }
   }
 }

@@ -10,7 +10,7 @@
     <div class="message-content-wrapper">
       <!-- 时间和模型信息 -->
       <div class="message-header">
-        <span class="message-time">{{ message.datetime }}</span>
+        <span class="message-time">{{ formattedTime }}</span>
         <a-tag v-if="message.model && message.role === 'assistant'" color="blue" size="small">
           {{ message.model }}
         </a-tag>
@@ -164,6 +164,45 @@ const aiAvatar = computed(() => {
   return zenoAgentAvatar;
 });
 
+// 格式化时间
+const formattedTime = computed(() => {
+  if (!props.message.datetime) return '';
+  try {
+    const date = new Date(props.message.datetime);
+    const now = new Date();
+    
+    // 检查是否是今天
+    const isToday = date.getDate() === now.getDate() &&
+      date.getMonth() === now.getMonth() &&
+      date.getFullYear() === now.getFullYear();
+      
+    // 检查是否是今年
+    const isThisYear = date.getFullYear() === now.getFullYear();
+    
+    // 补零函数
+    const pad = (n: number) => n < 10 ? '0' + n : n;
+    
+    const hours = pad(date.getHours());
+    const minutes = pad(date.getMinutes());
+    const timeStr = `${hours}:${minutes}`;
+    
+    if (isToday) {
+      return timeStr;
+    }
+    
+    const month = pad(date.getMonth() + 1);
+    const day = pad(date.getDate());
+    
+    if (isThisYear) {
+      return `${month}-${day} ${timeStr}`;
+    }
+    
+    return `${date.getFullYear()}-${month}-${day} ${timeStr}`;
+  } catch (e) {
+    return props.message.datetime;
+  }
+});
+
 // Markdown 渲染器
 const mdi = new MarkdownIt({
   html: true,
@@ -308,10 +347,7 @@ function getImageUrl(img: string) {
 
 // 预览图片
 function handlePreviewImage(img: string) {
-  createImgPreview({
-    imageList: [getImageUrl(img)],
-    defaultWidth: 700,
-  });
+  createImgPreview([getImageUrl(img)], 0);
 }
 
 // 工具状态颜色
