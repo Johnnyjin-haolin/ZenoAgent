@@ -99,8 +99,11 @@ export type AgentEventType =
   | 'agent:tool_result'     // 工具执行结果
   | 'agent:message'         // 流式内容
   | 'agent:iteration_start' // 迭代开始
-  | 'agent:iteration_end'   // 迭代结束
+  | 'agent:iteration_end'       // 迭代结束
+  | 'agent:status:analyzing'          // 正在分析任务和用户意图
   | 'agent:status:thinking_process'     // 思考过程
+  | 'agent:status:planning'             // 正在规划
+  | 'agent:status:rag_querying'         // 正在查询知识库
   | 'agent:status:tool_executing_single' // 单个工具执行
   | 'agent:status:tool_executing_batch'  // 批量工具执行
   | 'agent:stream_complete' // 流式输出完成

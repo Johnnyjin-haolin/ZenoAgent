@@ -90,6 +90,9 @@ export default {
       calling_tool: '调用工具...',
       generating: '生成回复...',
       processing: '处理中...',
+      analyzing: '正在分析任务和用户意图...',
+      planning: '正在规划...',
+      rag_querying: '正在查询知识库...',
       thinking_process: '正在进行深入思考...',
       tool_executing_single: '正在执行工具: {toolName}...',
       tool_executing_batch: '正在并行执行 {count} 个操作...',
@@ -186,13 +189,6 @@ export default {
         success: '成功',
         error: '失败',
       },
-    },
-    status: {
-      thinking: '思考中...',
-      retrieving: '检索知识库...',
-      calling_tool: '调用工具中...',
-      generating: '正在生成...',
-      processing: '处理中...',
     },
     chat: {
       waiting: '等待中',

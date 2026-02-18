@@ -373,7 +373,10 @@ function dispatchEvent(event: AgentEvent, callbacks: AgentEventCallbacks) {
       callbacks.onIterationEnd?.(event);
       break;
 
+    case 'agent:status:analyzing':
     case 'agent:status:thinking_process':
+    case 'agent:status:planning':
+    case 'agent:status:rag_querying':
     case 'agent:status:tool_executing_single':
     case 'agent:status:tool_executing_batch':
       logger.debug('[Agent] 状态更新:', event.event, event.data);

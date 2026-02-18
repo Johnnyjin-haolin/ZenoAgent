@@ -87,9 +87,12 @@ export default {
     status: {
       thinking: 'Thinking...',
       retrieving: 'Retrieving...',
-      calling_tool: 'Calling Tool...',
-      generating: 'Generating Response...',
+      calling_tool: 'Calling tool...',
+      generating: 'Generating response...',
       processing: 'Processing...',
+      analyzing: 'Analyzing task and user intent...',
+      planning: 'Planning...',
+      rag_querying: 'Querying knowledge base...',
       thinking_process: 'Thinking deeply...',
       tool_executing_single: 'Executing tool: {toolName}...',
       tool_executing_batch: 'Executing {count} actions in parallel...',
@@ -186,13 +189,6 @@ export default {
         success: 'Success',
         error: 'Failed',
       },
-    },
-    status: {
-      thinking: 'Thinking...',
-      retrieving: 'Retrieving...',
-      calling_tool: 'Calling Tool...',
-      generating: 'Generating...',
-      processing: 'Processing...',
     },
     chat: {
       waiting: 'Waiting',

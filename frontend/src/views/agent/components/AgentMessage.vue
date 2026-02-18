@@ -273,10 +273,13 @@ const getStatusText = computed(() => {
     retrieving: t('agent.status.retrieving'),
     calling_tool: t('agent.status.calling_tool'),
     generating: t('agent.status.generating'),
-    'agent:status:thinking_process': t('agent.status.thinking_process'),
-    'agent:status:tool_executing_single': t('agent.status.tool_executing_single', { 
-      toolName: props.message.data?.toolName || 'Tool' 
-    }),
+        'agent:status:analyzing': t('agent.status.analyzing'),
+        'agent:status:thinking_process': t('agent.status.thinking_process'),
+        'agent:status:planning': t('agent.status.planning'),
+        'agent:status:rag_querying': t('agent.status.rag_querying'),
+        'agent:status:tool_executing_single': t('agent.status.tool_executing_single', {  
+          toolName: props.message.data?.toolName || 'Tool' 
+        }),
     'agent:status:tool_executing_batch': t('agent.status.tool_executing_batch', { 
       count: props.message.data?.count || 0 
     }),

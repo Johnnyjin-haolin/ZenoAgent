@@ -220,7 +220,7 @@ public class ThinkingEngine {
         log.info("开始思考，目标: {}, 上次结果数量: {}", goal, lastResults != null ? lastResults.size() : 0);
         
         // 发送思考进度事件
-        sendProgressEvent(context, AgentConstants.EVENT_AGENT_THINKING, "正在分析任务和用户意图...");
+        sendProgressEvent(context, AgentConstants.EVENT_STATUS_ANALYZING, "正在分析任务和用户意图...");
         
         // 构建思考提示词（分离系统提示词和用户提示词）
         PromptPair promptPair = buildThinkingPrompt(goal, context, lastResults);
@@ -658,7 +658,7 @@ public class ThinkingEngine {
         if (thinkingStartIdx != -1 && !state.thinkingStarted) {
             state.thinkingStarted = true;
             state.thinkingContentSentIndex = thinkingStartIdx + tagLength;
-            sendProgressEvent(context, AgentConstants.EVENT_AGENT_THINKING, "正在进行深入思考...");
+            sendProgressEvent(context, AgentConstants.EVENT_STATUS_THINKING_PROCESS, "正在进行深入思考...");
         }
         String delta = "";
         if (state.thinkingStarted) {
@@ -679,7 +679,7 @@ public class ThinkingEngine {
         int doneIdx = text.indexOf("<THINKING_DONE>");
         if (doneIdx != -1 && !state.thinkingDoneMarked) {
             state.thinkingDoneMarked = true;
-            sendProgressEvent(context, AgentConstants.EVENT_AGENT_THINKING, "思考完成，正在生成动作计划...");
+            sendProgressEvent(context, AgentConstants.EVENT_STATUS_PLANNING, "思考完成，正在生成动作计划...");
         }
         
         return delta;

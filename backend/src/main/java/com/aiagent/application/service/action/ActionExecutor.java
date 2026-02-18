@@ -184,9 +184,6 @@ public class ActionExecutor {
             long start = System.currentTimeMillis();
             ToolExecutionResult toolResult = mcpToolExecutor.execute(toolInfo, toolCallParams.getToolParams());
 
-            sendProgressEvent(context, AgentConstants.EVENT_AGENT_TOOL_EXECUTING,
-                    "调用工具: " + toolInfo.getName() + " 成功");
-            
             // 注意：动作执行历史会在 executeParallel 方法结束后统一记录
             
             long duration = System.currentTimeMillis() - startTime;
@@ -210,7 +207,6 @@ public class ActionExecutor {
             ActionResult result = ActionResult.failure(action, e.getMessage());
             result.setDuration(duration);
             
-            sendProgressEvent(context, AgentConstants.EVENT_AGENT_TOOL_EXECUTING, "调用工具失败");
             sendToolResultEvent(context, null, action.getName(), null, e.getMessage());
             return result;
         }
@@ -255,7 +251,7 @@ public class ActionExecutor {
                 ragMessage += " (知识库数量: " + knowledgeIds.size() + ")";
             }
             ragMessage += "...";
-            sendProgressEvent(context, AgentConstants.EVENT_AGENT_RAG_QUERYING, ragMessage);
+            sendProgressEvent(context, AgentConstants.EVENT_STATUS_RAG_QUERYING, ragMessage);
             
             // 执行RAG检索（传递 context，使用已加载的知识库信息）
             AgentKnowledgeResult knowledgeResult = ragEnhancer.retrieve(query, context.getKnowledgeBaseMap(),context.getRagConfig());

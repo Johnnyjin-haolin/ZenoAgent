@@ -313,8 +313,14 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           
           // 更新全局状态文本（手动处理国际化）
           let statusText = '';
-          if (event.event === 'agent:status:thinking_process') {
+          if (event.event === 'agent:status:analyzing') {
+            statusText = t('agent.status.analyzing');
+          } else if (event.event === 'agent:status:thinking_process') {
             statusText = t('agent.status.thinking_process');
+          } else if (event.event === 'agent:status:planning') {
+            statusText = t('agent.status.planning');
+          } else if (event.event === 'agent:status:rag_querying') {
+            statusText = t('agent.status.rag_querying');
           } else if (event.event === 'agent:status:tool_executing_single') {
             statusText = t('agent.status.tool_executing_single', { 
               toolName: event.data?.toolName || 'Tool' 

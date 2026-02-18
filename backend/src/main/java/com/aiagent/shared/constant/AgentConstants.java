@@ -77,7 +77,10 @@ public class AgentConstants {
     public static final String EVENT_ITERATION_END = "agent:iteration_end";
 
     // Detailed status events for i18n
+    public static final String EVENT_STATUS_ANALYZING = "agent:status:analyzing";
     public static final String EVENT_STATUS_THINKING_PROCESS = "agent:status:thinking_process";
+    public static final String EVENT_STATUS_PLANNING = "agent:status:planning";
+    public static final String EVENT_STATUS_RAG_QUERYING = "agent:status:rag_querying";
     public static final String EVENT_STATUS_TOOL_EXECUTING_SINGLE = "agent:status:tool_executing_single";
     public static final String EVENT_STATUS_TOOL_EXECUTING_BATCH = "agent:status:tool_executing_batch";
     
