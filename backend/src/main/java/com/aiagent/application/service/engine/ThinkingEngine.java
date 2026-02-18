@@ -622,7 +622,7 @@ public class ThinkingEngine {
                     return;
                 }
                 state.fullText.append(token);
-                String delta = handleThinkingStream(state, context);
+                String delta = handleThinkingStream(state, context, false);
                 if (StringUtils.isNotEmpty(delta)) {
                     sendThinkingDeltaEvent(context, delta);
                 }
@@ -633,7 +633,7 @@ public class ThinkingEngine {
                 if (!StringUtils.isEmpty(fullText) && state.fullText.isEmpty()) {
                     state.fullText.append(fullText);
                 }
-                String delta = handleThinkingStream(state, context);
+                String delta = handleThinkingStream(state, context, true);
                 if (StringUtils.isNotEmpty(delta)) {
                     sendThinkingDeltaEvent(context, delta);
                 }
@@ -647,7 +647,7 @@ public class ThinkingEngine {
         };
     }
 
-    private String handleThinkingStream(ThinkingStreamState state, AgentContext context) {
+    private String handleThinkingStream(ThinkingStreamState state, AgentContext context, boolean isComplete) {
         String text = state.fullText.toString();
         if (StringUtils.isEmpty(text)) {
             return "";
@@ -663,6 +663,17 @@ public class ThinkingEngine {
         String delta = "";
         if (state.thinkingStarted) {
             int logicalEnd = thinkingEndIdx != -1 ? thinkingEndIdx : text.length();
+
+            // Lookahead buffer: if we haven't found the end tag yet and stream is not complete,
+            // check if the end of the current content looks like a partial closing tag.
+            if (thinkingEndIdx == -1 && !isComplete) {
+                String currentContent = text.substring(state.thinkingContentSentIndex, logicalEnd);
+                int bufferLen = calculatePartialTagMatchLength(currentContent);
+                if (bufferLen > 0) {
+                    logicalEnd -= bufferLen;
+                }
+            }
+
             if (state.thinkingContentSentIndex < logicalEnd) {
                 String newContent = text.substring(state.thinkingContentSentIndex, logicalEnd);
                 if (StringUtils.isNotEmpty(newContent)) {
@@ -683,6 +694,22 @@ public class ThinkingEngine {
         }
         
         return delta;
+    }
+
+    private int calculatePartialTagMatchLength(String content) {
+        if (StringUtils.isEmpty(content)) {
+            return 0;
+        }
+        String tag = "</thinking>";
+        // Check from longest possible match down to length 1
+        // We only care if the content *ends* with a prefix of the tag
+        for (int i = tag.length() - 1; i >= 1; i--) {
+            String prefix = tag.substring(0, i);
+            if (content.endsWith(prefix)) {
+                return i;
+            }
+        }
+        return 0;
     }
 
     private void sendThinkingDeltaEvent(AgentContext context, String content) {
