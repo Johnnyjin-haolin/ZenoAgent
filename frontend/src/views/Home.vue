@@ -1,6 +1,6 @@
 <template>
   <div class="home-container dark-theme">
-    <!-- Removed AuroraBackground, using internal particles or new background -->
+    <TechBackground />
     
     <!-- Navbar -->
     <nav class="navbar">
@@ -66,10 +66,12 @@
 
 <script setup lang="ts">
 import ZenoTesseract from '@/components/ZenoTesseract.vue';
+import TechBackground from '@/components/TechBackground.vue';
 </script>
 
 <style lang="less" scoped>
 /* Force disable horizontal scroll globally for this page */
+:global(html),
 :global(body) {
   overflow-x: hidden;
   width: 100%;
@@ -77,7 +79,7 @@ import ZenoTesseract from '@/components/ZenoTesseract.vue';
 
 .home-container {
   min-height: 100vh;
-  background: radial-gradient(circle at 50% 0%, #0F1729 0%, #020408 100%); /* Abyss Black */
+  /* background: radial-gradient(circle at 50% 0%, #0F1729 0%, #020408 100%);  Abyss Black - Replaced by TechBackground */
   font-family: 'Inter', 'Google Sans', sans-serif;
   color: #F8FAFC;
   position: relative;
