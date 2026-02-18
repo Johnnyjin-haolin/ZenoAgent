@@ -1,5 +1,6 @@
 package com.aiagent.application.service.engine;
 
+import com.aiagent.api.dto.ThinkingConfig;
 import com.aiagent.application.model.AgentKnowledgeDocument;
 import com.aiagent.application.model.AgentKnowledgeResult;
 import com.aiagent.application.service.action.ActionInputDTO;
@@ -74,7 +75,7 @@ public class ThinkingEngine {
     private static final String OUTPUT_FORMAT_PROMPT = """
             ## 输出协议与格式规范
             
-            你必须严格遵守以下"两阶段"输出协议：
+            你必须严格遵守以下"三段式"输出协议：
             
             ### 第一阶段：深度思考 (Thinking)
             在做出决定前，必须先进行逻辑推演。
@@ -85,8 +86,19 @@ public class ThinkingEngine {
             3. 规划后续步骤...
             </thinking>
             
-            ### 第二阶段：动作执行 (Execution)
-            思考结束后（即 `</thinking>` 闭合后），**立即**输出最终的动作指令 JSON，不要包含任何其他解释性文字。
+            ### 第二阶段：思考截断 (Checkpoint)
+            思考结束后，必须输出唯一的结束标记：
+            <THINKING_DONE>
+            
+            ### 第三阶段：动作执行 (Execution)
+            在输出 `<THINKING_DONE>` 后，**立即**输出最终的动作指令 JSON，不要包含任何其他解释性文字。
+            
+            **⚠️ 严正警告 (CRITICAL WARNING)**：
+            1. `<actions>` 标签内部 **只能** 包含一个标准的 JSON 对象。
+            2. **严禁** 在 JSON 前后添加任何解释性文字（如 "好的，这是执行计划..."）。
+            3. **严禁** 使用 Markdown 代码块标记（如 ```json ... ```）。
+            4. 如果你想直接回复用户，请使用 `DIRECT_RESPONSE` 动作，将回复内容放在 `content` 字段中，而不是直接输出文本。
+            
             格式要求：
             <actions>
             {
@@ -244,6 +256,7 @@ public class ThinkingEngine {
      */
     private PromptPair buildThinkingPrompt(String goal, AgentContext context, List<ActionResult> lastResults) {
         String systemPrompt = buildSystemPrompt();
+        // 这里仅保留动态上下文（如当前目标、工具列表、执行结果等），不再包含历史对话
         String userPrompt = buildUserPrompt(goal, context);
         return new PromptPair(systemPrompt, userPrompt);
     }
@@ -293,35 +306,6 @@ public class ThinkingEngine {
             prompt.append("\n");
         }
 
-        // ========== 对话历史 ==========
-        if (context.getMessages() != null && !context.getMessages().isEmpty()) {
-            int historySize = config.getHistoryMessageLoadLimitOrDefault();
-            int maxLength = config.getMaxMessageLengthOrDefault();
-
-            List<ChatMessage> recentMessages = context.getMessages();
-            int start = 0;
-            if (start < recentMessages.size()) {
-                prompt.append("## 对话历史（最近").append(historySize).append("轮）\n\n");
-                for (int i = start; i < recentMessages.size(); i++) {
-                    ChatMessage msg = recentMessages.get(i);
-                    if (msg instanceof UserMessage userMessage) {
-                        String text = userMessage.singleText();
-                        if (text.length() > maxLength) {
-                            text = text.substring(0, maxLength) + "...";
-                        }
-                        prompt.append("[User]: ").append(text).append("\n");
-                    } else if (msg instanceof AiMessage aiMsg) {
-                        String text = aiMsg.text();
-                        if (text.length() > maxLength) {
-                            text = text.substring(0, maxLength) + "...";
-                        }
-                        prompt.append("[Agent]: ").append(text).append("\n");
-                    }
-                }
-                prompt.append("\n");
-            }
-        }
-
         // ========== RAG 知识库信息 ==========
         appendRAGInfo(prompt, context);
 
@@ -367,7 +351,29 @@ public class ThinkingEngine {
     
     private String callLLMForThinking(PromptPair promptPair, AgentContext context) {
             List<ChatMessage> messages = new ArrayList<>();
+            
+            // 1. 系统提示词
             messages.add(new SystemMessage(promptPair.getSystemPrompt()));
+            
+            // 2. 插入原生历史对话 (Native Messages)
+            if (context.getMessages() != null && !context.getMessages().isEmpty()) {
+                // 获取配置的历史消息加载数量限制
+                ThinkingConfig config = context.getThinkingConfig();
+                int historyLimit = (config != null) ? config.getHistoryMessageLoadLimitOrDefault() : 10;
+                
+                List<ChatMessage> history = context.getMessages();
+                int start = Math.max(0, history.size() - historyLimit);
+                
+                // 将最近的历史消息加入到 messages 列表中
+                // 注意：这里直接复用 ChatMessage 对象，保留了 User/AI 的角色信息
+                for (int i = start; i < history.size(); i++) {
+                    messages.add(history.get(i));
+                }
+                log.debug("已加载 {} 条历史对话消息", history.size() - start);
+            }
+            
+            // 3. 当前任务上下文（包含工具、RAG结果、执行历史等）
+            // 将这些作为最新的 UserMessage 发送
             messages.add(new UserMessage(promptPair.getUserPrompt()));
             
             String modelId = context != null ? context.getModelId() : null;
@@ -383,9 +389,9 @@ public class ThinkingEngine {
             StreamingCallback callback = createThinkingStreamingCallback(context);
             String response = llmChatHandler.chatWithCallback(modelId, messages, callback);
             log.info("思考LLM请求完成，耗时 {} ms", java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs));
-            log.info("LLM思考完整响应: {}", response);
+            log.debug("LLM思考完整响应: {}", response);
             String actionsJson = extractActionsJson(response);
-            log.info("LLM思考提取的动作JSON: {}", actionsJson);
+            log.debug("LLM思考提取的动作JSON: {}", actionsJson);
             return actionsJson;
     }
 
@@ -666,13 +672,16 @@ public class ThinkingEngine {
             }
             if (thinkingEndIdx != -1 && !state.thinkingClosed) {
                 state.thinkingClosed = true;
-                // 思考结束即视为完成
-                if (!state.thinkingDoneMarked) {
-                    state.thinkingDoneMarked = true;
-                    sendProgressEvent(context, AgentConstants.EVENT_AGENT_THINKING, "思考完成，正在生成动作计划...");
-                }
             }
         }
+        
+        // 检测思考完成标记
+        int doneIdx = text.indexOf("<THINKING_DONE>");
+        if (doneIdx != -1 && !state.thinkingDoneMarked) {
+            state.thinkingDoneMarked = true;
+            sendProgressEvent(context, AgentConstants.EVENT_AGENT_THINKING, "思考完成，正在生成动作计划...");
+        }
+        
         return delta;
     }
 
@@ -704,10 +713,16 @@ public class ThinkingEngine {
             return;
         }
         String names = actions.stream().map(AgentAction::getName).collect(Collectors.joining(", "));
+        
+        // Use structured event for i18n
+        java.util.Map<String, Object> data = new java.util.HashMap<>();
+        data.put("actionNames", names);
+        
         context.getEventPublisher().accept(
             AgentEventData.builder()
-                .event(AgentConstants.EVENT_AGENT_THINKING)
-                .message("已决定执行动作: " + names)
+                .event(AgentConstants.EVENT_STATUS_THINKING_PROCESS)
+                .message("正在进行深入思考...") // Fallback message
+                .data(data)
                 .build()
         );
     }
@@ -717,17 +732,31 @@ public class ThinkingEngine {
             return response;
         }
         String text = removeControlChars(response);
-        int startIdx = text.indexOf("<actions>");
-        int endIdx = text.indexOf("</actions>");
-        if (startIdx >= 0 && endIdx > startIdx) {
-            int jsonStart = startIdx + "<actions>".length();
-            return text.substring(jsonStart, endIdx);
+        
+        // 1. 尝试提取 <actions> 标签内的内容
+        int startTagIdx = text.indexOf("<actions>");
+        int endTagIdx = text.indexOf("</actions>");
+        
+        String candidate = text;
+        if (startTagIdx >= 0) {
+            int contentStart = startTagIdx + "<actions>".length();
+            if (endTagIdx > contentStart) {
+                candidate = text.substring(contentStart, endTagIdx);
+            } else {
+                candidate = text.substring(contentStart);
+            }
         }
-        if (startIdx >= 0) {
-            int jsonStart = startIdx + "<actions>".length();
-            return text.substring(jsonStart);
+        
+        // 2. 在候选文本中寻找第一个 '{' 和最后一个 '}'
+        // 这能有效过滤掉标签内的自然语言杂质（如：<actions>\n好的，这是JSON...\n{...}\n</actions>）
+        int jsonStart = candidate.indexOf('{');
+        int jsonEnd = candidate.lastIndexOf('}');
+        
+        if (jsonStart >= 0 && jsonEnd > jsonStart) {
+            return candidate.substring(jsonStart, jsonEnd + 1);
         }
-        return text;
+        
+        return candidate.trim();
     }
 
     private static class ThinkingStreamState {
