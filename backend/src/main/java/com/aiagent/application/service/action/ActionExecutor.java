@@ -526,6 +526,64 @@ public class ActionExecutor {
         }
     }
 
+    /**
+     * 格式化工具执行结果，用于发送给前端事件
+     */
+    private Object formatToolResultForEvent(Object result) {
+        if (result == null) {
+            return null;
+        }
+        
+        // 检查是否是 ToolExecutionResult
+        if (result instanceof ToolExecutionResult) {
+            ToolExecutionResult toolResult = (ToolExecutionResult) result;
+            String text = null;
+            
+            // 1. 尝试直接获取 text()
+            try {
+                // 使用反射调用以兼容不同版本或避免编译错误（如果方法名不确定）
+                // 优先尝试 text() 方法（标准 LangChain4j）
+                try {
+                    text = (String) result.getClass().getMethod("text").invoke(result);
+                } catch (NoSuchMethodException e) {
+                    // 尝试 resultText() 方法
+                    try {
+                        text = (String) result.getClass().getMethod("resultText").invoke(result);
+                    } catch (NoSuchMethodException e2) {
+                         // 尝试 getResultText() 方法
+                         text = (String) result.getClass().getMethod("getResultText").invoke(result);
+                    }
+                }
+            } catch (Exception e) {
+                // 反射调用失败，尝试直接 toString 解析（作为最后手段）
+                // 但通常 toString 格式不好解析，这里先忽略
+                log.warn("无法获取 ToolExecutionResult 的文本内容", e);
+            }
+            
+            // 如果反射获取失败，尝试直接访问字段（如果有 getter 但上面没试对，或者直接是 public 字段 - 不太可能）
+            // 暂时只依赖 toString 如果 text 为空
+            
+            if (StringUtils.isNotEmpty(text)) {
+                // 尝试解析为JSON对象
+                try {
+                    String trimmed = text.trim();
+                    if (trimmed.startsWith("{")) {
+                        return JSON.parseObject(trimmed);
+                    } else if (trimmed.startsWith("[")) {
+                        return JSON.parseArray(trimmed);
+                    }
+                } catch (Exception e) {
+                    // 解析失败，返回文本
+                }
+                return text;
+            }
+            
+            // 如果无法获取文本，或者文本为空，返回 toString
+            return toolResult.toString();
+        }
+        return result;
+    }
+
     private void sendToolResultEvent(AgentContext context, String toolExecutionId, String toolName,
                                      Object result, String error) {
         if (context != null && context.getEventPublisher() != null) {
@@ -535,7 +593,7 @@ public class ActionExecutor {
             }
             data.put("toolName", toolName);
             if (result != null) {
-                data.put("result", result);
+                data.put("result", formatToolResultForEvent(result));
             }
             if (error != null) {
                 data.put("error", error);
