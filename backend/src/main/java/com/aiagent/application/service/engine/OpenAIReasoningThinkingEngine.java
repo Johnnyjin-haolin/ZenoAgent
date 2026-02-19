@@ -60,41 +60,66 @@ public class OpenAIReasoningThinkingEngine implements ThinkingEngine {
      */
     private static final String DECISION_FRAMEWORK_PROMPT = """
             ## 决策要求
-            1. 分析目标和上下文，决定下一步动作。
-            2. 仅在必要时调用工具 (TOOL_CALL)。
-            3. 需要知识库资料时选 RAG_RETRIEVE。
-            4. 如果可以回答用户问题，使用 DIRECT_RESPONSE。
-            5. action的type字段 仅限: TOOL_CALL, RAG_RETRIEVE, DIRECT_RESPONSE, LLM_GENERATE。
-            6. 每轮至少输出一个 Action。
-            ### 各actionType参数规范（必填+可选）
+            1. 先判断已有信息是否足够回答用户问题
+            2. 如果你觉得解决该问题需要调用工具才需要 TOOL_CALL
+            3. 需要知识库资料时选 RAG_RETRIEVE
+            4. 如果你已经可以直接给出完整答案，必须使用 DIRECT_RESPONSE，把最终回复放在 content
+            5. 只有在需要让模型二次生成或改写时才用 LLM_GENERATE（prompt 应是指令，不是答案）
+            6. 每轮思考必须输出至少一个Action，如果你觉得需要用户输入或者已经可以回答问题，请使用DIRECT_RESPONSE，把提问/回复放在 content
+            7. 避免重复调用同一工具
+            
+            ## 格式要求
+            1. 仅输出一个 JSON 对象，禁止输出任何额外文字、代码块、markdown。
+            2. JSON 顶层必须包含字段 actions，类型为数组，至少 1 个元素。
+            3. 每个 action 必须包含且仅包含字段：actionType、actionName，以及对应的参数对象。
+            4. actionType 必须且只能取以下枚举值之一（全大写，严格匹配）：
+               TOOL_CALL | RAG_RETRIEVE | DIRECT_RESPONSE | LLM_GENERATE
+            5. actionType 字段名必须为 "actionType"，不得使用 "type" 或其他字段名。
+            ## 输出格式（严格遵循）
+            {
+              "actions": [
+                {
+                  "actionType": "TOOL_CALL|RAG_RETRIEVE|DIRECT_RESPONSE|LLM_GENERATE",
+                  "actionName": "string",
+                  "toolCallParams": { ... } | "ragRetrieveParams": { ... } | "directResponseParams": { ... } | "llmGenerateParams": { ... }
+                }
+              ]
+            }
+            
+            ## 各 actionType 参数要求
             #### (A) TOOL_CALL（调用工具）
-            当actionType=TOOL_CALL时，必须包含toolCallParams字段，结构如下：
+            当 actionType=TOOL_CALL 时，必须包含 toolCallParams 字段，结构如下：
             "toolCallParams": {
-              "toolName": "工具名称(String, 必填)", // 如ResourceCenter-20221201-SearchResources
-              "toolParams": "{}"// 工具具体参数对象，以tool的params JsonObjectSchema要求为准
+              "toolName": "工具名称(String, 必填)",
+              "toolParams": "{}"
             }
             #### (B) RAG_RETRIEVE（知识库检索）
-            当actionType=RAG_RETRIEVE时，必须包含ragRetrieveParams字段，结构如下：
+            当 actionType=RAG_RETRIEVE 时，必须包含 ragRetrieveParams 字段，结构如下：
             "ragRetrieveParams": {
               "query": "检索关键词(String, 必填)",
-              "knowledgeIds": ["kb_id1"], // 知识库ID列表(List<String>, 可选)
-              "maxResults": 5, // 最大结果数(Integer, 可选，默认5)
-              "similarityThreshold": 0.7 // 相似度阈值(Double, 可选，默认0.7)
+              "knowledgeIds": ["kb_id1"],
+              "maxResults": 5,
+              "similarityThreshold": 0.7
             }
             
             #### (C) LLM_GENERATE（大模型生成）
-            当actionType=LLM_GENERATE时，必须包含llmGenerateParams字段，结构如下：
+            当 actionType=LLM_GENERATE 时，必须包含 llmGenerateParams 字段，结构如下：
             "llmGenerateParams": {
-              "prompt": "提示词(String, 必填)", // 给子模型的生成指令
-              "systemPrompt": "系统设定(String, 可选)", // 子模型的系统角色
-              "temperature": 0.7 // 温度(Double, 可选，默认0.7)
+              "prompt": "提示词(String, 必填)",
+              "systemPrompt": "系统设定(String, 可选)",
+              "temperature": 0.7
             }
             
             #### (D) DIRECT_RESPONSE（直接回复）
-            当actionType=DIRECT_RESPONSE时，必须包含directResponseParams字段，结构如下：
+            当 actionType=DIRECT_RESPONSE 时，必须包含 directResponseParams 字段，结构如下：
             "directResponseParams": {
-              "content": "回复内容(String, 必填)", // 给用户的最终回复
+              "content": "回复内容(String, 必填)"
             }
+            
+            ## 失败示例（严格禁止）
+            - 使用 "type" 代替 "actionType"
+            - actionType 使用小写或其他值
+            - 输出任何 JSON 之外的文本
             """;
 
     @Override
@@ -155,7 +180,7 @@ public class OpenAIReasoningThinkingEngine implements ThinkingEngine {
 
     private PromptPair buildThinkingPrompt(String goal, AgentContext context, List<ActionResult> lastResults, String retryHint) {
         StringBuilder systemPrompt = new StringBuilder();
-        systemPrompt.append("你是一个拥有深度推理能力的智能Agent。\n");
+        systemPrompt.append("你是一个智能Agent的思考与决策模块，需基于用户需求输出包含思考过程和动作指令的结构化JSON内容。。\n");
         systemPrompt.append(DECISION_FRAMEWORK_PROMPT);
         
         if (StringUtils.isNotEmpty(retryHint)) {
@@ -163,8 +188,7 @@ public class OpenAIReasoningThinkingEngine implements ThinkingEngine {
         }
 
         StringBuilder userPrompt = new StringBuilder();
-        userPrompt.append("## 当前目标\n").append(goal).append("\n\n");
-        
+
         // 工具列表
         List<McpToolInfo> tools = toolSelector.selectTools(goal, context.getEnabledMcpGroups(), context.getEnabledTools());
         if (!tools.isEmpty()) {
@@ -180,6 +204,12 @@ public class OpenAIReasoningThinkingEngine implements ThinkingEngine {
 
         // 历史记录
         appendHistory(userPrompt, context);
+
+        userPrompt.append("## 当前目标\n").append(goal).append("\n\n");
+
+        if (StringUtils.isNotEmpty(retryHint)) {
+            userPrompt.append("\n## 修正要求\n").append(retryHint);
+        }
 
         return new PromptPair(systemPrompt.toString(), userPrompt.toString());
     }
@@ -239,7 +269,7 @@ public class OpenAIReasoningThinkingEngine implements ThinkingEngine {
     }
 
     /**
-     * 简化的 Schema，仅包含 actions，不需要 thinking 字段
+     * 简化的 Schema，仅包含 actions
      */
     private ResponseFormat buildStructuredResponseFormat() {
         JsonObjectSchema toolCallParams = JsonObjectSchema.builder()
