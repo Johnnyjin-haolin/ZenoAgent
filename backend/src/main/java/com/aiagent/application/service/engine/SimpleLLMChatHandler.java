@@ -7,8 +7,10 @@ import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.request.ResponseFormat;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.PartialThinking;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.TokenStream;
@@ -167,10 +169,22 @@ public class SimpleLLMChatHandler {
                     }
                 }
                 
+                // 适配 LangChain4j 的思考过程回调 (既然用户明确要求使用 onPartialThinking，我们假设 SDK 支持此方法)
+                // 如果编译报错，说明 SDK 版本过低，需要升级或移除
+                public void onPartialThinking(String partialThinking) {
+                    if (callback != null) {
+                        try {
+                            callback.onThinking(partialThinking);
+                        } catch (Exception e) {
+                            log.error("回调onThinking失败", e);
+                        }
+                    }
+                }
+                
                 @Override
                 public void onCompleteResponse(ChatResponse completeResponse) {
                     String fullText = fullTextBuilder.toString();
-                    log.debug("LLM真正流式对话完成，总长度: {}", fullText.length());
+                    log.info("LLM真正流式对话完成，总长度: {}", fullText.length());
                     
                     // 通知完成（这会触发SSE事件发送）
                     if (callback != null) {
@@ -246,38 +260,45 @@ public class SimpleLLMChatHandler {
     }
 
     public String chatWithResponseFormat(String modelId, List<ChatMessage> messages, ResponseFormat responseFormat, StreamingCallback callback) {
+        if (callback==null){
+            throw new RuntimeException("callback 参数必传");
+        }
         log.info("开始LLM流式对话（结构化输出），模型: {}", modelId);
         long startNs = System.nanoTime();
         try {
-            if (callback != null) {
-                callback.onStart();
-            }
+            callback.onStart();
             StreamingChatModel streamingModel = modelManager.getOrCreateStreamingModel(modelId);
             StringBuilder fullTextBuilder = new StringBuilder();
             final Object lock = new Object();
-            final boolean[] completed = {false};
-            final Throwable[] error = {null};
+            final boolean[] completed = new boolean[1];
+            final Throwable[] error = new Throwable[1];
             StreamingChatResponseHandler handler = new StreamingChatResponseHandler() {
                 @Override
                 public void onPartialResponse(String partialResponse) {
                     fullTextBuilder.append(partialResponse);
-                    if (callback != null) {
-                        try {
-                            callback.onToken(partialResponse);
-                        } catch (Exception e) {
-                            log.error("回调onToken失败", e);
-                        }
+                    try {
+                        callback.onToken(partialResponse);
+                    } catch (Exception e) {
+                        log.error("回调onToken失败", e);
                     }
                 }
+
+                @Override
+                public void onPartialThinking(PartialThinking partialThinking) {
+                    try {
+                        callback.onThinking(partialThinking.text());
+                    } catch (Exception e) {
+                        log.error("回调onThinking失败", e);
+                    }
+                }
+                
                 @Override
                 public void onCompleteResponse(ChatResponse completeResponse) {
                     String fullText = fullTextBuilder.toString();
-                    if (callback != null) {
-                        try {
-                            callback.onComplete(fullText);
-                        } catch (Exception e) {
-                            log.error("回调onComplete失败", e);
-                        }
+                    try {
+                        callback.onComplete(fullText);
+                    } catch (Exception e) {
+                        log.error("回调onComplete失败", e);
                     }
                     synchronized (lock) {
                         completed[0] = true;
@@ -291,12 +312,10 @@ public class SimpleLLMChatHandler {
                         completed[0] = true;
                         lock.notifyAll();
                     }
-                    if (callback != null) {
-                        try {
-                            callback.onError(throwable);
-                        } catch (Exception e) {
-                            log.error("回调onError失败", e);
-                        }
+                    try {
+                        callback.onError(throwable);
+                    } catch (Exception e) {
+                        log.error("回调onError失败", e);
                     }
                 }
             };

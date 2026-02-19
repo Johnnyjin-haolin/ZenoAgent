@@ -16,6 +16,15 @@ public interface StreamingCallback {
     void onToken(String token);
     
     /**
+     * 当产生思考/推理内容时调用 (适配 reasoning_content)
+     * 
+     * @param thinkingToken 思考内容的token片段
+     */
+    default void onThinking(String thinkingToken) {
+        // 默认空实现
+    }
+    
+    /**
      * 当生成完成时调用
      * 
      * @param fullText 完整的生成文本

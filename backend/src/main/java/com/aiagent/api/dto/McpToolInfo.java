@@ -1,6 +1,7 @@
 package com.aiagent.api.dto;
 
 import com.aiagent.domain.enums.ConnectionTypeEnums;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import lombok.Data;
 
@@ -33,7 +34,7 @@ public class McpToolInfo {
      */
     private String description;
 
-
+    @JsonIgnore
     private JsonObjectSchema parameters;
 
     private  Map<String, Object> metadata;
