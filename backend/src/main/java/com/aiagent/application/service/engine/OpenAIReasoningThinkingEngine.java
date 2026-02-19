@@ -64,7 +64,7 @@ public class OpenAIReasoningThinkingEngine implements ThinkingEngine {
             2. 仅在必要时调用工具 (TOOL_CALL)。
             3. 需要知识库资料时选 RAG_RETRIEVE。
             4. 如果可以回答用户问题，使用 DIRECT_RESPONSE。
-            5. actionType 仅限: TOOL_CALL, RAG_RETRIEVE, DIRECT_RESPONSE, LLM_GENERATE。
+            5. action的type字段 仅限: TOOL_CALL, RAG_RETRIEVE, DIRECT_RESPONSE, LLM_GENERATE。
             6. 每轮至少输出一个 Action。
             ### 各actionType参数规范（必填+可选）
             #### (A) TOOL_CALL（调用工具）
@@ -131,7 +131,11 @@ public class OpenAIReasoningThinkingEngine implements ThinkingEngine {
 
             try {
                 finalActions = parseThinkingResult(fullText, context);
-                break; // 解析成功，退出重试
+                break;
+            } catch (LLMParseException e) {
+                log.warn("解析失败，尝试重试: {}", e.getMessage());
+                retryHint = e.getMessage();
+                sendStatusEvent(context, AgentConstants.EVENT_STATUS_RETRYING, "输出格式错误，正在重试...", null);
             } catch (Exception e) {
                 log.warn("解析失败，尝试重试: {}", e.getMessage());
                 retryHint = "JSON解析失败，请确保输出符合Schema要求。错误: " + e.getMessage();
@@ -295,59 +299,106 @@ public class OpenAIReasoningThinkingEngine implements ThinkingEngine {
 
     private List<AgentAction> parseThinkingResult(String json, AgentContext context) {
         String cleaned = cleanJsonResponse(json);
-        JSONObject root = JSON.parseObject(cleaned);
-        if (root == null || !root.containsKey("actions")) {
-            throw new RuntimeException("缺少 actions 字段");
+        JSONObject root;
+        try {
+            root = JSON.parseObject(cleaned);
+        } catch (Exception e) {
+            throw new LLMParseException(ParseErrCode.JSON_PARSE, "path=$, raw=" + truncate(cleaned, 300));
         }
-        
+        if (root == null || !root.containsKey("actions")) {
+            throw new LLMParseException(ParseErrCode.ACTIONS_MISSING, "path=$.actions, raw=" + truncate(cleaned, 300));
+        }
+
         JSONArray actions = root.getJSONArray("actions");
-        return buildAgentActions(actions.toJavaList(ActionInputDTO.class), context);
+        if (actions == null) {
+            throw new LLMParseException(ParseErrCode.ACTIONS_MISSING, "path=$.actions, raw=" + truncate(root, 300));
+        }
+        if (actions.isEmpty()) {
+            throw new LLMParseException(ParseErrCode.ACTIONS_EMPTY, "path=$.actions");
+        }
+        return buildAgentActions(actions, context);
     }
     
     // --- 复用 PromptGuidedThinkingEngine 的部分辅助逻辑 (简化版) ---
     
-    private List<AgentAction> buildAgentActions(List<ActionInputDTO> dtos, AgentContext context) {
-        return dtos.stream()
-            .map(dto -> buildAgentAction(dto, context))
-            .filter(Objects::nonNull)
-            .collect(Collectors.toList());
+    private List<AgentAction> buildAgentActions(JSONArray actionArray, AgentContext context) {
+        List<AgentAction> results = new ArrayList<>();
+        for (int i = 0; i < actionArray.size(); i++) {
+            Object item = actionArray.get(i);
+            if (!(item instanceof JSONObject)) {
+                throw new LLMParseException(ParseErrCode.ACTION_ITEM_INVALID, "path=$.actions[" + i + "], raw=" + truncate(item, 300));
+            }
+            JSONObject raw = (JSONObject) item;
+            ActionInputDTO dto = raw.toJavaObject(ActionInputDTO.class);
+            results.add(buildAgentAction(dto, context, i, raw));
+        }
+        return results;
     }
 
-    private AgentAction buildAgentAction(ActionInputDTO dto, AgentContext context) {
-        if (StringUtils.isEmpty(dto.getActionType())) return null;
-        try {
-            ActionType type = ActionType.getByCode(dto.getActionType());
-            if (type == null) {
-                throw new LLMParseException(ParseErrCode.ACTION_TYPE_INVALID);
-            }
-            String name = StringUtils.isNotEmpty(dto.getActionName()) ? dto.getActionName() : type.name().toLowerCase();
-            
-            switch (type) {
-                case TOOL_CALL:
-                    if (dto.getToolCallParams() == null) {
-                        throw new LLMParseException(ParseErrCode.ACTION_TYPE_INVALID);
-                    }
-                    if (StringUtils.isEmpty(dto.getToolCallParams().getToolName())) {
-                        dto.getToolCallParams().setToolName(name);
-                    }
-                    return AgentAction.toolCall(name, dto.getToolCallParams());
-                case RAG_RETRIEVE:
-                    if (dto.getRagRetrieveParams() == null) return null;
-                    if (dto.getRagRetrieveParams().getKnowledgeIds() == null) dto.getRagRetrieveParams().setKnowledgeIds(context.getKnowledgeIds());
-                    return AgentAction.ragRetrieve(dto.getRagRetrieveParams());
-                case DIRECT_RESPONSE:
-                    if (dto.getDirectResponseParams() == null) return null;
-                    return AgentAction.directResponse(dto.getDirectResponseParams());
-                case LLM_GENERATE:
-                    if (dto.getLlmGenerateParams() == null) return null;
-                    return AgentAction.llmGenerate(dto.getLlmGenerateParams());
-                default:
-                    return null;
-            }
-        } catch (Exception e) {
-            log.error("构建Action失败", e);
-            return null;
+    private AgentAction buildAgentAction(ActionInputDTO dto, AgentContext context, int index, JSONObject raw) {
+        String basePath = "$.actions[" + index + "]";
+        if (dto == null) {
+            throw new LLMParseException(ParseErrCode.ACTION_ITEM_INVALID, "path=" + basePath + ", raw=" + truncate(raw, 300));
         }
+        if (StringUtils.isEmpty(dto.getActionType())) {
+            throw new LLMParseException(ParseErrCode.ACTION_TYPE_MISSING, "path=" + basePath + ".actionType, raw=" + truncate(raw, 300));
+        }
+        ActionType type = ActionType.getByCode(dto.getActionType());
+        if (type == null) {
+            throw new LLMParseException(ParseErrCode.ACTION_TYPE_INVALID, "path=" + basePath + ".actionType, raw=" + truncate(raw, 300));
+        }
+        String name = StringUtils.isNotEmpty(dto.getActionName()) ? dto.getActionName() : type.name().toLowerCase();
+
+        switch (type) {
+            case TOOL_CALL:
+                if (dto.getToolCallParams() == null) {
+                    throw new LLMParseException(ParseErrCode.TOOL_CALL_PARAMS_MISSING, "path=" + basePath + ".toolCallParams, raw=" + truncate(raw, 300));
+                }
+                if (StringUtils.isEmpty(dto.getToolCallParams().getToolName())) {
+                    throw new LLMParseException(ParseErrCode.TOOL_NAME_MISSING, "path=" + basePath + ".toolCallParams.toolName, raw=" + truncate(raw, 300));
+                }
+                return AgentAction.toolCall(name, dto.getToolCallParams());
+            case RAG_RETRIEVE:
+                if (dto.getRagRetrieveParams() == null) {
+                    throw new LLMParseException(ParseErrCode.RAG_PARAMS_MISSING, "path=" + basePath + ".ragRetrieveParams, raw=" + truncate(raw, 300));
+                }
+                if (StringUtils.isEmpty(dto.getRagRetrieveParams().getQuery())) {
+                    throw new LLMParseException(ParseErrCode.RAG_QUERY_MISSING, "path=" + basePath + ".ragRetrieveParams.query, raw=" + truncate(raw, 300));
+                }
+                if (dto.getRagRetrieveParams().getKnowledgeIds() == null) {
+                    dto.getRagRetrieveParams().setKnowledgeIds(context.getKnowledgeIds());
+                }
+                return AgentAction.ragRetrieve(dto.getRagRetrieveParams());
+            case DIRECT_RESPONSE:
+                if (dto.getDirectResponseParams() == null) {
+                    throw new LLMParseException(ParseErrCode.DIRECT_PARAMS_MISSING, "path=" + basePath + ".directResponseParams, raw=" + truncate(raw, 300));
+                }
+                if (StringUtils.isEmpty(dto.getDirectResponseParams().getContent())) {
+                    throw new LLMParseException(ParseErrCode.DIRECT_CONTENT_MISSING, "path=" + basePath + ".directResponseParams.content, raw=" + truncate(raw, 300));
+                }
+                return AgentAction.directResponse(dto.getDirectResponseParams());
+            case LLM_GENERATE:
+                if (dto.getLlmGenerateParams() == null) {
+                    throw new LLMParseException(ParseErrCode.LLM_PARAMS_MISSING, "path=" + basePath + ".llmGenerateParams, raw=" + truncate(raw, 300));
+                }
+                if (StringUtils.isEmpty(dto.getLlmGenerateParams().getPrompt())) {
+                    throw new LLMParseException(ParseErrCode.LLM_PROMPT_MISSING, "path=" + basePath + ".llmGenerateParams.prompt, raw=" + truncate(raw, 300));
+                }
+                return AgentAction.llmGenerate(dto.getLlmGenerateParams());
+            default:
+                throw new LLMParseException(ParseErrCode.ACTION_TYPE_INVALID, "path=" + basePath + ".actionType, raw=" + truncate(raw, 300));
+        }
+    }
+
+    private String truncate(Object raw, int maxLength) {
+        if (raw == null) {
+            return "";
+        }
+        String text = raw instanceof String ? (String) raw : JSON.toJSONString(raw);
+        if (text.length() <= maxLength) {
+            return text;
+        }
+        return text.substring(0, maxLength);
     }
 
     private String cleanJsonResponse(String response) {
