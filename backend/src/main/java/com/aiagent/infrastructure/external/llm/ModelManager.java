@@ -242,6 +242,8 @@ public class ModelManager {
                     .apiKey(modelDef.getApiKey())
                     .baseUrl(baseUrl)
                     .modelName(modelDef.getId())
+                        //返回思考过程
+                        .returnThinking(true)
                     .temperature(0.7)
                     .timeout(Duration.ofSeconds(timeoutSeconds))
                     .build();

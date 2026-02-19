@@ -38,12 +38,14 @@ import java.util.stream.Collectors;
 /**
  * 思考引擎 (基于OpenAI原生Reasoning能力)
  * 适配支持 reasoning_content 的模型 (如 DeepSeek R1, OpenAI o1/o3)
+ * 目前大多数模型都不原生支持，如qwen3,但是大多模型都支持 原生支持 Reasoning 能力（会思考）但原生不输出 reasoning 字段reasoning 字段 = Ollama 封装出来的
+ * 需要注意用ollama部署的模型，吐出字段为Reasoning，但是langchain4j默认解析的字段为reasoning_content,所以即使支持也会因为字段不一致而失败
  * 
  * @author aiagent
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(name = "aiagent.thinking.engine", havingValue = "openai_reasoning", matchIfMissing = true)
+@ConditionalOnProperty(name = "aiagent.thinking.engine", havingValue = "openai_reasoning")
 public class OpenAIReasoningThinkingEngine implements ThinkingEngine {
 
     @Autowired

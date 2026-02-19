@@ -49,7 +49,7 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(name = "aiagent.thinking.engine", havingValue = "prompt_guided")
+@ConditionalOnProperty(name = "aiagent.thinking.engine", havingValue = "prompt_guided", matchIfMissing = true)
 public class PromptGuidedThinkingEngine implements ThinkingEngine {
     
     @Autowired
@@ -296,6 +296,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
             log.info("ai回复：{}", fullText);
             try {
                 finalActions = parseThinkingResult(fullText, goal, context);
+                break;
             }catch (LLMParseException e){
                 retryHint=e.getMessage();
                 log.warn("输出不合规，进行重试，输出:{}",fullText);
@@ -306,6 +307,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
                 sendStatusEvent(context, AgentConstants.EVENT_STATUS_RETRYING, "输出不合规，进行重试", data);
                 continue;
             }
+
         }
         if (finalActions.isEmpty()) {
             log.warn("思考阶段未产生Action");
@@ -316,7 +318,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
             finalActions = finalActions.subList(0, 5);
         }
         log.info("思考完成，决定执行 {} 个Action: {}", finalActions.size(),
-            finalActions.stream().map(AgentAction::getName).collect(java.util.stream.Collectors.joining(", ")));
+                finalActions.stream().map(AgentAction::getName).collect(Collectors.joining(", ")));
         sendDecidedActionsEvent(context, finalActions);
         return finalActions;
     }

@@ -259,7 +259,14 @@ public class McpGroupManager {
     public List<McpToolInfo> getToolsByGroups(List<String> groups) {
         if (groups == null || groups.isEmpty()) {
             // 返回所有启用分组的工具
-            return new ArrayList<>();
+            // 返回所有启用分组的工具
+            return getEnabledGroups().stream()
+                    .flatMap(group -> {
+                        List<McpToolInfo> tools = toolsByGroup.getOrDefault(group.getId(), Collections.emptyList());
+                        return tools.stream();
+                    })
+                    .filter(McpToolInfo::isEnabled)
+                    .collect(Collectors.toList());
         }
         
         // 返回指定分组的工具

@@ -5,7 +5,9 @@ import com.aiagent.api.dto.McpToolInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.util.CollectionUtils;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -32,7 +34,10 @@ public class IntelligentToolSelector {
      */
     public List<McpToolInfo> selectTools(String taskRequirement, List<String> enabledGroups, List<String> enabledTools) {
         log.info("开始智能选择工具，任务需求: {}", taskRequirement);
-        
+        //如果没有启用的分组且没有指定启用的工具，则返回空列表
+        if (CollectionUtils.isEmpty(enabledGroups)&&CollectionUtils.isEmpty(enabledTools)) {
+            return java.util.Collections.emptyList();
+        }
         // 1. 先按分组获取工具
         List<McpToolInfo> availableTools = mcpGroupManager.getToolsByGroups(enabledGroups);
         
