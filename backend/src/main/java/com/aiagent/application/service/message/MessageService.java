@@ -5,7 +5,10 @@ import com.aiagent.domain.entity.MessageEntity;
 import com.aiagent.infrastructure.mapper.MessageMapper;
 import com.aiagent.shared.util.UUIDGenerator;
 import com.alibaba.fastjson2.JSON;
+import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.UserMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -38,12 +41,12 @@ public class MessageService {
         
         // 根据消息类型获取内容
         String content = "";
-        if (message instanceof dev.langchain4j.data.message.UserMessage) {
-            content = ((dev.langchain4j.data.message.UserMessage) message).singleText();
-        } else if (message instanceof dev.langchain4j.data.message.AiMessage) {
-            content = ((dev.langchain4j.data.message.AiMessage) message).text();
-        } else if (message instanceof dev.langchain4j.data.message.SystemMessage) {
-            content = ((dev.langchain4j.data.message.SystemMessage) message).text();
+        if (message instanceof UserMessage) {
+            content = ((UserMessage) message).singleText();
+        } else if (message instanceof AiMessage) {
+            content = ((AiMessage) message).text();
+        } else if (message instanceof SystemMessage) {
+            content = ((SystemMessage) message).text();
         }
         
         entity.setContent(content);

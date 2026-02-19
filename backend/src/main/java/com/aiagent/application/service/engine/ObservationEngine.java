@@ -69,7 +69,8 @@ public class ObservationEngine {
             List<ChatMessage> allMessages = context.getMessages();
             
             ReActExecutionResult executionResult = ReActExecutionResult.builder()
-                .success(true) // 停止也算成功
+                // 停止也算成功
+                .success(true)
                 .messages(allMessages != null ? allMessages : new ArrayList<>())
                 .iterations(currentIteration)
                 .totalDurationMs(totalDurationMs)
@@ -219,9 +220,10 @@ public class ObservationEngine {
      * @param result 动作执行结果
      * @param context Agent上下文
      */
-    private void persistAiMessage(AiMessage aiMessage, ActionResult result, AgentContext context) {
+    private void  persistAiMessage(AiMessage aiMessage, ActionResult result, AgentContext context) {
         try {
             // 构造元数据
+            //todo 未来会移除
             HashMap<String, Object> metadata = buildMetadata(result);
             
             // 保存到 Redis + MySQL
@@ -255,11 +257,6 @@ public class ObservationEngine {
         if (result.getAction() != null) {
             metadata.put("actionType", result.getAction().getType().name());
             metadata.put("actionName", result.getAction().getName());
-            
-            // 添加推理信息
-            if (result.getAction().getReasoning() != null) {
-                metadata.put("reasoning", result.getAction().getReasoning());
-            }
         }
         
         // 添加执行耗时

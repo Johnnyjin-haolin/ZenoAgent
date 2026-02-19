@@ -88,18 +88,13 @@ public class ActionExecutor {
         long startTime = System.currentTimeMillis();
         
         try {
-            switch (action.getType()) {
-                case TOOL_CALL:
-                    return executeToolCall(action, context, startTime);
-                case RAG_RETRIEVE:
-                    return executeRAGRetrieve(action, context, startTime);
-                case LLM_GENERATE:
-                    return executeLLMGenerate(action, context, startTime);
-                case DIRECT_RESPONSE:
-                    return executeDirectResponse(action, context, startTime);
-                default:
-                    return ActionResult.failure(action, "不支持的动作类型: " + action.getType());
-            }
+            return switch (action.getType()) {
+                case TOOL_CALL -> executeToolCall(action, context, startTime);
+                case RAG_RETRIEVE -> executeRAGRetrieve(action, context, startTime);
+                case LLM_GENERATE -> executeLLMGenerate(action, context, startTime);
+                case DIRECT_RESPONSE -> executeDirectResponse(action, context, startTime);
+                default -> ActionResult.failure(action, "不支持的动作类型: " + action.getType());
+            };
         } catch (Exception e) {
             log.error("执行动作失败", e);
             long duration = System.currentTimeMillis() - startTime;
@@ -121,8 +116,6 @@ public class ActionExecutor {
                 throw new IllegalArgumentException("参数错误,toolCallParams为空");
             }
             
-            // 使用特定类型参数
-            params = Objects.requireNonNullElseGet(toolCallParams.getToolParams(), HashMap::new);
             // 如果toolCallParams中有toolName，优先使用
             String toolName = toolCallParams.getToolName();
             // 查找工具信息
@@ -140,7 +133,7 @@ public class ActionExecutor {
             }
 
             // 发送工具调用事件（包含确认信息）
-            sendToolCallEvent(context, toolExecutionId, toolName, params, requiresConfirmation);
+            sendToolCallEvent(context, toolExecutionId, toolName, toolCallParams.getToolParams(), requiresConfirmation);
 
             if (requiresConfirmation) {
                 ToolConfirmationDecision decision = toolConfirmationManager.waitForDecision(
@@ -181,7 +174,6 @@ public class ActionExecutor {
                 "正在执行工具: " + toolInfo.getName() + "...", data);
             
             // Execute tool
-            long start = System.currentTimeMillis();
             ToolExecutionResult toolResult = mcpToolExecutor.execute(toolInfo, toolCallParams.getToolParams());
 
             // 注意：动作执行历史会在 executeParallel 方法结束后统一记录
@@ -239,15 +231,11 @@ public class ActionExecutor {
                 query = ragParams.getQuery();
                 knowledgeIds = Objects.requireNonNullElseGet(ragParams.getKnowledgeIds(), ArrayList::new);
             }
-            
-            // 如果query为空，使用reasoning作为查询
-            if (StringUtils.isEmpty(query)) {
-                query = action.getReasoning();
-            }
+
             
             // 发送RAG检索进度事件
             String ragMessage = "查询相关知识";
-            if (knowledgeIds != null && !knowledgeIds.isEmpty()) {
+            if (!knowledgeIds.isEmpty()) {
                 ragMessage += " (知识库数量: " + knowledgeIds.size() + ")";
             }
             ragMessage += "...";
@@ -290,11 +278,7 @@ public class ActionExecutor {
             // 使用特定类型参数
             prompt = llmParams.getPrompt();
             systemPrompt = llmParams.getSystemPrompt();
-            // 如果prompt为空，使用reasoning作为prompt
-            if (StringUtils.isEmpty(prompt)) {
-                prompt = action.getReasoning();
-            }
-            
+
             // 准备消息列表，包含完整的对话历史以保持上下文
             List<ChatMessage> messages = new ArrayList<>();
             
@@ -509,7 +493,7 @@ public class ActionExecutor {
     }
 
     private void sendToolCallEvent(AgentContext context, String toolExecutionId, String toolName,
-                                   Map<String, Object> params, boolean requiresConfirmation) {
+                                   String params, boolean requiresConfirmation) {
         if (context != null && context.getEventPublisher() != null) {
             Map<String, Object> data = new HashMap<>();
             data.put("toolExecutionId", toolExecutionId);

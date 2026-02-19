@@ -21,7 +21,7 @@ public class ToolCallParams {
     /**
      * 工具参数（传递给工具的实际参数）
      */
-    private Map<String, Object> toolParams;
+    private String toolParams;
     
     /**
      * 工具名称（可选，如果AgentAction中已有name，可以省略）

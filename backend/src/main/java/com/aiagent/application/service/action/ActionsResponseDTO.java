@@ -21,7 +21,6 @@ public class ActionsResponseDTO {
      * 动作列表
      */
     private List<ActionInputDTO> actions;
-    
     /**
      * 检查actions是否为空
      */

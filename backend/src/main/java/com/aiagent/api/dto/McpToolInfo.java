@@ -1,6 +1,7 @@
 package com.aiagent.api.dto;
 
 import com.aiagent.domain.enums.ConnectionTypeEnums;
+import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import lombok.Data;
 
 import java.util.Map;
@@ -31,12 +32,11 @@ public class McpToolInfo {
      * 工具描述
      */
     private String description;
-    
-    /**
-     * 工具参数定义（JSON Schema格式，用于大模型理解如何调用工具）
-     * 格式：Map<String, Object>，包含properties、required等字段
-     */
-    private Map<String, Object> parameters;
+
+
+    private JsonObjectSchema parameters;
+
+    private  Map<String, Object> metadata;
     
     /**
      * 工具分组
@@ -47,12 +47,7 @@ public class McpToolInfo {
      * 是否启用
      */
     private boolean enabled;
-    
-    /**
-     * 工具版本
-     */
-    private String version;
-    
+
     /**
      * 所属服务器ID
      */

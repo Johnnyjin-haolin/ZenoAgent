@@ -21,17 +21,14 @@ import com.aiagent.application.model.AgentContext;
 import com.aiagent.api.dto.AgentEventData;
 import com.aiagent.api.dto.McpToolInfo;
 import com.alibaba.fastjson2.JSON;
-import dev.langchain4j.data.message.AiMessage;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ResponseFormat;
 import dev.langchain4j.model.chat.request.ResponseFormatType;
 import dev.langchain4j.model.chat.request.json.JsonArraySchema;
-import dev.langchain4j.model.chat.request.json.JsonBooleanSchema;
-import dev.langchain4j.model.chat.request.json.JsonEnumSchema;
-import dev.langchain4j.model.chat.request.json.JsonIntegerSchema;
-import dev.langchain4j.model.chat.request.json.JsonNumberSchema;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.request.json.JsonSchema;
 import dev.langchain4j.model.chat.request.json.JsonStringSchema;
@@ -423,7 +420,6 @@ public class ThinkingEngine {
         String retryHint = "";
         List<AgentAction> finalActions = new ArrayList<>();
         int maxRetries = 3;
-        long[] backoffs = new long[]{300, 800, 1500};
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
             //构建提示词
             PromptPair promptPair = buildThinkingPrompt(goal,context,lastResults,retryHint);
@@ -448,26 +444,17 @@ public class ThinkingEngine {
             String fullText = llmChatHandler.chatWithResponseFormat(modelId,
                     messages,  buildStructuredResponseFormat(), createStructuredStreamingCallback(context));
             log.info("ai回复：{}", fullText);
-            List<AgentAction> actions = parseThinkingResult(fullText, goal, context);
-            if (!actions.isEmpty()) {
-                finalActions = actions;
-                break;
-            } else {
-                List<String> violations = new java.util.ArrayList<>();
-                violations.add("JSON解析失败或无actions");
-                if (attempt < maxRetries) {
-                    retryHint = buildRetryHint(violations);
-                    java.util.Map<String, Object> data = new java.util.HashMap<>();
+            try {
+                finalActions = parseThinkingResult(fullText, goal, context);
+            }catch (LLMParseException e){
+                retryHint=e.getMessage();
+                log.warn("输出不合规，进行重试，输出:{}",fullText);
+                Map<String, Object> data = new java.util.HashMap<>();
                     data.put("attempt", attempt + 1);
-                    data.put("violations", violations);
+                    data.put("violations", "LLM parse failed");
                     data.put("modelId", modelId);
-                    sendStatusEvent(context, AgentConstants.EVENT_STATUS_RETRYING, "输出不合规，进行格式重试", data);
-                    try {
-                        long waitMs = backoffs[Math.min(attempt - 1, backoffs.length - 1)];
-                        Thread.sleep(waitMs);
-                    } catch (InterruptedException ignored) {
-                    }
-                }
+                sendStatusEvent(context, AgentConstants.EVENT_STATUS_RETRYING, "输出不合规，进行重试", data);
+                continue;
             }
         }
         if (finalActions.isEmpty()) {
@@ -540,11 +527,7 @@ public class ThinkingEngine {
         if (!availableTools.isEmpty()) {
             prompt.append("## 可用工具\n\n");
             for (McpToolInfo tool : availableTools) {
-                prompt.append("- ").append(tool.getName());
-                if (StringUtils.isNotEmpty(tool.getDescription())) {
-                    String desc = tool.getDescription();
-                    prompt.append(" (").append(desc).append(")");
-                }
+                prompt.append(formatToolDefinition(tool));
                 prompt.append("\n");
             }
             prompt.append("\n");
@@ -683,7 +666,7 @@ public class ThinkingEngine {
     private List<AgentAction> parseThinkingResult(String thinkingResult, String goal, AgentContext context) {
         // 1. 尝试解析为 ActionsResponseDTO
         ActionsResponseDTO response = tryParseActionsResponse(thinkingResult);
-        if (response != null && response.hasActions()) {
+        if (response.hasActions()) {
             List<AgentAction> actions = buildAgentActions(response.getActions(), context);
             if (!actions.isEmpty()) {
                 return actions;
@@ -737,6 +720,7 @@ public class ThinkingEngine {
     }
 
     private String buildRetryHint(List<String> violations) {
+        //todo 这里格式校验
         StringBuilder sb = new StringBuilder();
         sb.append("请严格修复以下格式问题：\n");
         if (violations != null && !violations.isEmpty()) {
@@ -752,6 +736,7 @@ public class ThinkingEngine {
     
     /**
      * 尝试解析为 ActionsResponseDTO
+     * 这里考虑一些兼容性的操作，最大程度容忍ai的格式输出错误
      */
     private ActionsResponseDTO tryParseActionsResponse(String text) {
         try {
@@ -759,20 +744,19 @@ public class ThinkingEngine {
             log.debug("清理后的思考结果: {}", cleaned);
             
             // 1. 先尝试解析为 JSONObject，进行兼容性处理
-            com.alibaba.fastjson2.JSONObject jsonObject = JSON.parseObject(cleaned);
+            JSONObject jsonObject = JSON.parseObject(cleaned);
             if (jsonObject != null && jsonObject.containsKey("actions")) {
-                com.alibaba.fastjson2.JSONArray actions = jsonObject.getJSONArray("actions");
+                JSONArray actions = jsonObject.getJSONArray("actions");
                 if (actions != null) {
-                    for (int i = 0; i < actions.size(); i++) {
-                        Object item = actions.get(i);
-                        if (item instanceof com.alibaba.fastjson2.JSONObject) {
-                            com.alibaba.fastjson2.JSONObject action = (com.alibaba.fastjson2.JSONObject) item;
-                            
+                    for (Object item : actions) {
+                        if (item instanceof JSONObject) {
+                            JSONObject action = (JSONObject) item;
+
                             // 兼容 action -> actionType
                             if (action.containsKey("action") && !action.containsKey("actionType")) {
                                 action.put("actionType", action.getString("action"));
                             }
-                            
+
                             // 兼容 params -> xxxParams
                             if (action.containsKey("params")) {
                                 String type = action.getString("actionType");
@@ -793,7 +777,7 @@ public class ThinkingEngine {
                                             targetParamKey = "llmGenerateParams";
                                             break;
                                     }
-                                    
+
                                     if (targetParamKey != null && !action.containsKey(targetParamKey)) {
                                         action.put(targetParamKey, action.get("params"));
                                     }
@@ -813,13 +797,14 @@ public class ThinkingEngine {
                 String extracted = extractFirstJsonObject(normalized);
                 String fallback = StringUtils.isNotEmpty(extracted) ? extracted : cleanJsonResponse(normalized);
                 if (StringUtils.isNotEmpty(fallback)) {
-                    log.debug("清理后的思考结果(兜底): {}", fallback);
+                    log.info("清理后的思考结果(兜底): {}", fallback);
                     return JSON.parseObject(fallback, ActionsResponseDTO.class);
                 }
             } catch (Exception ignored) {
+
             }
-            log.error("解析JSON失败，原始结果: {}", text, e);
-            return null;
+            String errMsg = String.format("上次thinking内容：%s,解析格式错误，请严格按照以下格式解析:%s", text, JSON_OUTPUT_FORMAT_PROMPT);
+            throw new LLMParseException(1,errMsg);
         }
     }
     
@@ -829,7 +814,7 @@ public class ThinkingEngine {
     private List<AgentAction> buildAgentActions(List<ActionInputDTO> actionDTOs, AgentContext context) {
         return actionDTOs.stream()
             .map(dto -> buildAgentAction(dto, context))
-            .filter(action -> action != null)
+            .filter(Objects::nonNull)
             .collect(Collectors.toList());
     }
     
@@ -850,22 +835,21 @@ public class ThinkingEngine {
             return null;
         }
         
-        String reasoning = dto.getReasoning();
         String actionName = dto.getActionName();
         
         AgentAction action = null;
         switch (type) {
             case TOOL_CALL:
-                action = buildToolCallAction(dto, reasoning);
+                action = buildToolCallAction(dto);
                 break;
             case RAG_RETRIEVE:
-                action = buildRAGRetrieveAction(dto, reasoning, context);
+                action = buildRAGRetrieveAction(dto, context);
                 break;
             case LLM_GENERATE:
-                action = buildLLMGenerateAction(dto, reasoning);
+                action = buildLLMGenerateAction(dto);
                 break;
             case DIRECT_RESPONSE:
-                action = buildDirectResponseAction(dto, reasoning);
+                action = buildDirectResponseAction(dto);
                 break;
             default:
                 log.warn("不支持的Action类型: {}", type);
@@ -1329,7 +1313,7 @@ public class ThinkingEngine {
     /**
      * 构建工具调用Action
      */
-    private AgentAction buildToolCallAction(ActionInputDTO dto, String reasoning) {
+    private AgentAction buildToolCallAction(ActionInputDTO dto) {
         ToolCallParams params = dto.getToolCallParams();
         if (params == null) {
             log.warn("TOOL_CALLAction缺少toolCallParams");
@@ -1346,23 +1330,19 @@ public class ThinkingEngine {
             return null;
         }
         
-        // 确保 toolParams 不为 null
-        if (params.getToolParams() == null) {
-            params.setToolParams(new HashMap<>());
-        }
         
         // 如果 toolCallParams 中没有 toolName，设置它
         if (StringUtils.isEmpty(params.getToolName())) {
             params.setToolName(toolName);
         }
         
-        return AgentAction.toolCall(toolName, params, reasoning);
+        return AgentAction.toolCall(toolName, params);
     }
     
     /**
      * 构建RAG检索Action
      */
-    private AgentAction buildRAGRetrieveAction(ActionInputDTO dto, String reasoning, AgentContext context) {
+    private AgentAction buildRAGRetrieveAction(ActionInputDTO dto, AgentContext context) {
         RAGRetrieveParams params = dto.getRagRetrieveParams();
         if (params == null) {
             log.warn("RAG_RETRIEVEAction缺少ragRetrieveParams");
@@ -1384,52 +1364,24 @@ public class ThinkingEngine {
             }
         }
         
-        return AgentAction.ragRetrieve(params, reasoning);
+        return AgentAction.ragRetrieve(params);
     }
     
     /**
      * 构建直接返回响应Action
      */
-    private AgentAction buildDirectResponseAction(ActionInputDTO dto, String reasoning) {
+    private AgentAction buildDirectResponseAction(ActionInputDTO dto) {
         DirectResponseParams params = dto.getDirectResponseParams();
-        if (params == null && dto.getToolCallParams() != null && dto.getToolCallParams().getToolParams() != null) {
-            Object contentObj = dto.getToolCallParams().getToolParams().get("content");
-            if (contentObj instanceof String content && StringUtils.isNotEmpty(content)) {
-                params = DirectResponseParams.builder()
-                    .content(content)
-                    .streaming(true)
-                    .build();
-            }
-        }
-        if (params == null) {
-            log.warn("DIRECT_RESPONSEAction缺少directResponseParams");
-            return null;
-        }
-        
-        if (StringUtils.isEmpty(params.getContent())) {
-            log.warn("DIRECT_RESPONSEAction缺少content");
-            return null;
-        }
-        
-        // 如果 streaming 未设置（为 false），使用默认值 true
-        // 注意：FastJSON2 反序列化时，如果 JSON 中没有 streaming 字段，boolean 类型默认为 false
-        // 但根据业务逻辑，应该默认为 true
-        if (!params.isStreaming() && params.getContent() != null) {
-            // 重新构建，确保使用默认值 true
-            params = DirectResponseParams.builder()
-                .content(params.getContent())
-                .systemPrompt(params.getSystemPrompt())
-                .streaming(true)  // 默认值
+        DirectResponseParams.builder()
+                .content(dto.getDirectResponseParams().getContent())
                 .build();
-        }
-        
-        return AgentAction.directResponse(params, reasoning);
+        return AgentAction.directResponse(params);
     }
     
     /**
      * 构建LLM生成Action
      */
-    private AgentAction buildLLMGenerateAction(ActionInputDTO dto, String reasoning) {
+    private AgentAction buildLLMGenerateAction(ActionInputDTO dto) {
         LLMGenerateParams params = dto.getLlmGenerateParams();
         if (params == null) {
             log.warn("LLM_GENERATEAction缺少llmGenerateParams");
@@ -1441,7 +1393,7 @@ public class ThinkingEngine {
             return null;
         }
         
-        return AgentAction.llmGenerate(params, reasoning);
+        return AgentAction.llmGenerate(params);
     }
 
     /**
@@ -1611,5 +1563,21 @@ public class ThinkingEngine {
         
         prompt.append("\n");
     }
-    
+
+    /**
+     * 格式化工具定义（包含参数说明）
+     */
+    private String formatToolDefinition(McpToolInfo tool) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("- ").append(tool.getName());
+
+        if (StringUtils.isNotEmpty(tool.getDescription())) {
+            sb.append(": ").append(tool.getDescription());
+        }
+        sb.append("\n");
+        sb.append("params:").append(tool.getParameters().toString());
+        sb.append("\nmetadata:").append(tool.getMetadata().toString());
+
+        return sb.toString();
+    }
 }

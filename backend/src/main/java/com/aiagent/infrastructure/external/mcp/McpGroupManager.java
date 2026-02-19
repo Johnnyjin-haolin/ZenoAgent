@@ -4,8 +4,6 @@ import com.aiagent.infrastructure.config.McpServerConfig;
 import com.aiagent.domain.enums.ConnectionTypeEnums;
 import com.aiagent.api.dto.McpGroupInfo;
 import com.aiagent.api.dto.McpToolInfo;
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONObject;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.mcp.client.McpClient;
 import lombok.extern.slf4j.Slf4j;
@@ -150,38 +148,38 @@ public class McpGroupManager {
             }
             
             List<McpToolInfo> tools = new ArrayList<>();
-            
+
+            if (!isSupportedTransportType(connectionType)) {
+                log.warn("不支持的连接类型: {}, serverId={}", connectionType, server.getId());
+                continue;
+            }
             // 注意：当前ConnectionType枚举中没有LOCAL类型
             // 如果需要本地工具，可以考虑添加LOCAL枚举值，或使用其他方式标识
             // 这里暂时跳过本地工具的处理
-            if (isSupportedTransportType(connectionType)) {
-                // 使用LangChain4j MCP客户端获取工具列表（用于展示）
-                try {
-                    // 创建或获取MCP客户端
-                    McpClient client = mcpClientFactory.getOrCreateClient(server);
-                    serverClients.put(server.getId(), client);
-                    
-                    // 从MCP客户端获取工具列表
-                    // 注意：这里仅用于展示，工具注册由McpToolProvider自动处理
-                    List<ToolSpecification> toolSpecs = client.listTools();
-                    
-                    // 转换为本地工具定义
-                    for (ToolSpecification toolSpec : toolSpecs) {
-                        McpToolInfo toolInfo = convertToLocalTool(toolSpec, server);
-                        tools.add(toolInfo);
-                    }
-                    
-                    log.info("成功从MCP服务器获取工具列表: serverId={}, 工具数量={}", 
-                        server.getId(), tools.size());
-                    
-                } catch (Exception e) {
-                    log.error("从MCP服务器获取工具列表失败: serverId={}", server.getId(), e);
-                    // 失败时不添加工具，但不影响其他服务器
+            // 使用LangChain4j MCP客户端获取工具列表（用于展示）
+            try {
+                // 创建或获取MCP客户端
+                McpClient client = mcpClientFactory.getOrCreateClient(server);
+                serverClients.put(server.getId(), client);
+
+                // 从MCP客户端获取工具列表
+                // 注意：这里仅用于展示，工具注册由McpToolProvider自动处理
+                List<ToolSpecification> toolSpecs = client.listTools();
+
+                // 转换为本地工具定义
+                for (ToolSpecification toolSpec : toolSpecs) {
+                    McpToolInfo toolInfo = convertToLocalTool(toolSpec, server);
+                    tools.add(toolInfo);
                 }
-            } else {
-                log.warn("不支持的连接类型: {}, serverId={}", connectionType, server.getId());
+
+                log.info("成功从MCP服务器获取工具列表: serverId={}, 工具数量={}",
+                    server.getId(), tools.size());
+
+            } catch (Exception e) {
+                log.error("从MCP服务器获取工具列表失败: serverId={}", server.getId(), e);
+                // 失败时不添加工具，但不影响其他服务器
             }
-            
+
             toolsByGroup.put(groupId, tools);
             
             // 更新分组的工具数量
@@ -225,153 +223,18 @@ public class McpGroupManager {
         // 唯一ID
         toolInfo.setId(server.getId() + ":" + toolSpec.name());
         toolInfo.setName(toolSpec.name());
-        toolInfo.setDescription(toolSpec.description() != null ? toolSpec.description() : "");
+        toolInfo.setDescription(toolSpec.description());
         toolInfo.setGroupId(server.getGroup());
         toolInfo.setEnabled(true);
-        // 默认版本
-        toolInfo.setVersion("1.0");
         toolInfo.setServerId(server.getId());
         toolInfo.setConnectionType(server.getConnection().getType());
-        
-        // 转换参数定义（JsonObjectSchema -> Map）
-        // 这对于大模型理解如何调用工具非常重要
-        if (toolSpec.parameters() != null) {
-            try {
-                Map<String, Object> parametersMap = convertParametersToMap(toolSpec.parameters());
-                toolInfo.setParameters(parametersMap);
-                log.debug("工具 {} 的参数定义已转换: {}", toolSpec.name(), parametersMap);
-            } catch (Exception e) {
-                log.warn("转换工具参数定义失败: toolName={}", toolSpec.name(), e);
-                // 参数转换失败不影响工具注册，但大模型可能无法正确调用
-            }
-        } else {
-            log.debug("工具 {} 没有参数定义", toolSpec.name());
-        }
-        
+        toolInfo.setParameters(toolSpec.parameters());
+        toolInfo.setMetadata(toolSpec.metadata());
+
         return toolInfo;
     }
-    
-    /**
-     * 将ToolSpecification的parameters转换为Map
-     * parameters是JsonObjectSchema类型，包含工具参数的JSON Schema定义
-     */
-    private Map<String, Object> convertParametersToMap(Object parameters) {
-        if (parameters == null) {
-            return new HashMap<>();
-        }
-        
-        try {
-            // 方法1：尝试使用FastJSON2直接序列化
-            // JsonObjectSchema应该可以被序列化为JSON
-            String jsonString = JSON.toJSONString(parameters);
-            JSONObject jsonObject = JSON.parseObject(jsonString);
-            @SuppressWarnings("unchecked")
-            Map<String, Object> result = jsonObject.toJavaObject(Map.class);
-            
-            // 确保返回的是标准的JSON Schema格式
-            if (result != null && !result.isEmpty()) {
-                return result;
-            }
-        } catch (Exception e) {
-            log.debug("使用FastJSON2序列化参数失败，尝试其他方式", e);
-        }
-        
-        // 方法2：尝试使用反射获取properties和required
-        try {
-            Map<String, Object> result = new HashMap<>();
-            result.put("type", "object");
-            
-            // 尝试获取properties
-            try {
-                java.lang.reflect.Method propertiesMethod = parameters.getClass().getMethod("properties");
-                Object properties = propertiesMethod.invoke(parameters);
-                if (properties != null) {
-                    // 将properties转换为Map
-                    String propsJson = JSON.toJSONString(properties);
-                    JSONObject propsObj = JSON.parseObject(propsJson);
-                    result.put("properties", propsObj.toJavaObject(Map.class));
-                } else {
-                    result.put("properties", new HashMap<>());
-                }
-            } catch (NoSuchMethodException e) {
-                result.put("properties", new HashMap<>());
-            }
-            
-            // 尝试获取required
-            try {
-                java.lang.reflect.Method requiredMethod = parameters.getClass().getMethod("required");
-                Object required = requiredMethod.invoke(parameters);
-                if (required != null) {
-                    result.put("required", required);
-                }
-            } catch (NoSuchMethodException e) {
-                // required字段可选
-            }
-            
-            return result;
-        } catch (Exception e) {
-            log.warn("使用反射提取参数定义失败", e);
-        }
-        
-        // 方法3：返回默认结构
-        Map<String, Object> defaultResult = new HashMap<>();
-        defaultResult.put("type", "object");
-        defaultResult.put("properties", new HashMap<>());
-        return defaultResult;
-    }
-    
-    /**
-     * 创建占位工具（用于演示或本地工具）
-     */
-    private List<McpToolInfo> createPlaceholderTools(McpServerConfig.McpServerDefinition server) {
-        List<McpToolInfo> tools = new ArrayList<>();
-        
-        // 根据分组名称创建示例工具
-        String groupId = server.getGroup();
-        
-        if ("device".equals(groupId)) {
-            tools.add(createTool("query_device_status", "查询设备状态", groupId, server.getId()));
-            tools.add(createTool("control_device", "控制设备", groupId, server.getId()));
-            tools.add(createTool("get_device_list", "获取设备列表", groupId, server.getId()));
-        } else if ("analytics".equals(groupId)) {
-            tools.add(createTool("analyze_data", "分析数据", groupId, server.getId()));
-            tools.add(createTool("generate_report", "生成报表", groupId, server.getId()));
-        } else if ("file".equals(groupId)) {
-            tools.add(createTool("read_file", "读取文件", groupId, server.getId()));
-            tools.add(createTool("write_file", "写入文件", groupId, server.getId()));
-            tools.add(createTool("list_files", "列出文件", groupId, server.getId()));
-        } else {
-            // 默认工具
-            tools.add(createTool("execute_task", "执行任务", groupId, server.getId()));
-        }
-        
-        return tools;
-    }
-    
-    /**
-     * 创建工具信息
-     */
-    private McpToolInfo createTool(String name, String description, String groupId, String serverId) {
-        McpToolInfo tool = new McpToolInfo();
-        tool.setId(serverId + ":" + name); // 唯一ID
-        tool.setName(name);
-        tool.setDescription(description);
-        tool.setGroupId(groupId);
-        tool.setEnabled(true);
-        tool.setVersion("1.0");
-        tool.setServerId(serverId);
-        // 占位工具使用STDIO类型（本地工具可以通过其他方式实现）
-        tool.setConnectionType(ConnectionTypeEnums.STDIO);
-        return tool;
-    }
-    
-    /**
-     * 获取所有分组列表
-     */
-    public List<McpGroupInfo> getAllGroups() {
-        return new ArrayList<>(groupCache.values());
-    }
-    
+
+
     /**
      * 获取所有启用的分组
      */
@@ -419,16 +282,7 @@ public class McpGroupManager {
                 .filter(McpToolInfo::isEnabled)
                 .collect(Collectors.toList());
     }
-    
-    /**
-     * 获取指定分组的工具
-     */
-    public List<McpToolInfo> getToolsByGroup(String groupId) {
-        return toolsByGroup.getOrDefault(groupId, Collections.emptyList()).stream()
-                .filter(McpToolInfo::isEnabled)
-                .collect(Collectors.toList());
-    }
-    
+
     /**
      * 获取所有工具
      */
@@ -445,21 +299,7 @@ public class McpGroupManager {
     public McpClient getMcpClient(String serverId) {
         return serverClients.get(serverId);
     }
-    
-    /**
-     * 检查分组是否存在
-     */
-    public boolean hasGroup(String groupId) {
-        return groupCache.containsKey(groupId);
-    }
-    
-    /**
-     * 检查分组是否启用
-     */
-    public boolean isGroupEnabled(String groupId) {
-        McpGroupInfo group = groupCache.get(groupId);
-        return group != null && group.isEnabled();
-    }
+
 }
 
 

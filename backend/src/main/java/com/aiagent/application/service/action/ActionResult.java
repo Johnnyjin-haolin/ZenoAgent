@@ -109,7 +109,7 @@ public class ActionResult implements Serializable {
         
         // 3. 根据 ActionType 展示入参（从 action 中获取）
         String inputInfo = formatActionInput(action);
-        if (inputInfo != null && !inputInfo.isEmpty()) {
+        if (!inputInfo.isEmpty()) {
             sb.append("入参：").append(inputInfo).append("\n");
         }
         
@@ -119,12 +119,7 @@ public class ActionResult implements Serializable {
         } else if (!success && error != null && !error.isEmpty()) {
             sb.append("错误：").append(error).append("\n");
         }
-        
-        // 5. 可选：展示推理过程
-        if (action.getReasoning() != null && !action.getReasoning().isEmpty()) {
-            sb.append("推理：").append(truncate(action.getReasoning(), 100)).append("\n");
-        }
-        
+
         return sb.toString();
     }
     
@@ -138,92 +133,23 @@ public class ActionResult implements Serializable {
         }
 
         return switch (action.getType()) {
-            case TOOL_CALL -> formatToolCallInput(action);
-            case RAG_RETRIEVE -> formatRAGInput(action);
-            case LLM_GENERATE -> formatLLMInput(action);
-            case DIRECT_RESPONSE -> formatDirectResponseInput(action);
+            case TOOL_CALL -> "toolCallParams=" + action.getToolCallParams();
+            case RAG_RETRIEVE -> "ragRetrieveParams=" + action.getRagRetrieveParams();
+            case LLM_GENERATE -> "llmGenerateParams=" + action.getLlmGenerateParams();
+            case DIRECT_RESPONSE -> "directResponseParams=" + action.getDirectResponseParams();
         };
     }
-    
-    /**
-     * 格式化工具调用的入参
-     */
-    private String formatToolCallInput(AgentAction action) {
-        ToolCallParams params = action.getToolCallParams();
-        if (params == null) {
-            return "toolName=" + action.getName();
-        }
-        
-        StringBuilder sb = new StringBuilder();
-        sb.append("toolName=").append(action.getName());
-        
-        if (params.getToolParams() != null && !params.getToolParams().isEmpty()) {
-            sb.append(", params={");
-            params.getToolParams().forEach((key, value) -> 
-                sb.append(key).append("=").append(value).append(", ")
-            );
-            // 移除最后的 ", "
-            int length = sb.length();
-            if (length > 2 && sb.charAt(length - 2) == ',' && sb.charAt(length - 1) == ' ') {
-                sb.setLength(length - 2);
-            }
-            sb.append("}");
-        }
-        
-        return sb.toString();
-    }
-    
-    /**
-     * 格式化 RAG 检索的入参
-     */
-    private String formatRAGInput(AgentAction action) {
-        RAGRetrieveParams params = action.getRagRetrieveParams();
-        if (params == null) {
-            return "";
-        }
-        
-        StringBuilder sb = new StringBuilder();
-        sb.append("query=").append(params.getQuery());
-        
-        if (params.getKnowledgeIds() != null && !params.getKnowledgeIds().isEmpty()) {
-            sb.append(", knowledgeIds=[");
-            sb.append(String.join(", ", params.getKnowledgeIds()));
-            sb.append("]");
-        }
-        
-        return sb.toString();
-    }
-    
-    /**
-     * 格式化 LLM 生成的入参
-     */
-    private String formatLLMInput(AgentAction action) {
-        LLMGenerateParams params = action.getLlmGenerateParams();
-        if (params == null) {
-            return "";
-        }
-        
-        return "prompt=" + truncate(params.getPrompt(), 100);
-    }
-    
-    /**
-     * 格式化直接响应的入参
-     */
-    private String formatDirectResponseInput(AgentAction action) {
-        DirectResponseParams params = action.getDirectResponseParams();
-        if (params == null) {
-            return "";
-        }
-        
-        return "content=" + truncate(params.getContent(), 50) + ", streaming=true";
-    }
-    
+
     /**
      * 截断字符串
      */
     private String truncate(String str, int maxLength) {
-        if (str == null) return "";
-        if (str.length() <= maxLength) return str;
+        if (str == null) {
+            return "";
+        }
+        if (str.length() <= maxLength) {
+            return str;
+        }
         return str.substring(0, maxLength) + "...";
     }
 }
