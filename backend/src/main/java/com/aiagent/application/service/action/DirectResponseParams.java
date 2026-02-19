@@ -22,5 +22,13 @@ public class DirectResponseParams {
      */
     private String content;
 
+    /**
+     * 是否完成任务（可选，默认false）
+     */
+    private Boolean isComplete;
+    public boolean isComplete() {
+        return isComplete != null? isComplete : false;
+    }
+
 }
 

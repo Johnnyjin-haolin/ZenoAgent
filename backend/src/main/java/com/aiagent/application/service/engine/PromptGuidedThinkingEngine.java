@@ -8,6 +8,7 @@ import com.aiagent.application.service.action.ActionResult;
 import com.aiagent.application.service.action.ActionsResponseDTO;
 import com.aiagent.application.service.action.AgentAction;
 import com.aiagent.domain.enums.ActionType;
+import com.aiagent.domain.enums.ParseErrCode;
 import com.aiagent.domain.model.KnowledgeBase;
 import com.aiagent.infrastructure.config.AgentConfig;
 import com.aiagent.shared.constant.AgentConstants;
@@ -68,14 +69,17 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
      */
     private static final String DECISION_FRAMEWORK_PROMPT = """
             ## 决策要求
-            1. 先判断已有信息是否足够回答用户问题
-            2. 如果你觉得解决该问题需要调用工具才需要 TOOL_CALL
-            3. 需要知识库资料时选 RAG_RETRIEVE
-            4. 如果你已经可以直接给出完整答案，必须使用 DIRECT_RESPONSE，把最终回复放在 content
-            5. 只有在需要让模型二次生成或改写时才用 LLM_GENERATE（prompt 应是指令，不是答案）
-            6. actionType只有TOOL_CALL、RAG_RETRIEVE、DIRECT_RESPONSE、LLM_GENERATE四种类型，严禁输出其他类型
-            7. 每轮思考必须输出至少一个Action，如果你觉得需要用户输入或者已经可以回答问题，请使用DIRECT_RESPONSE，把提问/回复放在 content
-            8. 避免重复调用同一工具
+            1. 先判断已有信息是否足够回答用户问题；
+            2. 需要调用工具时使用 TOOL_CALL，需要知识库资料时使用 RAG_RETRIEVE；
+            3. 需要向用户输出内容时使用 DIRECT_RESPONSE（回复内容放在content），并通过isComplete字段控制流程：
+               - isComplete=true：最终回复，代表任务完成、流程终止，此时actions数组中**仅允许包含这一个DIRECT_RESPONSE动作**；
+               - isComplete=false：临时回复（如“正在查询，请稍等”），流程继续，可与TOOL_CALL/RAG_RETRIEVE/LLM_GENERATE并行；
+            4. 需要模型二次生成/改写时使用 LLM_GENERATE（prompt为指令，非答案）；
+            5. actionType仅允许：TOOL_CALL、RAG_RETRIEVE、DIRECT_RESPONSE、LLM_GENERATE，严禁其他值；
+            6. 支持actions数组包含多个Action（并行执行），但一次最多5个，核心规则：
+               - 仅当DIRECT_RESPONSE的isComplete=false时，可与其他非终止型Action（TOOL_CALL/RAG_RETRIEVE/LLM_GENERATE）并行；
+               - 当DIRECT_RESPONSE的isComplete=true时，actions数组中**禁止包含任何其他Action**（仅保留该终止型回复）；
+            7. 避免重复调用同一工具。
             
             """;
     
@@ -100,7 +104,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
             当actionType=TOOL_CALL时，必须包含toolCallParams字段，结构如下：
             "toolCallParams": {
               "toolName": "工具名称(String, 必填)", // 如ResourceCenter-20221201-SearchResources
-              "toolParams": { "key": "value" } // 工具具体参数对象(Map, 必填)
+              "toolParams": "工具具体参数(JSON字符串, 必填)" // 工具具体参数对象(Map, 必填)
             }
             
             #### (B) RAG_RETRIEVE（知识库检索）
@@ -120,13 +124,11 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
               "temperature": 0.7 // 温度(Double, 可选，默认0.7)
             }
             
-            #### (D) DIRECT_RESPONSE（直接回复）
-            当actionType=DIRECT_RESPONSE时，必须包含directResponseParams字段，结构如下：
-            "directResponseParams": {
-              "content": "回复内容(String, 必填)", // 给用户的最终回复
-              "streaming": true // 是否流式(Boolean, 可选，默认true)
-            }
-            
+            ### (D) DIRECT_RESPONSE（直接回复）
+               "directResponseParams": {
+                 "content": "回复内容(String, 必填)", // 给用户的回复文本
+                 "isComplete": "是否终止流程(Boolean, 可选，默认false)", // true=终止，false=继续
+               }
             ## JSON Schema（供你校验输出，必须完全匹配）
             {
               "type": "object",
@@ -156,7 +158,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
                         "type": "object",
                         "properties": {
                           "toolName": { "type": "string" },
-                          "toolParams": { "type": "object" }
+                          "toolParams": { "type": "string" }
                         },
                         "required": ["toolName", "toolParams"]
                       },
@@ -183,7 +185,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
                         "type": "object",
                         "properties": {
                           "content": { "type": "string" },
-                          "streaming": { "type": "boolean" }
+                          "isComplete": { "type": "boolean" }
                         },
                         "required": ["content"]
                       }
@@ -226,7 +228,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
                   "reasoning": "已获取资源类型列表，直接整理回复",
                   "directResponseParams": {
                     "content": "阿里云服务器相关资源主要分为三类：1. 计算类：ACS::ECS::Instance（ECS实例）、ACS::ECI::ContainerGroup（弹性容器实例）；2. 网络类：ACS::SLB::LoadBalancer（负载均衡）、ACS::VPC::VPC（虚拟私有云）；3. 存储类：ACS::RDS::DBInstance（关系型数据库）、ACS::OSS::Bucket（对象存储）。",
-                    "streaming": true
+                    "isComplete": true
                   }
                 }
               ]
@@ -242,10 +244,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
                   "reasoning": "需要调用工具查询ECS资源数量",
                   "toolCallParams": {
                     "toolName": "ResourceCenter-20221201-GetResourceCounts",
-                    "toolParams": {
-                      "Filter": [{"Key":"ResourceType","Value":"ECS","MatchType":"Equals"}],
-                      "MaxResults": 20
-                    }
+                    "toolParams": "{"Filter": [{"Key":"ResourceType","Value":"ECS","MatchType":"Equals"}],"MaxResults": 20}"
                   }
                 }
               ]
@@ -305,9 +304,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
                     data.put("violations", "LLM parse failed");
                     data.put("modelId", modelId);
                 sendStatusEvent(context, AgentConstants.EVENT_STATUS_RETRYING, "输出不合规，进行重试", data);
-                continue;
             }
-
         }
         if (finalActions.isEmpty()) {
             log.warn("思考阶段未产生Action");
@@ -549,7 +546,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
     private AgentAction buildAgentAction(ActionInputDTO dto, AgentContext context) {
         if (StringUtils.isEmpty(dto.getActionType())) {
             log.warn("Action缺少actionType");
-            return null;
+            throw new LLMParseException(ParseErrCode.ACTION_TYPE_INVALID);
         }
         
         ActionType type;
@@ -557,7 +554,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
             type = ActionType.valueOf(dto.getActionType());
         } catch (IllegalArgumentException e) {
             log.warn("无效的Action类型: {}", dto.getActionType());
-            return null;
+            throw new LLMParseException(ParseErrCode.ACTION_TYPE_INVALID);
         }
         
         String actionName = dto.getActionName();
@@ -577,8 +574,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
                 action = buildDirectResponseAction(dto);
                 break;
             default:
-                log.warn("不支持的Action类型: {}", type);
-                return null;
+                throw new LLMParseException(ParseErrCode.ACTION_TYPE_INVALID);
         }
         
         // 设置 actionName（如果为空）
@@ -703,7 +699,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
     private ResponseFormat buildStructuredResponseFormat() {
         JsonObjectSchema toolCallParams = JsonObjectSchema.builder()
             .addStringProperty("toolName")
-            .addProperty("toolParams", JsonObjectSchema.builder().build())
+            .addStringProperty("toolParams")
             .required("toolName", "toolParams")
             .build();
         JsonObjectSchema ragRetrieveParams = JsonObjectSchema.builder()
@@ -721,7 +717,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
             .build();
         JsonObjectSchema directResponseParams = JsonObjectSchema.builder()
             .addStringProperty("content")
-            .addBooleanProperty("streaming")
+            .addBooleanProperty("isComplete")
             .required("content")
             .build();
         JsonObjectSchema actionItem = JsonObjectSchema.builder()
@@ -832,7 +828,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
         ToolCallParams params = dto.getToolCallParams();
         if (params == null) {
             log.warn("TOOL_CALLAction缺少toolCallParams");
-            return null;
+            throw new LLMParseException(ParseErrCode.TOOL_CALL_PARAMS_MISSING);
         }
         
         String toolName = params.getToolName();
@@ -841,7 +837,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
         }
         if (StringUtils.isEmpty(toolName)) {
             log.warn("TOOL_CALLAction缺少工具名称");
-            return null;
+            throw new LLMParseException(ParseErrCode.TOOL_NAME_MISSING);
         }
         
         if (StringUtils.isEmpty(params.getToolName())) {
@@ -855,12 +851,12 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
         RAGRetrieveParams params = dto.getRagRetrieveParams();
         if (params == null) {
             log.warn("RAG_RETRIEVEAction缺少ragRetrieveParams");
-            return null;
+            throw new LLMParseException(ParseErrCode.RAG_PARAMS_MISSING);
         }
         
         if (StringUtils.isEmpty(params.getQuery())) {
             log.warn("RAG_RETRIEVEAction缺少query");
-            return null;
+            throw new LLMParseException(ParseErrCode.RAG_QUERY_MISSING);
         }
         
         if (params.getKnowledgeIds() == null || params.getKnowledgeIds().isEmpty()) {
@@ -877,9 +873,16 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
     
     private AgentAction buildDirectResponseAction(ActionInputDTO dto) {
         DirectResponseParams params = dto.getDirectResponseParams();
-        DirectResponseParams.builder()
-                .content(dto.getDirectResponseParams().getContent())
-                .build();
+        if (params == null) {
+            log.warn("DIRECT_RESPONSEAction缺少directResponseParams");
+            throw new LLMParseException(ParseErrCode.DIRECT_PARAMS_MISSING);
+        }
+
+        if (StringUtils.isEmpty(params.getContent())) {
+            log.warn("DIRECT_RESPONSEAction缺少content");
+            throw new LLMParseException(ParseErrCode.DIRECT_CONTENT_MISSING);
+        }
+
         return AgentAction.directResponse(params);
     }
     
@@ -887,12 +890,12 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
         LLMGenerateParams params = dto.getLlmGenerateParams();
         if (params == null) {
             log.warn("LLM_GENERATEAction缺少llmGenerateParams");
-            return null;
+            throw new LLMParseException(ParseErrCode.LLM_PARAMS_MISSING);
         }
         
         if (StringUtils.isEmpty(params.getPrompt())) {
             log.warn("LLM_GENERATEAction缺少prompt");
-            return null;
+            throw new LLMParseException(ParseErrCode.LLM_PROMPT_MISSING);
         }
         
         return AgentAction.llmGenerate(params);
