@@ -83,7 +83,8 @@ public class AgentConstants {
     public static final String EVENT_STATUS_RAG_QUERYING = "agent:status:rag_querying";
     public static final String EVENT_STATUS_TOOL_EXECUTING_SINGLE = "agent:status:tool_executing_single";
     public static final String EVENT_STATUS_TOOL_EXECUTING_BATCH = "agent:status:tool_executing_batch";
-    
+    public static final String EVENT_STATUS_RETRYING = "agent:status:retrying";
+
     /**
      * Redis缓存前缀
      */

@@ -106,6 +106,7 @@ export type AgentEventType =
   | 'agent:status:rag_querying'         // 正在查询知识库
   | 'agent:status:tool_executing_single' // 单个工具执行
   | 'agent:status:tool_executing_batch'  // 批量工具执行
+  | 'agent:status:retrying'              // 格式重试中
   | 'agent:stream_complete' // 流式输出完成
   | 'agent:complete'        // 任务完成
   | 'agent:error';          // 错误发生

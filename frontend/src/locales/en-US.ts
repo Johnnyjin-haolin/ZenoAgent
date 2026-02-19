@@ -96,6 +96,7 @@ export default {
       thinking_process: 'Thinking deeply...',
       tool_executing_single: 'Executing tool: {toolName}...',
       tool_executing_batch: 'Executing {count} actions in parallel...',
+      retrying: 'Invalid format, retrying (attempt {attempt})',
     },
     user: 'User',
     assistant: 'Assistant',

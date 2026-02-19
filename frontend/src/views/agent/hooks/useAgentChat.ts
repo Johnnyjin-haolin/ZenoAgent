@@ -329,6 +329,10 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             statusText = t('agent.status.tool_executing_batch', { 
               count: event.data?.count || 0 
             });
+          } else if (event.event === 'agent:status:retrying') {
+            statusText = t('agent.status.retrying', {
+              attempt: event.data?.attempt || 1
+            });
           }
           
           if (statusText) {

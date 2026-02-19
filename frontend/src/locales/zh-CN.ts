@@ -96,6 +96,7 @@ export default {
       thinking_process: '正在进行深入思考...',
       tool_executing_single: '正在执行工具: {toolName}...',
       tool_executing_batch: '正在并行执行 {count} 个操作...',
+      retrying: '输出不合规，正在进行格式重试（第 {attempt} 次）',
     },
     user: '用户',
     assistant: '助手',

@@ -5,6 +5,7 @@
 
 import { http } from '@/utils/http';
 import logger from '@/utils/logger';
+import i18n from '@/locales';
 import type {
   AgentRequest,
   AgentEvent,
@@ -123,6 +124,7 @@ export async function executeAgent(
   callbacks: AgentEventCallbacks
 ): Promise<AbortController> {
   const controller = new AbortController();
+  const t = i18n.global.t;
 
   try {
     const readableStream = await http.post(
@@ -149,13 +151,13 @@ export async function executeAgent(
       callbacks.onError?.({
         requestId: '',
         error: 'TIMEOUT',
-        message: '请求超时，请稍后重试',
+        message: t('agent.chat.sendFailed'),
       });
     } else {
       callbacks.onError?.({
         requestId: '',
         error: 'NETWORK_ERROR',
-        message: error.message || '网络错误，请稍后重试',
+        message: error.message || t('agent.chat.sendFailed'),
       });
     }
   }
@@ -285,6 +287,7 @@ async function processSSEStream(
  */
 function dispatchEvent(event: AgentEvent, callbacks: AgentEventCallbacks) {
   const { event: eventType } = event;
+  const t = i18n.global.t;
 
   logger.debug(`[Agent] 分发事件: ${eventType}`);
 
@@ -310,32 +313,56 @@ function dispatchEvent(event: AgentEvent, callbacks: AgentEventCallbacks) {
 
     case 'agent:planning':
       logger.debug('[Agent] 正在规划:', event.message);
-      callbacks.onThinking?.({ ...event, message: event.message || '正在规划下一步...', statusText: '规划中' });
+      callbacks.onThinking?.({
+        ...event,
+        message: event.message || t('agent.status.planning'),
+        statusText: t('agent.status.planning')
+      });
       break;
 
     case 'agent:tool_executing':
       logger.debug('[Agent] 正在执行工具:', event.message);
-      callbacks.onThinking?.({ ...event, message: event.message || '正在执行工具...', statusText: '执行中' });
+      callbacks.onThinking?.({
+        ...event,
+        message: event.message || t('agent.status.calling_tool'),
+        statusText: t('agent.status.calling_tool')
+      });
       break;
 
     case 'agent:rag_querying':
       logger.debug('[Agent] 正在查询知识库:', event.message);
-      callbacks.onThinking?.({ ...event, message: event.message || '查询相关知识...', statusText: '检索中' });
+      callbacks.onThinking?.({
+        ...event,
+        message: event.message || t('agent.status.rag_querying'),
+        statusText: t('agent.status.rag_querying')
+      });
       break;
 
     case 'agent:generating':
       logger.debug('[Agent] 正在生成回复:', event.message);
-      callbacks.onThinking?.({ ...event, message: event.message || '正在生成回复...', statusText: '生成中' });
+      callbacks.onThinking?.({
+        ...event,
+        message: event.message || t('agent.chat.generating'),
+        statusText: t('agent.chat.generating')
+      });
       break;
 
     case 'agent:observing':
       logger.debug('[Agent] 正在观察结果:', event.message);
-      callbacks.onThinking?.({ ...event, message: event.message || '正在观察执行结果...', statusText: '观察中' });
+      callbacks.onThinking?.({
+        ...event,
+        message: event.message || t('agent.status.processing'),
+        statusText: t('agent.status.processing')
+      });
       break;
 
     case 'agent:reflecting':
       logger.debug('[Agent] 正在反思:', event.message);
-      callbacks.onThinking?.({ ...event, message: event.message || '结果反思中...', statusText: '反思中' });
+      callbacks.onThinking?.({
+        ...event,
+        message: event.message || t('agent.chat.thinkingProcess'),
+        statusText: t('agent.chat.thinkingProcess')
+      });
       break;
 
     case 'agent:model_selected':
@@ -380,6 +407,10 @@ function dispatchEvent(event: AgentEvent, callbacks: AgentEventCallbacks) {
     case 'agent:status:tool_executing_single':
     case 'agent:status:tool_executing_batch':
       logger.debug('[Agent] 状态更新:', event.event, event.data);
+      callbacks.onStatusUpdate?.(event);
+      break;
+    case 'agent:status:retrying':
+      logger.debug('[Agent] 重试状态:', event.event, event.data);
       callbacks.onStatusUpdate?.(event);
       break;
 

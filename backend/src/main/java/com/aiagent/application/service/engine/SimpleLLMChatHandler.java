@@ -7,6 +7,7 @@ import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.request.ResponseFormat;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.service.AiServices;
@@ -240,6 +241,87 @@ public class SimpleLLMChatHandler {
                     log.error("回调onError失败", ex);
                 }
             }
+            throw new RuntimeException("LLM调用失败: " + e.getMessage(), e);
+        }
+    }
+
+    public String chatWithResponseFormat(String modelId, List<ChatMessage> messages, ResponseFormat responseFormat, StreamingCallback callback) {
+        log.info("开始LLM流式对话（结构化输出），模型: {}", modelId);
+        long startNs = System.nanoTime();
+        try {
+            if (callback != null) {
+                callback.onStart();
+            }
+            StreamingChatModel streamingModel = modelManager.getOrCreateStreamingModel(modelId);
+            StringBuilder fullTextBuilder = new StringBuilder();
+            final Object lock = new Object();
+            final boolean[] completed = {false};
+            final Throwable[] error = {null};
+            StreamingChatResponseHandler handler = new StreamingChatResponseHandler() {
+                @Override
+                public void onPartialResponse(String partialResponse) {
+                    fullTextBuilder.append(partialResponse);
+                    if (callback != null) {
+                        try {
+                            callback.onToken(partialResponse);
+                        } catch (Exception e) {
+                            log.error("回调onToken失败", e);
+                        }
+                    }
+                }
+                @Override
+                public void onCompleteResponse(ChatResponse completeResponse) {
+                    String fullText = fullTextBuilder.toString();
+                    if (callback != null) {
+                        try {
+                            callback.onComplete(fullText);
+                        } catch (Exception e) {
+                            log.error("回调onComplete失败", e);
+                        }
+                    }
+                    synchronized (lock) {
+                        completed[0] = true;
+                        lock.notifyAll();
+                    }
+                }
+                @Override
+                public void onError(Throwable throwable) {
+                    synchronized (lock) {
+                        error[0] = throwable;
+                        completed[0] = true;
+                        lock.notifyAll();
+                    }
+                    if (callback != null) {
+                        try {
+                            callback.onError(throwable);
+                        } catch (Exception e) {
+                            log.error("回调onError失败", e);
+                        }
+                    }
+                }
+            };
+            ChatRequest chatRequest = ChatRequest.builder()
+                .messages(messages)
+                .responseFormat(responseFormat)
+                .build();
+            streamingModel.chat(chatRequest, handler);
+            synchronized (lock) {
+                while (!completed[0]) {
+                    try {
+                        lock.wait();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("等待LLM响应被中断", e);
+                    }
+                }
+            }
+            if (error[0] != null) {
+                throw new RuntimeException("LLM生成失败", error[0]);
+            }
+            log.info("LLM结构化流式对话完成，耗时 {} ms", elapsedMs(startNs));
+            return fullTextBuilder.toString();
+        } catch (Exception e) {
+            log.error("LLM结构化流式调用失败，耗时 {} ms", elapsedMs(startNs), e);
             throw new RuntimeException("LLM调用失败: " + e.getMessage(), e);
         }
     }
