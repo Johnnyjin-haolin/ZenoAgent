@@ -146,7 +146,7 @@ public class ObservationEngine {
         // 6. 检查是否包含 DIRECT_RESPONSE（任务完成）
         ActionResult completeAction = results.stream()
             .filter(a -> a.getAction() != null && a.getAction().getType() == ActionType.DIRECT_RESPONSE
-                    && a.getAction().getDirectResponseParams().isComplete())
+                    && a.getAction().getDirectResponseParams().checkComplete())
             .findFirst()
             .orElse(null);
             

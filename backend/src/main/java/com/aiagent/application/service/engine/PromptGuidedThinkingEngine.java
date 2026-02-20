@@ -72,8 +72,8 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
             1. 先判断已有信息是否足够回答用户问题；
             2. 需要调用工具时使用 TOOL_CALL，需要知识库资料时使用 RAG_RETRIEVE；
             3. 需要向用户输出内容时使用 DIRECT_RESPONSE（回复内容放在content），并通过isComplete字段控制流程：
-               - isComplete=true：最终回复，代表任务完成、流程终止，此时actions数组中**仅允许包含这一个DIRECT_RESPONSE动作**；
-               - isComplete=false：临时回复（如“正在查询，请稍等”），流程继续，可与TOOL_CALL/RAG_RETRIEVE/LLM_GENERATE并行；
+               - checkComplete=true：最终回复，代表任务完成、流程终止或者需要用户新的输入才能继续任务，此时actions数组中**仅允许包含这一个DIRECT_RESPONSE动作**；
+               - checkComplete=false：临时回复（如“正在查询，请稍等”），流程继续，可与TOOL_CALL/RAG_RETRIEVE/LLM_GENERATE并行；
             4. 需要模型二次生成/改写时使用 LLM_GENERATE（prompt为指令，非答案）；
             5. actionType仅允许：TOOL_CALL、RAG_RETRIEVE、DIRECT_RESPONSE、LLM_GENERATE，严禁其他值；
             6. 支持actions数组包含多个Action（并行执行），但一次最多5个，核心规则：
@@ -127,7 +127,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
             ### (D) DIRECT_RESPONSE（直接回复）
                "directResponseParams": {
                  "content": "回复内容(String, 必填)", // 给用户的回复文本
-                 "isComplete": "是否终止流程(Boolean, 可选，默认false)", // true=终止，false=继续
+                 "checkComplete": "是否终止流程(Boolean, 可选，默认false)", // true=终止，false=继续
                }
             ## JSON Schema（供你校验输出，必须完全匹配）
             {
@@ -185,7 +185,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
                         "type": "object",
                         "properties": {
                           "content": { "type": "string" },
-                          "isComplete": { "type": "boolean" }
+                          "checkComplete": { "type": "boolean" }
                         },
                         "required": ["content"]
                       }
@@ -228,7 +228,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
                   "reasoning": "已获取资源类型列表，直接整理回复",
                   "directResponseParams": {
                     "content": "阿里云服务器相关资源主要分为三类：1. 计算类：ACS::ECS::Instance（ECS实例）、ACS::ECI::ContainerGroup（弹性容器实例）；2. 网络类：ACS::SLB::LoadBalancer（负载均衡）、ACS::VPC::VPC（虚拟私有云）；3. 存储类：ACS::RDS::DBInstance（关系型数据库）、ACS::OSS::Bucket（对象存储）。",
-                    "isComplete": true
+                    "checkComplete": true
                   }
                 }
               ]
@@ -363,9 +363,9 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
         StringBuilder prompt = new StringBuilder();
         
         // 获取配置
-        com.aiagent.api.dto.ThinkingConfig config = context.getThinkingConfig();
+        ThinkingConfig config = context.getThinkingConfig();
         if (config == null) {
-            config = com.aiagent.api.dto.ThinkingConfig.builder().build();
+            config = ThinkingConfig.builder().build();
         }
         
 
@@ -717,7 +717,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
             .build();
         JsonObjectSchema directResponseParams = JsonObjectSchema.builder()
             .addStringProperty("content")
-            .addBooleanProperty("isComplete")
+            .addBooleanProperty("checkComplete")
             .required("content")
             .build();
         JsonObjectSchema actionItem = JsonObjectSchema.builder()

@@ -294,7 +294,7 @@ public class OpenAIReasoningThinkingEngine implements ThinkingEngine {
             
         JsonObjectSchema directResponseParams = JsonObjectSchema.builder()
             .addStringProperty("content")
-            .addBooleanProperty("isComplete")
+            .addBooleanProperty("checkComplete")
             .required("content")
             .build();
             

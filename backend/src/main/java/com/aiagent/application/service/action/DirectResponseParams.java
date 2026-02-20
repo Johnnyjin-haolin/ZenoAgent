@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 /**
  * 直接返回响应参数
@@ -15,6 +16,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class DirectResponseParams {
     
     /**
@@ -26,7 +28,7 @@ public class DirectResponseParams {
      * 是否完成任务（可选，默认false）
      */
     private Boolean isComplete;
-    public boolean isComplete() {
+    public boolean checkComplete() {
         return isComplete != null? isComplete : false;
     }
 
