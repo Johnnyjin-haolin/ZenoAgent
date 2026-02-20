@@ -33,6 +33,8 @@ import dev.langchain4j.model.chat.request.json.JsonArraySchema;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.request.json.JsonSchema;
 import dev.langchain4j.model.chat.request.json.JsonStringSchema;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -55,6 +57,9 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
     
     @Autowired
     private SimpleLLMChatHandler llmChatHandler;
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
+            .setSerializationInclusion(JsonInclude.Include.NON_NULL);
     
     @Autowired
     private IntelligentToolSelector toolSelector;
@@ -1072,14 +1077,24 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
 
     private String formatToolDefinition(McpToolInfo tool) {
         StringBuilder sb = new StringBuilder();
-        sb.append("- ").append(tool.getName());
+        sb.append("### ").append(tool.getName());
 
         if (StringUtils.isNotEmpty(tool.getDescription())) {
             sb.append(": ").append(tool.getDescription());
         }
         sb.append("\n");
-        sb.append("params:").append(tool.getParameters().toString());
-        sb.append("\nmetadata:").append(tool.getMetadata().toString());
+        try {
+            sb.append("params:").append(OBJECT_MAPPER.writeValueAsString(tool.getParameters()));
+            if (tool.getMetadata() != null && !tool.getMetadata().isEmpty()) {
+                sb.append("\nmetadata:").append(OBJECT_MAPPER.writeValueAsString(tool.getMetadata()));
+            }
+        } catch (Exception e) {
+            log.warn("Failed to serialize tool definition for {}", tool.getName(), e);
+            sb.append("params:").append(tool.getParameters());
+            if (tool.getMetadata() != null) {
+                sb.append("\nmetadata:").append(tool.getMetadata());
+            }
+        }
 
         return sb.toString();
     }
