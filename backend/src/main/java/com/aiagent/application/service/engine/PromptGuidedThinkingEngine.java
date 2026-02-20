@@ -801,7 +801,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
         if (StringUtils.isEmpty(text)) {
             return "";
         }
-        int keyIdx = text.indexOf("\"thinking”");
+        int keyIdx = text.indexOf("\"thinking\"");
         if (keyIdx != -1) {
             int colonIdx = text.indexOf(":", keyIdx);
             if (colonIdx != -1) {
