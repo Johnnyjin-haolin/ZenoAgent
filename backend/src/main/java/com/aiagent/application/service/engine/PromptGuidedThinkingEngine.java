@@ -72,8 +72,8 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
             1. 先判断已有信息是否足够回答用户问题；
             2. 需要调用工具时使用 TOOL_CALL，需要知识库资料时使用 RAG_RETRIEVE；
             3. 需要向用户输出内容时使用 DIRECT_RESPONSE（回复内容放在content），并通过isComplete字段控制流程：
-               - isComplete=true：最终回复，代表任务完成、流程终止或者需要用户新的输入才能继续任务，此时actions数组中**仅允许包含这一个DIRECT_RESPONSE动作**；
-               - isComplete=false：临时回复（如“正在查询，请稍等”），流程继续，可与TOOL_CALL/RAG_RETRIEVE/LLM_GENERATE并行；
+               - isComplete=true：**终止本轮**。用于：1. 任务彻底完成；2. **需要提问并等待用户回复**。此时意味着Agent暂停工作移交控制权给用户，actions数组中**仅允许包含这一个DIRECT_RESPONSE动作**；
+               - isComplete=false：**过程通知**。用于：任务仍在进行中，仅向用户发送“正在查询”、“已调用工具”等进度提示，**不等待用户回复**，流程自动继续。可与TOOL_CALL/RAG_RETRIEVE/LLM_GENERATE并行；
             4. 需要模型二次生成/改写时使用 LLM_GENERATE（prompt为指令，非答案）；
             5. actionType仅允许：TOOL_CALL、RAG_RETRIEVE、DIRECT_RESPONSE、LLM_GENERATE，严禁其他值；
             6. 支持actions数组包含多个Action（并行执行），但一次最多5个，核心规则：
@@ -244,7 +244,23 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
                   "reasoning": "需要调用工具查询ECS资源数量",
                   "toolCallParams": {
                     "toolName": "ResourceCenter-20221201-GetResourceCounts",
-                    "toolParams": "{"Filter": [{"Key":"ResourceType","Value":"ECS","MatchType":"Equals"}],"MaxResults": 20}"
+                    "toolParams": "{"Filter": [{"Key”:”ResourceType”,”Value”:”ECS”,”MatchType”:”Equals”}],”MaxResults\": 20}"
+                  }
+                }
+              ]
+            }
+            
+            ### 示例3：DIRECT_RESPONSE（需要用户补充信息）
+            {
+              "thinking": "用户想要查询天气，但未提供具体城市。当前无法调用天气工具，必须先向用户询问城市名称。这是一个需要用户输入的阻断性步骤。",
+              "actions": [
+                {
+                  "actionType": "DIRECT_RESPONSE",
+                  "actionName": "ask_city_location",
+                  "reasoning": "缺少城市信息，需询问用户",
+                  "directResponseParams": {
+                    "content": "请问您想查询哪个城市的天气？",
+                    "isComplete": true
                   }
                 }
               ]
@@ -285,6 +301,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
                     messages.add(history.get(i));
                 }
             }
+            log.info("历史对话:{}",messages);
             messages.add(new SystemMessage(promptPair.getSystemPrompt()));
             messages.add(new UserMessage(promptPair.getUserPrompt()));
 
@@ -784,7 +801,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
         if (StringUtils.isEmpty(text)) {
             return "";
         }
-        int keyIdx = text.indexOf("\"thinking\"");
+        int keyIdx = text.indexOf("\"thinking”");
         if (keyIdx != -1) {
             int colonIdx = text.indexOf(":", keyIdx);
             if (colonIdx != -1) {
