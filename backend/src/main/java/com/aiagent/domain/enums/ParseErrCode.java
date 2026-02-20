@@ -27,6 +27,7 @@ public enum ParseErrCode {
     RAG_QUERY_MISSING(10,"ragRetrieveParams.query缺失"),
     DIRECT_PARAMS_MISSING(11,"directResponseParams缺失"),
     DIRECT_CONTENT_MISSING(12,"directResponseParams.content缺失"),
+    DIRECT_IS_COMPLETE_MISSING(12,"directResponseParams.isComplete缺失"),
     LLM_PARAMS_MISSING(13,"llmGenerateParams缺失"),
     LLM_PROMPT_MISSING(14,"llmGenerateParams.prompt缺失");
 

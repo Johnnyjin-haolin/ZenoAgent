@@ -294,8 +294,8 @@ public class OpenAIReasoningThinkingEngine implements ThinkingEngine {
             
         JsonObjectSchema directResponseParams = JsonObjectSchema.builder()
             .addStringProperty("content")
-            .addBooleanProperty("checkComplete")
-            .required("content")
+            .addBooleanProperty("isComplete")
+            .required("content").required("isComplete")
             .build();
             
         JsonObjectSchema actionItem = JsonObjectSchema.builder()
@@ -407,6 +407,10 @@ public class OpenAIReasoningThinkingEngine implements ThinkingEngine {
                 }
                 if (StringUtils.isEmpty(dto.getDirectResponseParams().getContent())) {
                     throw new LLMParseException(ParseErrCode.DIRECT_CONTENT_MISSING, "path=" + basePath + ".directResponseParams.content, raw=" + truncate(raw, 300));
+                }
+                if (StringUtils.isEmpty(dto.getDirectResponseParams().getIsComplete())) {
+                    log.warn("DIRECT_RESPONSEAction缺少ssComplete");
+                    throw new LLMParseException(ParseErrCode.DIRECT_IS_COMPLETE_MISSING);
                 }
                 return AgentAction.directResponse(dto.getDirectResponseParams());
             case LLM_GENERATE:

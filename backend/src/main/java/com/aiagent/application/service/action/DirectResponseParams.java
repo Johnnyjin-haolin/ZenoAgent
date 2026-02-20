@@ -1,5 +1,6 @@
 package com.aiagent.application.service.action;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -25,12 +26,8 @@ public class DirectResponseParams {
     private String content;
 
     /**
-     * 是否完成任务（可选，默认false）
+     * 是否完成任务（必需）
      */
     private Boolean isComplete;
-    public boolean checkComplete() {
-        return isComplete != null? isComplete : false;
-    }
-
 }
 
