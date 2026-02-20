@@ -1,6 +1,6 @@
 package com.aiagent.infrastructure.mapper;
 
-import com.aiagent.domain.entity.DocumentEntity;
+import com.aiagent.domain.model.entity.DocumentEntity;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 

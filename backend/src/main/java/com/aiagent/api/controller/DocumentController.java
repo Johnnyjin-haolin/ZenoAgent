@@ -2,9 +2,9 @@ package com.aiagent.api.controller;
 
 import com.aiagent.api.dto.Page;
 import com.aiagent.api.dto.PageResult;
-import com.aiagent.domain.model.Document;
-import com.aiagent.application.service.rag.DocumentService;
-import com.aiagent.shared.response.Result;
+import com.aiagent.domain.model.bo.Document;
+import com.aiagent.domain.rag.DocumentService;
+import com.aiagent.common.response.Result;
 import com.aiagent.api.dto.TextDocumentRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;

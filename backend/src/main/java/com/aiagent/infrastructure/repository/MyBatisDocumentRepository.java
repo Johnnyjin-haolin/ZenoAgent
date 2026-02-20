@@ -1,9 +1,8 @@
 package com.aiagent.infrastructure.repository;
 
-import com.aiagent.domain.entity.DocumentEntity;
+import com.aiagent.domain.model.entity.DocumentEntity;
 import com.aiagent.infrastructure.mapper.DocumentMapper;
-import com.aiagent.domain.model.Document;
-import com.aiagent.infrastructure.repository.DocumentRepository;
+import com.aiagent.domain.model.bo.Document;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;

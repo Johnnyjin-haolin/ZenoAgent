@@ -1,6 +1,6 @@
 package com.aiagent.api.dto;
 
-import com.aiagent.domain.enums.AgentMode;
+import com.aiagent.common.enums.AgentMode;
 import lombok.Data;
 
 import java.util.List;

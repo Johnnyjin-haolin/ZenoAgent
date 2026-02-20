@@ -1,6 +1,6 @@
 package com.aiagent.infrastructure.repository;
 
-import com.aiagent.domain.model.KnowledgeBase;
+import com.aiagent.domain.model.bo.KnowledgeBase;
 
 import java.util.List;
 import java.util.Map;

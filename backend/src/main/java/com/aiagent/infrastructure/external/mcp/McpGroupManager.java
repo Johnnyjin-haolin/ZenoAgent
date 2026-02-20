@@ -1,7 +1,7 @@
 package com.aiagent.infrastructure.external.mcp;
 
 import com.aiagent.infrastructure.config.McpServerConfig;
-import com.aiagent.domain.enums.ConnectionTypeEnums;
+import com.aiagent.common.enums.ConnectionTypeEnums;
 import com.aiagent.api.dto.McpGroupInfo;
 import com.aiagent.api.dto.McpToolInfo;
 import dev.langchain4j.agent.tool.ToolSpecification;

@@ -1,6 +1,6 @@
 package com.aiagent.infrastructure.repository;
 
-import com.aiagent.domain.model.Document;
+import com.aiagent.domain.model.bo.Document;
 
 import java.util.List;
 import java.util.Optional;

@@ -1,9 +1,9 @@
 package com.aiagent.api.controller;
 
-import com.aiagent.domain.model.KnowledgeBase;
-import com.aiagent.application.service.rag.KnowledgeBaseService;
+import com.aiagent.domain.model.bo.KnowledgeBase;
+import com.aiagent.domain.rag.KnowledgeBaseService;
 import com.aiagent.api.dto.KnowledgeBaseRequest;
-import com.aiagent.shared.response.Result;
+import com.aiagent.common.response.Result;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 

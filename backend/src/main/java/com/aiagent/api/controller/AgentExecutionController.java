@@ -1,10 +1,10 @@
 package com.aiagent.api.controller;
 
-import com.aiagent.shared.response.ErrorCode;
-import com.aiagent.application.service.agent.IAgentService;
+import com.aiagent.common.response.ErrorCode;
+import com.aiagent.application.IAgentService;
 import com.aiagent.api.dto.AgentRequest;
 import com.aiagent.api.dto.HealthResponse;
-import com.aiagent.shared.response.Result;
+import com.aiagent.common.response.Result;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;

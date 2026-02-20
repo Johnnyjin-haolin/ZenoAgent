@@ -1,6 +1,6 @@
 package com.aiagent.infrastructure.config;
 
-import com.aiagent.shared.util.StringUtils;
+import com.aiagent.common.util.StringUtils;
 import com.alibaba.fastjson2.JSON;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

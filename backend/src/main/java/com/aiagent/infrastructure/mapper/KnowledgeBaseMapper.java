@@ -1,6 +1,6 @@
 package com.aiagent.infrastructure.mapper;
 
-import com.aiagent.domain.entity.KnowledgeBaseEntity;
+import com.aiagent.domain.model.entity.KnowledgeBaseEntity;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 

@@ -1,16 +1,13 @@
 package com.aiagent.infrastructure.external.mcp;
 
-import com.aiagent.domain.enums.ConnectionTypeEnums;
+import com.aiagent.common.enums.ConnectionTypeEnums;
 import com.aiagent.api.dto.McpToolInfo;
-import com.alibaba.fastjson2.JSON;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.mcp.client.McpClient;
 import dev.langchain4j.service.tool.ToolExecutionResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-
-import java.util.Map;
 
 /**
  * MCP工具执行器

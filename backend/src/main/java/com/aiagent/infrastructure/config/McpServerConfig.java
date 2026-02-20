@@ -1,7 +1,7 @@
 package com.aiagent.infrastructure.config;
 
-import com.aiagent.domain.enums.ConnectionTypeEnums;
-import com.aiagent.shared.util.StringUtils;
+import com.aiagent.common.enums.ConnectionTypeEnums;
+import com.aiagent.common.util.StringUtils;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

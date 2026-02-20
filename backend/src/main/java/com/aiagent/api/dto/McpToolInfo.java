@@ -1,6 +1,6 @@
 package com.aiagent.api.dto;
 
-import com.aiagent.domain.enums.ConnectionTypeEnums;
+import com.aiagent.common.enums.ConnectionTypeEnums;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import lombok.Data;

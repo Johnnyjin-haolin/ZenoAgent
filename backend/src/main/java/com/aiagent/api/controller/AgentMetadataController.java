@@ -3,11 +3,11 @@ package com.aiagent.api.controller;
 import com.aiagent.api.dto.McpGroupInfo;
 import com.aiagent.api.dto.McpToolInfo;
 import com.aiagent.infrastructure.config.AgentConfig;
-import com.aiagent.shared.response.ErrorCode;
-import com.aiagent.domain.enums.ModelType;
+import com.aiagent.common.response.ErrorCode;
+import com.aiagent.common.enums.ModelType;
 import com.aiagent.infrastructure.external.mcp.McpGroupManager;
 import com.aiagent.api.dto.ModelInfoVO;
-import com.aiagent.shared.response.Result;
+import com.aiagent.common.response.Result;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,10 +17,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Agent 配置与元数据接口

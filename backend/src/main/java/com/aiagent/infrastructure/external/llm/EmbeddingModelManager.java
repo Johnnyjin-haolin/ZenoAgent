@@ -1,7 +1,7 @@
 package com.aiagent.infrastructure.external.llm;
 
 import com.aiagent.infrastructure.config.AgentConfig;
-import com.aiagent.domain.enums.ModelType;
+import com.aiagent.common.enums.ModelType;
 import dev.langchain4j.http.client.jdk.JdkHttpClientBuilder;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.openai.OpenAiEmbeddingModel;

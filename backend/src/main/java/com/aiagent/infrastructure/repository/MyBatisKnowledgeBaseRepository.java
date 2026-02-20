@@ -1,8 +1,8 @@
 package com.aiagent.infrastructure.repository;
 
-import com.aiagent.domain.entity.KnowledgeBaseEntity;
+import com.aiagent.domain.model.entity.KnowledgeBaseEntity;
 import com.aiagent.infrastructure.mapper.KnowledgeBaseMapper;
-import com.aiagent.domain.model.KnowledgeBase;
+import com.aiagent.domain.model.bo.KnowledgeBase;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
