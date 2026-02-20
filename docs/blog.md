@@ -511,7 +511,7 @@ ZenoAgent 是我边学习边实践的产物。通过 Spring Boot 的工程化能
 
 目前项目已开源，欢迎感兴趣的朋友 Star ⭐️ 和 PR！
 
-*   **GitHub**: [https://github.com/zeno-agent/zeno-agent](https://github.com/zeno-agent/zeno-agent)
+*   **GitHub**: [https://github.com/Johnnyjin-haolin/ZenoAgent](https://github.com/Johnnyjin-haolin/ZenoAgent)
 *   **主要特性**: ReAct 引擎、RAG 知识库、MCP 工具协议、分布式协同、流式思考。
 
 让我们一起探索 AI Agent的无限可能！
