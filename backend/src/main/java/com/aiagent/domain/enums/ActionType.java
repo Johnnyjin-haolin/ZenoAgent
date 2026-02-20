@@ -1,8 +1,15 @@
 package com.aiagent.domain.enums;
 
+import lombok.Getter;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+
 /**
  * 动作类型枚举
  */
+@Getter
 public enum ActionType {
 
     /**
@@ -44,5 +51,8 @@ public enum ActionType {
             }
         }
         return null;
+    }
+    public static List<String> getActionTypeEnums(){
+        return Arrays.stream(ActionType.values()).map(ActionType::getCode).collect(Collectors.toList());
     }
 }

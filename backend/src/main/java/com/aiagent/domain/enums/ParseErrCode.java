@@ -11,8 +11,7 @@ public enum ParseErrCode {
     /**
      * action Type不合法
      */
-    ACTION_TYPE_INVALID(1,"action Type不合法，请使用严格按照允许的ActionType"),
-
+    ACTION_TYPE_INVALID(1,"action Type不合法，请使用严格按照允许的ActionType,ActionType仅允许RAG_RETRIEVE、TOOL_CALL、DIRECT_RESPONSE、LLM_GENERATE，"),
     /**
      * JSON解析格式错误
      */
@@ -29,7 +28,8 @@ public enum ParseErrCode {
     DIRECT_CONTENT_MISSING(12,"directResponseParams.content缺失"),
     DIRECT_IS_COMPLETE_MISSING(12,"directResponseParams.isComplete缺失"),
     LLM_PARAMS_MISSING(13,"llmGenerateParams缺失"),
-    LLM_PROMPT_MISSING(14,"llmGenerateParams.prompt缺失");
+    LLM_PROMPT_MISSING(14,"llmGenerateParams.prompt缺失"),
+    TOOL_NOT_FOUND(15, "Tool not found");
 
     private final Integer code;
     private final String description;

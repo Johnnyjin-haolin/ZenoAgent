@@ -714,6 +714,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
     }
 
     private ResponseFormat buildStructuredResponseFormat() {
+        // 1. 先定义 actionType 允许的枚举值
         JsonObjectSchema toolCallParams = JsonObjectSchema.builder()
             .addStringProperty("toolName")
             .addStringProperty("toolParams")
@@ -738,7 +739,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
             .required("content")
             .build();
         JsonObjectSchema actionItem = JsonObjectSchema.builder()
-            .addStringProperty("actionType")
+                .addEnumProperty("actionType", ActionType.getActionTypeEnums())
             .addStringProperty("actionName")
             .addStringProperty("reasoning")
             .addProperty("toolCallParams", toolCallParams)
@@ -859,6 +860,13 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
         
         if (StringUtils.isEmpty(params.getToolName())) {
             params.setToolName(toolName);
+        }
+
+        // Check if tool exists
+        McpToolInfo toolInfo = toolSelector.getToolByName(toolName);
+        if (toolInfo == null) {
+            log.warn("Thinking engine generated invalid tool: {}", toolName);
+            throw new LLMParseException(ParseErrCode.TOOL_NOT_FOUND.getCode(), "Tool not found: " + toolName + ". Please check available tools.");
         }
         
         return AgentAction.toolCall(toolName, params);
