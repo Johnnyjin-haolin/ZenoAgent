@@ -26,7 +26,7 @@
     <select id="selectByConversationId" resultMap="BaseResultMap">
         SELECT * FROM agent_message
         WHERE conversation_id = #{conversationId}
-        ORDER BY create_time ASC
+        ORDER BY create_time
         <if test="limit > 0">
             LIMIT #{limit}
         </if>

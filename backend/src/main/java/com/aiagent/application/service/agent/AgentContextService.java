@@ -113,10 +113,8 @@ public class AgentContextService {
             log.debug("使用默认RAG配置");
         }
         
-        // 加载历史对话消息（如果 messages 为空）
-        if (context.getMessages() == null || context.getMessages().isEmpty()) {
-            loadHistoryMessages(context, conversationId);
-        }
+        // 强制从数据库加载最新的历史对话消息，覆盖Redis中的缓存（确保消息列表与ThinkingConfig配置一致）
+        loadHistoryMessages(context, conversationId);
 
         return context;
     }
@@ -206,7 +204,7 @@ public class AgentContextService {
             // 1. 获取历史消息加载数量配置（从 ThinkingConfig 中获取）
             int limit = context.getThinkingConfig().getHistoryMessageLoadLimitOrDefault();
             
-            // 2. 从数据库查询历史消息（数据库返回倒序，即最新的消息在前）
+            // 2. 从数据库查询历史消息
             List<MessageEntity> historyEntities = messageMapper.selectByConversationId(
                 conversationId, 
                 limit
@@ -214,6 +212,7 @@ public class AgentContextService {
             
             if (historyEntities == null || historyEntities.isEmpty()) {
                 log.debug("会话 {} 没有历史消息", conversationId);
+                context.setMessages(new ArrayList<>());
                 return;
             }
             
@@ -225,11 +224,7 @@ public class AgentContextService {
                     historyMessages.add(message);
                 }
             }
-            
-            // 4. 反转列表（因为数据库返回的是倒序，需要转为正序）
-            Collections.reverse(historyMessages);
-            
-            // 5. 设置到 context
+            // 4. 设置到 context
             context.setMessages(historyMessages);
             
             log.info("加载历史对话消息成功，会话: {}, 消息数: {}", 
