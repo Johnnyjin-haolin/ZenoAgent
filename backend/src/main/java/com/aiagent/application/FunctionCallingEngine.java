@@ -24,9 +24,21 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 基于 LangChain4j 原生 Function Calling 的标准 Agent 推理引擎（默认引擎）
+ *
+ * <p>适用于支持 Function Calling 的主流模型（GPT-4、Claude、DeepSeek R1、Qwen3 等）。
+ * 通过 {@code toolSpecifications} 将工具定义以结构化参数传递给 LLM，
+ * 依据 {@code FinishReason.TOOL_EXECUTION} 驱动推理循环，无需 Prompt 解析。
+ *
+ * <p>如需使用不支持 Function Calling 的模型，切换 {@code AgentServiceImpl} 中的
+ * {@code @Qualifier} 值为 {@code "promptReActEngine"}。
+ *
+ * @see PromptReActEngine
+ */
 @Slf4j
 @Component
-public class NativeFunctionCallingEngine implements AgentEngine {
+public class FunctionCallingEngine implements AgentEngine {
 
     private static final int MAX_TOOL_ROUNDS = 8;
 
@@ -48,10 +60,17 @@ public class NativeFunctionCallingEngine implements AgentEngine {
             log.warn("AgentDefinition 未找到: agentId={}，使用默认 Agent", agentId);
             agentDef = agentDefinitionLoader.getById(AgentConstants.DEFAULT_AGENT_ID);
         }
-        List<ChatMessage> messages = buildMessages(agentDef, context);
-        List<ToolSpecification> toolSpecs = agentDef != null
-            ? toolRegistry.resolveToolSpecifications(agentDef)
-            : new ArrayList<>();
+
+        // 判断是否启用渐进式加载
+        boolean progressiveMode = toolRegistry.isProgressiveMode(agentDef);
+        log.info("渐进式工具加载模式: {}", progressiveMode ? "已启用" : "未启用");
+
+        // 初始化 messages（渐进式模式下追加工具概览到 System Prompt）
+        List<ChatMessage> messages = buildMessages(agentDef, context, progressiveMode);
+
+        // 初始化 toolSpecs（渐进式模式下仅包含系统工具，不加载 MCP 工具）
+        List<ToolSpecification> toolSpecs = resolveInitialToolSpecs(agentDef, progressiveMode);
+
         int toolRound = 0;
         
         try {
@@ -87,6 +106,19 @@ public class NativeFunctionCallingEngine implements AgentEngine {
                         publishEvent(context, AgentConstants.EVENT_AGENT_TOOL_RESULT,
                             "工具执行完成: " + toolRequest.name());
                     }
+
+                    // 渐进式加载：检测是否有新的工具加载请求
+                    if (progressiveMode && context.getActiveMcpToolNames() != null 
+                        && !context.getActiveMcpToolNames().isEmpty()) {
+                        List<ToolSpecification> newToolSpecs = 
+                            toolRegistry.resolveActiveToolSpecifications(context.getActiveMcpToolNames());
+                        toolSpecs.addAll(newToolSpecs);
+                        log.info("动态加载 {} 个 MCP 工具，当前 toolSpecs 共 {} 个", 
+                            newToolSpecs.size(), toolSpecs.size());
+                        // 清空已消费的工具名列表
+                        context.getActiveMcpToolNames().clear();
+                    }
+
                     continue;
                 }
                 log.info("Function Calling 循环结束，共执行 {} 轮工具调用", toolRound);
@@ -110,16 +142,61 @@ public class NativeFunctionCallingEngine implements AgentEngine {
                 context.getMessages(), toolRound, durationMs, AgentState.FAILED);
         }
     }
-    private List<ChatMessage> buildMessages(AgentDefinition agentDef, AgentContext context) {
+    /**
+     * 构建消息列表（渐进式模式下追加工具概览到 System Prompt）
+     */
+    private List<ChatMessage> buildMessages(AgentDefinition agentDef, AgentContext context, boolean progressiveMode) {
         List<ChatMessage> messages = new ArrayList<>();
+        
         if (agentDef != null && agentDef.getSystemPrompt() != null && !agentDef.getSystemPrompt().isEmpty()) {
-            messages.add(SystemMessage.from(agentDef.getSystemPrompt()));
+            String systemPrompt = agentDef.getSystemPrompt();
+            
+            // 渐进式模式：追加 MCP 工具概览
+            if (progressiveMode) {
+                String toolSummary = toolRegistry.buildMcpToolSummary(agentDef);
+                if (!toolSummary.isEmpty()) {
+                    systemPrompt += toolSummary;
+                }
+            }
+            
+            messages.add(SystemMessage.from(systemPrompt));
         }
+        
         List<ChatMessage> history = context.getMessages();
         if (history != null) {
             messages.addAll(history);
         }
         return messages;
+    }
+
+    /**
+     * 解析初始 ToolSpecification 列表
+     * 渐进式模式下仅包含系统工具，非渐进式模式包含全量工具
+     */
+    private List<ToolSpecification> resolveInitialToolSpecs(AgentDefinition agentDef, boolean progressiveMode) {
+        List<ToolSpecification> result = new ArrayList<>();
+        
+        if (agentDef == null || agentDef.getTools() == null) {
+            return result;
+        }
+        
+        // 获取全量工具定义（供过滤使用）
+        List<ToolSpecification> allSpecs = toolRegistry.resolveToolSpecifications(agentDef);
+
+        // 系统工具：始终加载
+        allSpecs.stream()
+            .filter(spec -> spec.name().startsWith("system_"))
+            .forEach(result::add);
+
+        // MCP 工具：渐进式模式下不加载（通过 system_resolve_tools 按需加载）
+        if (!progressiveMode) {
+            allSpecs.stream()
+                .filter(spec -> !spec.name().startsWith("system_"))
+                .forEach(result::add);
+        }
+        
+        log.info("初始化工具列表，渐进式模式={}, toolSpecs数量={}", progressiveMode, result.size());
+        return result;
     }
 
     private void publishEvent(AgentContext context, String event, String message) {

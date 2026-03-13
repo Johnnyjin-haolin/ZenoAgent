@@ -159,6 +159,12 @@ public class AgentConfig {
     @Data
     public static class ToolConfig {
         private boolean enabledByDefault = true;
+        
+        /**
+         * 渐进式工具加载阈值
+         * 当 MCP 工具数量超过此值时，启用渐进式加载（仅展示工具概览，需要时按需加载详情）
+         */
+        private int progressiveThreshold = 20;
     }
 }
 

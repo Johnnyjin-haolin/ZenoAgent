@@ -23,10 +23,13 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 
 /**
- * AI Agent 服务实现（ReAct架构版本）
- * 
- * 使用ReAct循环实现自主思考和决策能力
- * 
+ * AI Agent 服务实现
+ *
+ * <p>当前默认使用 {@link FunctionCallingEngine}（支持 Function Calling 的主流模型）。
+ * 如需切换为 Prompt 引导的备选引擎，将 {@code @Qualifier} 值改为 {@code "promptReActEngine"}。
+ *
+ * @see FunctionCallingEngine
+ * @see PromptReActEngine
  * @author aiagent
  */
 @Slf4j
@@ -35,7 +38,7 @@ public class AgentServiceImpl implements IAgentService {
     private static final long STEP_EVENT_THRESHOLD_MS = 300;
     
     @Autowired
-    @Qualifier("nativeFunctionCallingEngine")
+    @Qualifier("functionCallingEngine")
     private AgentEngine agentEngine;
 
     @Autowired

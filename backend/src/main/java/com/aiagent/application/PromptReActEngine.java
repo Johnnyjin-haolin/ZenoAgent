@@ -23,14 +23,21 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * ReAct循环引擎
- * 实现Reasoning-Acting循环，让Agent能够自主思考、行动、观察和反思
- * 
- * @author aiagent
+ * 基于 Prompt 引导的 ReAct（Reasoning + Acting）循环引擎（备选引擎）
+ *
+ * <p>适用于<b>不支持 Function Calling</b> 的模型（如部分私有化部署的老旧模型、Ollama 部分模型）。
+ * 通过在 Prompt 中注入工具定义，由 LLM 以 JSON 格式输出 Action，后端解析后执行，
+ * 支持 TOOL_CALL / RAG_RETRIEVE / LLM_GENERATE / DIRECT_RESPONSE 四种动作类型，
+ * 并支持并行执行多个动作。
+ *
+ * <p>如需切换到此引擎，将 {@code AgentServiceImpl} 中的
+ * {@code @Qualifier} 值改为 {@code "promptReActEngine"}。
+ *
+ * @see FunctionCallingEngine
  */
 @Slf4j
 @Component
-public class ReActEngine implements AgentEngine {
+public class PromptReActEngine implements AgentEngine {
     
     @Autowired
     private ThinkingEngine thinkingEngine;

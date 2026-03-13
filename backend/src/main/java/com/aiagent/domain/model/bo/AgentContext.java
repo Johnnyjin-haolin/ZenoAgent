@@ -13,9 +13,11 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -140,6 +142,13 @@ public class AgentContext implements Serializable {
      */
     @JsonIgnore
     private transient AgentKnowledgeResult initialRagResult;
+
+    /**
+     * 渐进式工具加载：本轮 LLM 通过 system_resolve_tools 工具请求加载的 MCP 工具名称集合
+     * 工具执行后由 NativeFunctionCallingEngine 消费并清空，不需要序列化
+     */
+    @JsonIgnore
+    private transient Set<String> activeMcpToolNames = new HashSet<>();
     
     /**
      * 从 ChatMessage 列表设置消息（自动转换为DTO）
