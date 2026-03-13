@@ -118,6 +118,9 @@ public class AgentContextService {
         // 强制从数据库加载最新的历史对话消息，覆盖Redis中的缓存（确保消息列表与ThinkingConfig配置一致）
         loadHistoryMessages(context, conversationId);
 
+        //把本次的请求消息添加到消息列表中
+        context.getMessages().add(new UserMessage(request.getContent()));
+
         return context;
     }
 

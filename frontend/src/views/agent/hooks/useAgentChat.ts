@@ -7,7 +7,7 @@ import { ref, Ref, computed, reactive, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { message } from 'ant-design-vue';
 import logger from '@/utils/logger';
-import { executeAgent, getConversationMessages, confirmToolExecution, stopAgent } from '../agent.api';
+import { executeAgent, getConversationMessages, confirmToolExecution, stopAgent, submitAnswer } from '../agent.api';
 import type {
   AgentMessage,
   AgentRequest,
@@ -21,6 +21,7 @@ import type {
   ProcessSubStep,
   ThinkingConfig,
   RAGConfig,
+  UserQuestion,
 } from '../agent.types';
 
 export interface UseAgentChatOptions {
@@ -70,6 +71,12 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     toolName: string;
     params: Record<string, any>;
   }>>([]);
+
+  /**
+   * 当前待回答的用户提问（来自 system_ask_user_question 工具）
+   * null 表示当前没有待回答的问题
+   */
+  const pendingQuestion = ref<UserQuestion | null>(null);
 
   /**
    * 创建执行步骤
@@ -271,6 +278,19 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     try {
       // 执行 Agent 任务
       currentController = await executeAgent(request, {
+        onAskUserQuestion: (question) => {
+          logger.debug('[useAgentChat] 收到用户提问:', question);
+          pendingQuestion.value = question;
+
+          // 在当前迭代中标记有提问步骤（展示用）
+          if (currentIteration) {
+            const step = createStep('tool_call', t('agent.chat.askingUser', { question: question.question }), 'waiting', {
+              toolName: 'system_ask_user_question',
+            });
+            currentIteration.steps.push(step);
+          }
+        },
+
         onStart: (event) => {
           logger.debug('任务开始:', event);
           updateConversationId(event);
@@ -786,6 +806,41 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
   };
 
   /**
+   * 提交用户对 Agent 提问的回答
+   * 由 AgentUserQuestion 组件在用户填写完毕后调用
+   */
+  const resolveQuestion = async (answer: string) => {
+    if (!pendingQuestion.value) return;
+
+    const { questionId } = pendingQuestion.value;
+    const questionText = pendingQuestion.value.question;
+
+    // 完成当前迭代中 ask_user_question 的步骤
+    const lastAssistantMsg = messages.value[messages.value.length - 1];
+    if (lastAssistantMsg?.process?.iterations?.length) {
+      const iter = lastAssistantMsg.process.iterations[lastAssistantMsg.process.iterations.length - 1] as any;
+      if (iter?.steps) {
+        const step = [...iter.steps].reverse().find(
+          (s: any) => s.type === 'tool_call' && s.metadata?.toolName === 'system_ask_user_question'
+        );
+        if (step) {
+          step.status = 'success';
+          step.endTime = Date.now();
+          step.duration = step.startTime ? step.endTime - step.startTime : undefined;
+          step.metadata = { ...step.metadata, toolResult: answer };
+        }
+      }
+    }
+
+    pendingQuestion.value = null;
+
+    const success = await submitAnswer(questionId, answer);
+    if (!success) {
+      message.error(t('agent.chat.submitAnswerFailed'));
+    }
+  };
+
+  /**
    * 确认/拒绝当前工具执行
    */
   const resolvePendingTool = async (approve: boolean) => {
@@ -1009,5 +1064,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     loadMessages,
     pendingToolConfirmations,
     resolvePendingTool,
+    pendingQuestion,
+    resolveQuestion,
   };
 }

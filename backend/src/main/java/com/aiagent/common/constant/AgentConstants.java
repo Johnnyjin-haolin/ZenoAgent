@@ -111,5 +111,10 @@ public class AgentConstants {
     public static final String MESSAGE_STREAM_COMPLETE = "流式输出完成";
     public static final String MESSAGE_TASK_COMPLETE = "任务完成";
     public static final String MESSAGE_RAG_QUERYING = "正在检索知识库...";
+
+    /**
+     * 用户交互事件（系统工具 ASK_USER_QUESTION 使用）
+     */
+    public static final String EVENT_AGENT_ASK_USER_QUESTION = "agent:ask_user_question";
 }
 

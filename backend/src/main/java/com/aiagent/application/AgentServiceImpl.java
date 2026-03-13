@@ -56,6 +56,9 @@ public class AgentServiceImpl implements IAgentService {
     
     @Autowired
     private StopRequestManager stopRequestManager;
+
+    @Autowired
+    private NativeFunctionCallingEngine nativeFunctionCallingEngine;
     
     @Override
     //todo 前端UI界面参照Google的炫酷画面
@@ -248,6 +251,7 @@ public class AgentServiceImpl implements IAgentService {
             //todo 简单咨询模式
             //todo react 复杂任务模式
             ReActExecutionResult executionResult = reActEngine.execute(request.getContent(), context);
+//            nativeFunctionCallingEngine.execute(context);
             stepStartNs = logStep("react_execute", reactStartNs, requestId, conversationId,
                 "modelId=" + modelId + ", iterations=" + executionResult.getIterations(), emitter);
 

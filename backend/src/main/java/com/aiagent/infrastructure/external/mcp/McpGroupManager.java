@@ -294,6 +294,14 @@ public class McpGroupManager {
                 .collect(Collectors.toList());
     }
     
+    public McpToolInfo getToolByName(String toolName) {
+        return toolsByGroup.values().stream()
+            .flatMap(List::stream)
+            .filter(t -> toolName.equals(t.getName()))
+            .findFirst()
+            .orElse(null);
+    }
+    
     /**
      * 获取MCP客户端（用于直接调用）
      */

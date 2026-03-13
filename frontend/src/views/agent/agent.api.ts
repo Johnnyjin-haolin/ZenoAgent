@@ -15,6 +15,7 @@ import type {
   ConversationInfo,
   PageResult,
   HealthResponse,
+  UserQuestion,
 } from './agent.types';
 import { ModelType } from '@/types/model.types';
 
@@ -26,6 +27,8 @@ export enum AgentApi {
   execute = '/aiagent/execute',
   /** 停止 Agent 执行 */
   stop = '/aiagent/stop',
+  /** 提交用户对 Agent 提问的回答 */
+  answer = '/aiagent/answer',
   /** 获取可用模型列表 */
   availableModels = '/aiagent/models/available',
   /** 健康检查 */
@@ -177,6 +180,25 @@ export async function stopAgent(requestId: string): Promise<boolean> {
     return response.success === true;
   } catch (error) {
     logger.error('停止 Agent 失败:', error);
+    return false;
+  }
+}
+
+/**
+ * 提交用户对 Agent 提问的回答
+ * 在收到 agent:ask_user_question 事件后，用户填写回答后调用此函数
+ * @param questionId  问题ID（从事件 data.questionId 获取）
+ * @param answer      用户的回答内容
+ */
+export async function submitAnswer(questionId: string, answer: string): Promise<boolean> {
+  try {
+    const response = await http.post(
+      { url: AgentApi.answer, params: { questionId, answer } },
+      { isTransformResponse: false }
+    );
+    return response.success === true;
+  } catch (error) {
+    logger.error('提交用户回答失败:', error);
     return false;
   }
 }
@@ -374,6 +396,21 @@ function dispatchEvent(event: AgentEvent, callbacks: AgentEventCallbacks) {
       logger.debug('[Agent] RAG 检索:', event.message);
       callbacks.onRagRetrieve?.(event);
       break;
+
+    case 'agent:ask_user_question': {
+      logger.debug('[Agent] 向用户提问:', event.data);
+      if (callbacks.onAskUserQuestion && event.data) {
+        const question: UserQuestion = {
+          questionId: event.data.questionId,
+          question: event.data.question,
+          questionType: event.data.questionType,
+          options: event.data.options,
+          previewContent: event.data.previewContent,
+        };
+        callbacks.onAskUserQuestion(question);
+      }
+      break;
+    }
 
     case 'agent:tool_call':
       logger.debug('[Agent] 工具调用:', event.data);

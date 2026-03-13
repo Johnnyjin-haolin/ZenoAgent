@@ -228,6 +228,15 @@ export default {
       inputMsg: 'Please enter message content',
       noRegenMsg: 'No message to regenerate',
       answerDone: 'Answer completed',
+      askingUser: 'Waiting for user answer: {question}',
+      submitAnswerFailed: 'Failed to submit answer, please try again',
+    },
+    question: {
+      title: 'Agent needs your answer',
+      inputPlaceholder: 'Please enter your answer...',
+      submit: 'Submit',
+      skip: 'Skip',
+      skipped: '(Skipped by user)',
     },
     process: {
       reactTitle: 'ReAct Reasoning',

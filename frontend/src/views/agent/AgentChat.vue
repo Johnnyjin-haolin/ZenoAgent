@@ -42,6 +42,12 @@
         @reject-tool="handleRejectTool"
       />
 
+      <!-- Agent 向用户提问悬浮卡片 -->
+      <AgentUserQuestion
+        :question="pendingQuestion"
+        @submit="resolveQuestion"
+      />
+
       <ChatInput
         ref="chatInputRef"
         v-model="userInput"
@@ -91,6 +97,7 @@ import ChatHeader from './components/ChatHeader.vue';
 import ChatInput from './components/ChatInput.vue';
 import ChatMessages from './components/ChatMessages.vue';
 import AgentSlide from './components/AgentSlide.vue';
+import AgentUserQuestion from './components/AgentUserQuestion.vue';
 import { AGENT_CONFIG_STORAGE_KEY } from './agent.constants';
 import type { ModelInfo, KnowledgeInfo, ThinkingConfig, RAGConfig } from './agent.types';
 import { DEFAULT_THINKING_CONFIG, DEFAULT_RAG_CONFIG } from './agent.types';
@@ -157,6 +164,8 @@ const {
   clearMessages,
   loadMessages,
   resolvePendingTool,
+  pendingQuestion,
+  resolveQuestion,
 } = useAgentChat({
   conversationId: currentConversationId,  // Ref 会自动响应
   defaultModelId: selectedModelId.value,  // 初始值
@@ -472,6 +481,7 @@ watch(
   min-width: 0;
   overflow: hidden;
   background: transparent;
+  position: relative;
 
   &.expanded {
     margin-left: 0;

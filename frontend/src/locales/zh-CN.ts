@@ -228,6 +228,15 @@ export default {
       inputMsg: '请输入消息内容',
       noRegenMsg: '没有可重新生成的消息',
       answerDone: '回答完成',
+      askingUser: '等待用户回答：{question}',
+      submitAnswerFailed: '提交回答失败，请重试',
+    },
+    question: {
+      title: 'Agent 需要您的回答',
+      inputPlaceholder: '请输入您的回答...',
+      submit: '提交',
+      skip: '跳过',
+      skipped: '（用户跳过）',
     },
     process: {
       reactTitle: 'ReAct 推理过程',

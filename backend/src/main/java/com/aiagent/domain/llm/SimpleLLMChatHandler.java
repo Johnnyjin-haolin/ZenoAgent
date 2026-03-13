@@ -2,6 +2,7 @@ package com.aiagent.domain.llm;
 
 import com.aiagent.application.StreamingCallback;
 import com.aiagent.infrastructure.external.llm.ModelManager;
+import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.model.chat.ChatModel;
@@ -355,6 +356,116 @@ public class SimpleLLMChatHandler {
             }
         }
         return total;
+    }
+
+    public ChatResponse chatWithToolsStreaming(
+            String modelId,
+            List<ChatMessage> messages,
+            List<ToolSpecification> toolSpecs,
+            StreamingCallback callback) {
+        log.info("开始 Function Calling 流式对话，模型: {}, toolSpecs={}", modelId,
+            toolSpecs != null ? toolSpecs.size() : 0);
+        long startNs = System.nanoTime();
+        try {
+            if (callback != null) {
+                callback.onStart();
+            }
+            StreamingChatModel streamingModel = modelManager.getOrCreateStreamingModel(modelId);
+            StringBuilder fullTextBuilder = new StringBuilder();
+            final Object lock = new Object();
+            final boolean[] completed = {false};
+            final Throwable[] error = {null};
+            final ChatResponse[] finalResponse = {null};
+            ChatRequest.Builder requestBuilder = ChatRequest.builder()
+                    .messages(messages);
+            if (toolSpecs != null && !toolSpecs.isEmpty()) {
+                requestBuilder.toolSpecifications(toolSpecs);
+            }
+            ChatRequest chatRequest = requestBuilder.build();
+            StreamingChatResponseHandler handler = new StreamingChatResponseHandler() {
+                @Override
+                public void onPartialResponse(String partialResponse) {
+                    fullTextBuilder.append(partialResponse);
+                    if (callback != null) {
+                        try {
+                            callback.onToken(partialResponse);
+                        } catch (Exception e) {
+                            log.error("回调 onToken 失败", e);
+                        }
+                    }
+                }
+                @Override
+                public void onPartialThinking(dev.langchain4j.model.chat.response.PartialThinking partialThinking) {
+                    if (callback != null) {
+                        try {
+                            callback.onThinking(partialThinking.text());
+                        } catch (Exception e) {
+                            log.error("回调 onThinking 失败", e);
+                        }
+                    }
+                }
+                @Override
+                public void onCompleteResponse(ChatResponse completeResponse) {
+                    finalResponse[0] = completeResponse;
+                    String fullText = fullTextBuilder.toString();
+                    log.info("Function Calling 流式对话完成，文本长度={}, finishReason={}",
+                        fullText.length(), completeResponse.finishReason());
+                    if (callback != null) {
+                        try {
+                            callback.onComplete(fullText);
+                        } catch (Exception e) {
+                            log.error("回调 onComplete 失败", e);
+                        }
+                    }
+                    synchronized (lock) {
+                        completed[0] = true;
+                        lock.notifyAll();
+                    }
+                }
+                @Override
+                public void onError(Throwable throwable) {
+                    synchronized (lock) {
+                        error[0] = throwable;
+                        completed[0] = true;
+                        lock.notifyAll();
+                    }
+                    log.error("Function Calling 流式对话错误", throwable);
+                    if (callback != null) {
+                        try {
+                            callback.onError(throwable);
+                        } catch (Exception e) {
+                            log.error("回调 onError 失败", e);
+                        }
+                    }
+                }
+            };
+            streamingModel.chat(chatRequest, handler);
+            synchronized (lock) {
+                while (!completed[0]) {
+                    try {
+                        lock.wait();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("等待 LLM 响应被中断", e);
+                    }
+                }
+            }
+            if (error[0] != null) {
+                throw new RuntimeException("LLM Function Calling 失败", error[0]);
+            }
+            log.info("Function Calling 流式对话完成，耗时 {} ms", elapsedMs(startNs));
+            return finalResponse[0];
+        } catch (Exception e) {
+            log.error("Function Calling 流式对话失败，耗时 {} ms", elapsedMs(startNs), e);
+            if (callback != null) {
+                try {
+                    callback.onError(e);
+                } catch (Exception ex) {
+                    log.error("回调 onError 失败", ex);
+                }
+            }
+            throw new RuntimeException("LLM 调用失败: " + e.getMessage(), e);
+        }
     }
 
     private long elapsedMs(long startNs) {

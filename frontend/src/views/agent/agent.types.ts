@@ -81,6 +81,27 @@ export interface AgentRequest {
 }
 
 /**
+ * Agent 向用户提问的问题类型
+ */
+export type UserQuestionType = 'SINGLE_SELECT' | 'MULTI_SELECT' | 'INPUT' | 'PREVIEW';
+
+/**
+ * Agent 向用户发起的问题（由 system_ask_user_question 工具触发）
+ */
+export interface UserQuestion {
+  /** 问题唯一ID（提交答案时回传） */
+  questionId: string;
+  /** 问题内容 */
+  question: string;
+  /** 问题类型 */
+  questionType: UserQuestionType;
+  /** 选项列表（SINGLE_SELECT / MULTI_SELECT 时有值） */
+  options?: string[];
+  /** 预览内容（PREVIEW 时有值） */
+  previewContent?: string;
+}
+
+/**
  * Agent 事件类型
  */
 export type AgentEventType =
@@ -107,6 +128,7 @@ export type AgentEventType =
   | 'agent:status:tool_executing_single' // 单个工具执行
   | 'agent:status:tool_executing_batch'  // 批量工具执行
   | 'agent:status:retrying'              // 格式重试中
+  | 'agent:ask_user_question' // Agent 向用户提问（AskUserQuestion 工具触发）
   | 'agent:stream_complete' // 流式输出完成
   | 'agent:complete'        // 任务完成
   | 'agent:error';          // 错误发生
@@ -592,6 +614,7 @@ export interface McpToolInfo {
 export interface AgentEventCallbacks {
   onStart?: (event: AgentEvent) => void;
   onIterationStart?: (event: AgentEvent) => void;
+  onAskUserQuestion?: (question: UserQuestion) => void;
   onThinking?: (event: AgentEvent) => void;
   onThinkingDelta?: (event: AgentEvent) => void;
   onModelSelected?: (event: AgentEvent) => void;
