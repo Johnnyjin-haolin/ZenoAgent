@@ -1,6 +1,6 @@
 package com.aiagent.api.controller;
 
-import com.aiagent.api.dto.MessageDTO;
+import com.aiagent.api.dto.MessageResponse;
 import com.aiagent.api.dto.Page;
 import com.aiagent.api.dto.PageResult;
 import com.aiagent.domain.conversation.ConversationService;
@@ -57,10 +57,10 @@ public class AgentConversationController {
      * 获取会话消息列表（从MySQL读取）
      */
     @GetMapping("/conversation/{id}/messages")
-    public Result<List<MessageDTO>> getConversationMessages(
+    public Result<List<MessageResponse>> getConversationMessages(
             @PathVariable("id") String conversationId,
             @RequestParam(required = false, defaultValue = "50") Integer limit) {
-        List<MessageDTO> messages =
+        List<MessageResponse> messages =
             messageService.getMessages(conversationId, limit);
 
         return Result.success(messages);

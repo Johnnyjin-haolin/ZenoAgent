@@ -53,7 +53,9 @@ public class McpToolExecutor {
                 .arguments(params)
                 .build();
         // 调用工具
-        return client.executeTool(request);
+        ToolExecutionResult toolExecutionResult = client.executeTool(request);
+        log.info("MCP工具执行结果: {}", toolExecutionResult);
+        return toolExecutionResult;
 
     }
 

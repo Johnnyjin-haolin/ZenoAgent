@@ -1,6 +1,7 @@
 package com.aiagent.domain.context;
 
 import com.aiagent.domain.model.bo.KnowledgeBase;
+import com.aiagent.domain.model.bo.MessageBO;
 import com.aiagent.domain.rag.KnowledgeBaseService;
 import com.aiagent.domain.rag.RAGEnhancer;
 import com.aiagent.common.constant.AgentConstants;
@@ -15,6 +16,8 @@ import com.aiagent.api.dto.ConversationInfo;
 import com.aiagent.domain.conversation.ConversationService;
 import com.aiagent.domain.model.entity.MessageEntity;
 import com.aiagent.infrastructure.mapper.MessageMapper;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
@@ -66,7 +69,7 @@ public class AgentContextService {
             context = AgentContext.builder()
                 .conversationId(conversationId)
                 .agentId(StringUtils.getString(request.getAgentId(), AgentConstants.DEFAULT_AGENT_ID))
-                .messageDTOs(new ArrayList<>())
+                .messageBOS(new ArrayList<>())
                 .actionExecutionHistory(new ArrayList<>())
                 .ragRetrieveHistory(new ArrayList<>())
                 .iterations(0)
@@ -118,8 +121,7 @@ public class AgentContextService {
         // 强制从数据库加载最新的历史对话消息，覆盖Redis中的缓存（确保消息列表与ThinkingConfig配置一致）
         loadHistoryMessages(context, conversationId);
 
-        //把本次的请求消息添加到消息列表中
-        context.getMessages().add(new UserMessage(request.getContent()));
+        // 注意：此处不添加用户消息，由 AgentServiceImpl 统一通过 context.addMessage() 写入
 
         return context;
     }
@@ -246,23 +248,58 @@ public class AgentContextService {
     
     /**
      * 将 MessageEntity 转换为 ChatMessage
+     * 优先从 metadata.messageData 无损还原（支持 tool_calls），降级使用 role+content
      * 
      * @param entity 消息实体
      * @return ChatMessage
      */
     private ChatMessage convertToChatMessage(MessageEntity entity) {
-        if (entity == null || entity.getContent() == null) {
+        if (entity == null) {
             return null;
         }
         
-        // 根据角色类型转换
+        // 优先从 metadata.messageData 还原（完整信息，支持 tool_calls）
+        if (entity.getMetadata() != null && !entity.getMetadata().isEmpty()) {
+            try {
+                JSONObject metadata = JSON.parseObject(entity.getMetadata());
+                if (metadata != null && metadata.containsKey("messageData")) {
+                    Object messageDataObj = metadata.get("messageData");
+                    MessageBO dto = null;
+                    
+                    if (messageDataObj instanceof JSONObject) {
+                        dto = ((JSONObject) messageDataObj).toJavaObject(MessageBO.class);
+                    } else if (messageDataObj instanceof String) {
+                        dto = JSON.parseObject((String) messageDataObj, MessageBO.class);
+                    }
+                    
+                    if (dto != null) {
+                        ChatMessage restored = dto.toChatMessage();
+                        if (restored != null) {
+                            return restored;  // 无损还原成功
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("从 metadata 还原消息失败，降级使用 role+content: conversationId={}, error={}",
+                    entity.getConversationId(), e.getMessage());
+            }
+        }
+        
+        // 降级方案：用 role + content 简单还原（兼容旧数据）
         String role = entity.getRole();
+        String content = entity.getContent() != null ? entity.getContent() : "";
+        
         if ("user".equalsIgnoreCase(role)) {
-            return new UserMessage(entity.getContent());
+            return new UserMessage(content);
         } else if ("assistant".equalsIgnoreCase(role) || "ai".equalsIgnoreCase(role)) {
-            return new AiMessage(entity.getContent());
+            return content.isEmpty() ? null : AiMessage.from(content);
         } else if ("system".equalsIgnoreCase(role)) {
-            return new SystemMessage(entity.getContent());
+            return SystemMessage.from(content);
+        } else if ("tool".equalsIgnoreCase(role)) {
+            // 旧数据的 ToolExecutionResultMessage 无法还原，降级为 AiMessage 或跳过
+            log.warn("无法还原 tool 类型消息（缺少 metadata.messageData），跳过: messageId={}",
+                entity.getMessageId());
+            return null;
         } else {
             log.warn("未知的消息角色类型: {}", role);
             return null;

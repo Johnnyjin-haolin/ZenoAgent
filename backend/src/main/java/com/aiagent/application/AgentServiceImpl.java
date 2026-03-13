@@ -1,6 +1,7 @@
 package com.aiagent.application;
 
 import com.aiagent.domain.context.AgentContextService;
+import com.aiagent.domain.model.bo.MessageBO;
 import com.aiagent.infrastructure.config.AgentConfig;
 import com.aiagent.common.constant.AgentConstants;
 import com.aiagent.domain.conversation.ConversationService;
@@ -126,10 +127,7 @@ public class AgentServiceImpl implements IAgentService {
             // 2. 保存用户消息到记忆和MySQL（统一通过MemorySystem处理）
             UserMessage userMessage = new UserMessage(request.getContent());
             memorySystem.saveShortTermMemory(conversationId, userMessage, null, null, null, null);
-            if (context.getMessages() == null) {
-                context.setMessages(new java.util.ArrayList<>());
-            }
-            context.getMessages().add(userMessage);
+            context.addMessage(userMessage);
             stepStartNs = logStep("save_user_message", stepStartNs, requestId, conversationId, null, emitter);
 
             // 3. 设置上下文变量（使用具体属性）
@@ -255,11 +253,11 @@ public class AgentServiceImpl implements IAgentService {
             stepStartNs = logStep("engine_execute", engineStartNs, requestId, conversationId,
                 "modelId=" + modelId + ", iterations=" + executionResult.getIterations(), emitter);
 
-            // 6. 处理最终结果
-            // AI消息已经在 ObservationEngine 的观察阶段即时持久化了，无需再次保存
-            List<ChatMessage> allMessages = executionResult.getMessages();
-            log.debug("执行结果包含 {} 条消息（已在观察阶段持久化）",
-                allMessages != null ? allMessages.size() : 0);
+            // 6. 批量保存本轮新增的 AI/Tool 消息（UserMessage 已在步骤2保存，此处跳过）
+            // executionResult.getMessages() 是完整消息列表，新增消息 = 总数 - 加载到历史消息数 - 1(本轮user)
+            // 但最简单可靠的方式：保存 context 中类型非 USER 且非 SYSTEM 的新增消息
+            saveNewAssistantMessages(context, context.getModelId(), conversationId);
+            stepStartNs = logStep("save_assistant_messages", stepStartNs, requestId, conversationId, null, emitter);
 
             // 更新对话消息数量
             try {
@@ -336,6 +334,45 @@ public class AgentServiceImpl implements IAgentService {
                 .build());
         }
         return System.nanoTime();
+    }
+
+    /**
+     * 批量保存本轮新增的 AI/Tool 消息到 MySQL
+     * 策略：从 messageDTOs 中找出新增的非 USER 消息（通过简单时序判断）
+     */
+    private void saveNewAssistantMessages(AgentContext context, String modelId, String conversationId) {
+        List<MessageBO> allDTOs = context.getMessageBOS();
+        if (allDTOs == null || allDTOs.isEmpty()) {
+            return;
+        }
+
+        // 简单策略：遍历最后几条消息，保存所有 AI / TOOL_EXECUTION 类型
+        // （因为执行循环中多次 addMessage，这些消息一定是新增的）
+        int savedCount = 0;
+        for (int i = allDTOs.size() - 1; i >= 0 && savedCount < 20; i--) {
+            MessageBO dto = allDTOs.get(i);
+            String type = dto.getType();
+
+            // 只保存 AI 和 TOOL_EXECUTION，跳过 USER/SYSTEM
+            if ("AI".equals(type) || "TOOL_EXECUTION".equals(type)) {
+                try {
+                    ChatMessage message = dto.toChatMessage();
+                    if (message != null) {
+                        memorySystem.saveShortTermMemory(conversationId, message, modelId, null, null, null);
+                        savedCount++;
+                    }
+                } catch (Exception e) {
+                    log.warn("保存消息失败，跳过: type={}, error={}", type, e.getMessage());
+                }
+            } else if ("USER".equals(type)) {
+                // 遇到 USER 消息说明前面的都是历史消息，停止遍历
+                break;
+            }
+        }
+
+        if (savedCount > 0) {
+            log.info("批量保存本轮新增消息完成: conversationId={}, count={}", conversationId, savedCount);
+        }
     }
 }
 

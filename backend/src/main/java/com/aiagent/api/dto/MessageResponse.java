@@ -6,12 +6,12 @@ import lombok.Data;
 import java.util.Date;
 
 /**
- * 消息数据传输对象
+ * 消息响应对象（API 层）
  * 
  * @author aiagent
  */
 @Data
-public class MessageDTO {
+public class MessageResponse {
     
     /**
      * 消息唯一标识

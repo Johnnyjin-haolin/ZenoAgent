@@ -50,7 +50,7 @@ public class AgentContext implements Serializable {
      * 对话历史（存储DTO格式，用于序列化）
      * 注意：存储到Redis时使用MessageDTO，读取后转换回ChatMessage
      */
-    private List<MessageDTO> messageDTOs;
+    private List<MessageBO> messageBOS;
     
     /**
      * 动作执行历史（按 ReACT 迭代轮次组织）
@@ -165,10 +165,10 @@ public class AgentContext implements Serializable {
     @JsonIgnore
     public void setMessages(List<ChatMessage> messages) {
         if (messages == null) {
-            this.messageDTOs = new ArrayList<>();
+            this.messageBOS = new ArrayList<>();
         } else {
-            this.messageDTOs = messages.stream()
-                .map(MessageDTO::from)
+            this.messageBOS = messages.stream()
+                .map(MessageBO::from)
                 .collect(Collectors.toList());
         }
     }
@@ -179,11 +179,11 @@ public class AgentContext implements Serializable {
      */
     @JsonIgnore
     public List<ChatMessage> getMessages() {
-        if (messageDTOs == null) {
+        if (messageBOS == null) {
             return new ArrayList<>();
         }
-        return messageDTOs.stream()
-            .map(MessageDTO::toChatMessage)
+        return messageBOS.stream()
+            .map(MessageBO::toChatMessage)
             .filter(Objects::nonNull)
             .collect(Collectors.toList());
     }
@@ -192,12 +192,12 @@ public class AgentContext implements Serializable {
      * 添加消息
      */
     public void addMessage(ChatMessage message) {
-        if (messageDTOs == null) {
-            messageDTOs = new ArrayList<>();
+        if (messageBOS == null) {
+            messageBOS = new ArrayList<>();
         }
-        MessageDTO dto = MessageDTO.from(message);
+        MessageBO dto = MessageBO.from(message);
         if (dto != null) {
-            messageDTOs.add(dto);
+            messageBOS.add(dto);
         }
     }
 }

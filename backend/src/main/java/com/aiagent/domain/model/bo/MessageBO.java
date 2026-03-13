@@ -1,11 +1,15 @@
 package com.aiagent.domain.model.bo;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 消息 DTO
@@ -16,7 +20,7 @@ import java.io.Serializable;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class MessageDTO implements Serializable {
+public class MessageBO implements Serializable {
     
     private static final long serialVersionUID = 1L;
     
@@ -45,16 +49,47 @@ public class MessageDTO implements Serializable {
      * 工具名称（可选，用于 ToolExecutionResultMessage）
      */
     private String toolName;
+
+    /**
+     * 工具调用请求列表（可选，用于携带 tool_calls 的 AiMessage）
+     */
+    private List<ToolExecutionRequestDTO> toolExecutionRequests;
+
+    /**
+     * ToolExecutionRequest 的可序列化 DTO
+     */
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class ToolExecutionRequestDTO implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private String id;
+        private String name;
+        private String arguments;
+
+        public static ToolExecutionRequestDTO from(ToolExecutionRequest req) {
+            return new ToolExecutionRequestDTO(req.id(), req.name(), req.arguments());
+        }
+
+        public ToolExecutionRequest toToolExecutionRequest() {
+            return ToolExecutionRequest.builder()
+                .id(id)
+                .name(name)
+                .arguments(arguments)
+                .build();
+        }
+    }
     
     /**
      * 从 ChatMessage 转换为 DTO
      */
-    public static MessageDTO from(ChatMessage message) {
+    public static MessageBO from(ChatMessage message) {
         if (message == null) {
             return null;
         }
         
-        MessageDTO dto = new MessageDTO();
+        MessageBO dto = new MessageBO();
         
         if (message instanceof UserMessage) {
             UserMessage userMsg = (UserMessage) message;
@@ -66,6 +101,13 @@ public class MessageDTO implements Serializable {
             AiMessage aiMsg = (AiMessage) message;
             dto.setType("AI");
             dto.setText(aiMsg.text());
+            if (aiMsg.hasToolExecutionRequests()) {
+                dto.setToolExecutionRequests(
+                    aiMsg.toolExecutionRequests().stream()
+                        .map(ToolExecutionRequestDTO::from)
+                        .collect(Collectors.toList())
+                );
+            }
             
         } else if (message instanceof SystemMessage) {
             SystemMessage sysMsg = (SystemMessage) message;
@@ -80,7 +122,6 @@ public class MessageDTO implements Serializable {
             dto.setToolName(toolMsg.toolName());
             
         } else {
-            // 未知类型，尝试获取文本
             dto.setType("UNKNOWN");
         }
         
@@ -104,7 +145,15 @@ public class MessageDTO implements Serializable {
                 }
                 
             case "AI":
-                return AiMessage.from(text);
+                if (toolExecutionRequests != null && !toolExecutionRequests.isEmpty()) {
+                    List<ToolExecutionRequest> requests = toolExecutionRequests.stream()
+                        .map(ToolExecutionRequestDTO::toToolExecutionRequest)
+                        .collect(Collectors.toList());
+                    // text 可以为 null（纯 tool_calls 无正文时），AiMessage 支持 text=null + toolExecutionRequests
+                    return AiMessage.from(requests);
+                }
+                // 纯文本回复，text 不应为 null；防御性处理
+                return AiMessage.from(text != null ? text : "");
                 
             case "SYSTEM":
                 return SystemMessage.from(text);
@@ -113,15 +162,11 @@ public class MessageDTO implements Serializable {
                 if (toolExecutionId != null && toolName != null) {
                     return ToolExecutionResultMessage.from(toolExecutionId, toolName, text);
                 } else {
-                    // 降级为 AI 消息
-                    return AiMessage.from(text);
+                    return AiMessage.from(text != null ? text : "");
                 }
                 
             default:
-                // 未知类型降级为 AI 消息
-                return AiMessage.from(text);
+                return AiMessage.from(text != null ? text : "");
         }
     }
 }
-
-
