@@ -4,7 +4,7 @@ import com.aiagent.domain.context.AgentContextService;
 import com.aiagent.infrastructure.config.AgentConfig;
 import com.aiagent.common.constant.AgentConstants;
 import com.aiagent.domain.conversation.ConversationService;
-import com.aiagent.domain.model.bo.ReActExecutionResult;
+import com.aiagent.domain.model.bo.AgentExecutionResult;
 import com.aiagent.domain.memory.MemorySystem;
 import com.aiagent.api.dto.AgentEventData;
 import com.aiagent.api.dto.AgentRequest;
@@ -14,6 +14,7 @@ import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -34,8 +35,9 @@ public class AgentServiceImpl implements IAgentService {
     private static final long STEP_EVENT_THRESHOLD_MS = 300;
     
     @Autowired
-    private ReActEngine reActEngine;
-    
+    @Qualifier("nativeFunctionCallingEngine")
+    private AgentEngine agentEngine;
+
     @Autowired
     private MemorySystem memorySystem;
     
@@ -57,8 +59,6 @@ public class AgentServiceImpl implements IAgentService {
     @Autowired
     private StopRequestManager stopRequestManager;
 
-    @Autowired
-    private NativeFunctionCallingEngine nativeFunctionCallingEngine;
     
     @Override
     //todo 前端UI界面参照Google的炫酷画面
@@ -86,7 +86,7 @@ public class AgentServiceImpl implements IAgentService {
         // 5. 异步执行任务
         CompletableFuture.runAsync(() -> {
             try {
-                executeWithReAct(request, requestId, emitter);
+                executeWithEngine(request, requestId, emitter);
             } catch (Exception e) {
                 log.error("Agent任务执行失败", e);
                 streamingService.sendEvent(emitter, AgentEventData.builder()
@@ -103,9 +103,9 @@ public class AgentServiceImpl implements IAgentService {
     }
     
     /**
-     * 使用ReAct循环执行任务
+     * 使用 AgentEngine 执行任务
      */
-    private void executeWithReAct(AgentRequest request, String requestId, SseEmitter emitter) {
+    private void executeWithEngine(AgentRequest request, String requestId, SseEmitter emitter) {
         long totalStartNs = System.nanoTime();
         long stepStartNs = System.nanoTime();
         
@@ -239,20 +239,17 @@ public class AgentServiceImpl implements IAgentService {
             });
             stepStartNs = logStep("init_state_machine", stepStartNs, requestId, conversationId, null, emitter);
 
-            // 5. 执行ReAct循环
+            // 5. 执行推理循环
             streamingService.sendEvent(emitter, AgentEventData.builder()
                 .requestId(requestId)
                 .event(AgentConstants.EVENT_AGENT_THINKING)
-                .message("开始ReAct循环...")
+                .message("开始推理循环...")
                 .conversationId(context.getConversationId())
                 .build());
 
-            long reactStartNs = System.nanoTime();
-            //todo 简单咨询模式
-            //todo react 复杂任务模式
-            ReActExecutionResult executionResult = reActEngine.execute(request.getContent(), context);
-//            nativeFunctionCallingEngine.execute(context);
-            stepStartNs = logStep("react_execute", reactStartNs, requestId, conversationId,
+            long engineStartNs = System.nanoTime();
+            AgentExecutionResult executionResult = agentEngine.execute(context);
+            stepStartNs = logStep("engine_execute", engineStartNs, requestId, conversationId,
                 "modelId=" + modelId + ", iterations=" + executionResult.getIterations(), emitter);
 
             // 6. 处理最终结果

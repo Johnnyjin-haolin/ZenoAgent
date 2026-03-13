@@ -2,10 +2,12 @@ package com.aiagent.application;
 
 import com.aiagent.api.dto.AgentEventData;
 import com.aiagent.common.constant.AgentConstants;
+import com.aiagent.common.enums.AgentState;
 import com.aiagent.domain.agent.AgentDefinition;
 import com.aiagent.domain.agent.AgentDefinitionLoader;
 import com.aiagent.domain.llm.SimpleLLMChatHandler;
 import com.aiagent.domain.model.bo.AgentContext;
+import com.aiagent.domain.model.bo.AgentExecutionResult;
 import com.aiagent.domain.tool.ToolRegistry;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
@@ -24,7 +26,7 @@ import java.util.List;
 
 @Slf4j
 @Component
-public class NativeFunctionCallingEngine {
+public class NativeFunctionCallingEngine implements AgentEngine {
 
     private static final int MAX_TOOL_ROUNDS = 8;
 
@@ -37,7 +39,9 @@ public class NativeFunctionCallingEngine {
     @Autowired
     private ToolRegistry toolRegistry;
 
-    public void execute(AgentContext context) {
+    @Override
+    public AgentExecutionResult execute(AgentContext context) {
+        long startNs = System.nanoTime();
         String agentId = context.getAgentId();
         AgentDefinition agentDef = agentDefinitionLoader.getById(agentId);
         if (agentDef == null) {
@@ -49,43 +53,61 @@ public class NativeFunctionCallingEngine {
             ? toolRegistry.resolveToolSpecifications(agentDef)
             : new ArrayList<>();
         int toolRound = 0;
-        while (toolRound <= MAX_TOOL_ROUNDS) {
-            log.info("Function Calling 循环第 {} 轮，toolRound={}", toolRound, toolRound);
-            publishEvent(context, AgentConstants.EVENT_AGENT_THINKING, "AI 正在思考...");
-            ChatResponse response = llmChatHandler.chatWithToolsStreaming(
-                context.getModelId(), messages, toolSpecs, context.getStreamingCallback()
-            );
-            if (response == null) {
-                log.error("LLM 返回空响应");
+        
+        try {
+            while (toolRound <= MAX_TOOL_ROUNDS) {
+                log.info("Function Calling 循环第 {} 轮，toolRound={}", toolRound, toolRound);
+                publishEvent(context, AgentConstants.EVENT_AGENT_THINKING, "AI 正在思考...");
+                ChatResponse response = llmChatHandler.chatWithToolsStreaming(
+                    context.getModelId(), messages, toolSpecs, context.getStreamingCallback()
+                );
+                if (response == null) {
+                    log.error("LLM 返回空响应");
+                    long durationMs = elapsedMs(startNs);
+                    return AgentExecutionResult.failure("LLM 返回空响应", "NULL_RESPONSE", 
+                        context.getMessages(), toolRound, durationMs, AgentState.FAILED);
+                }
+                AiMessage aiMessage = response.aiMessage();
+                messages.add(aiMessage);
+                context.addMessage(aiMessage);
+                FinishReason finishReason = response.finishReason();
+                log.info("LLM 返回 finishReason={}", finishReason);
+                if (FinishReason.TOOL_EXECUTION.equals(finishReason) && aiMessage.hasToolExecutionRequests()) {
+                    toolRound++;
+                    List<ToolExecutionRequest> toolRequests = aiMessage.toolExecutionRequests();
+                    publishEvent(context, AgentConstants.EVENT_AGENT_TOOL_EXECUTING,
+                        "正在执行工具: " + toolRequests.get(0).name());
+                    for (ToolExecutionRequest toolRequest : toolRequests) {
+                        publishEvent(context, AgentConstants.EVENT_AGENT_TOOL_CALL,
+                            "调用工具: " + toolRequest.name());
+                        ToolExecutionResultMessage resultMsg =
+                            toolRegistry.execute(toolRequest, context);
+                        messages.add(resultMsg);
+                        context.addMessage(resultMsg);
+                        publishEvent(context, AgentConstants.EVENT_AGENT_TOOL_RESULT,
+                            "工具执行完成: " + toolRequest.name());
+                    }
+                    continue;
+                }
+                log.info("Function Calling 循环结束，共执行 {} 轮工具调用", toolRound);
                 break;
             }
-            AiMessage aiMessage = response.aiMessage();
-            messages.add(aiMessage);
-            context.addMessage(aiMessage);
-            FinishReason finishReason = response.finishReason();
-            log.info("LLM 返回 finishReason={}", finishReason);
-            if (FinishReason.TOOL_EXECUTION.equals(finishReason) && aiMessage.hasToolExecutionRequests()) {
-                toolRound++;
-                List<ToolExecutionRequest> toolRequests = aiMessage.toolExecutionRequests();
-                publishEvent(context, AgentConstants.EVENT_AGENT_TOOL_EXECUTING,
-                    "正在执行工具: " + toolRequests.get(0).name());
-                for (ToolExecutionRequest toolRequest : toolRequests) {
-                    publishEvent(context, AgentConstants.EVENT_AGENT_TOOL_CALL,
-                        "调用工具: " + toolRequest.name());
-                    ToolExecutionResultMessage resultMsg =
-                        toolRegistry.execute(toolRequest, context);
-                    messages.add(resultMsg);
-                    context.addMessage(resultMsg);
-                    publishEvent(context, AgentConstants.EVENT_AGENT_TOOL_RESULT,
-                        "工具执行完成: " + toolRequest.name());
-                }
-                continue;
+            if (toolRound > MAX_TOOL_ROUNDS) {
+                log.warn("工具调用轮次超限，强制终止推理循环");
+                long durationMs = elapsedMs(startNs);
+                return AgentExecutionResult.failure("工具调用轮次超限", "MAX_ITERATIONS_EXCEEDED",
+                    context.getMessages(), toolRound, durationMs, AgentState.FAILED);
             }
-            log.info("Function Calling 循环结束，共执行 {} 轮工具调用", toolRound);
-            break;
-        }
-        if (toolRound > MAX_TOOL_ROUNDS) {
-            log.warn("工具调用轮次超限，强制终止推理循环");
+            
+            long durationMs = elapsedMs(startNs);
+            return AgentExecutionResult.success(context.getMessages(), toolRound, durationMs, AgentState.COMPLETED);
+            
+        } catch (Exception e) {
+            log.error("NativeFunctionCalling 执行异常", e);
+            publishEvent(context, AgentConstants.EVENT_AGENT_ERROR, "执行失败: " + e.getMessage());
+            long durationMs = elapsedMs(startNs);
+            return AgentExecutionResult.failure(e.getMessage(), "EXCEPTION",
+                context.getMessages(), toolRound, durationMs, AgentState.FAILED);
         }
     }
     private List<ChatMessage> buildMessages(AgentDefinition agentDef, AgentContext context) {
@@ -114,5 +136,9 @@ public class NativeFunctionCallingEngine {
                 log.debug("发布事件失败: event={}", event, e);
             }
         }
+    }
+
+    private long elapsedMs(long startNs) {
+        return (System.nanoTime() - startNs) / 1_000_000;
     }
 }
