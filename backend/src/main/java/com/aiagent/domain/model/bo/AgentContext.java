@@ -4,6 +4,7 @@ import com.aiagent.api.dto.AgentEventData;
 import com.aiagent.domain.action.ActionResult;
 import com.aiagent.common.enums.AgentMode;
 import com.aiagent.application.StreamingCallback;
+import com.aiagent.domain.tool.todo.TodoItem;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import dev.langchain4j.data.message.ChatMessage;
 import lombok.AllArgsConstructor;
@@ -149,6 +150,13 @@ public class AgentContext implements Serializable {
      */
     @JsonIgnore
     private transient Set<String> activeMcpToolNames = new HashSet<>();
+
+    /**
+     * Todo 任务清单（与会话绑定，随 AgentContext 持久化到 Redis）
+     * 由 system_todo_write 工具读写，FunctionCallingEngine 在每轮构建系统提示词时注入
+     */
+    @Builder.Default
+    private List<TodoItem> todos = new ArrayList<>();
     
     /**
      * 从 ChatMessage 列表设置消息（自动转换为DTO）

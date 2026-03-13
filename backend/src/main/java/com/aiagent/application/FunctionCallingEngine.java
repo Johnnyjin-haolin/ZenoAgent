@@ -9,6 +9,7 @@ import com.aiagent.domain.llm.SimpleLLMChatHandler;
 import com.aiagent.domain.model.bo.AgentContext;
 import com.aiagent.domain.model.bo.AgentExecutionResult;
 import com.aiagent.domain.tool.ToolRegistry;
+import com.aiagent.domain.tool.todo.TodoItem;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
@@ -143,7 +144,7 @@ public class FunctionCallingEngine implements AgentEngine {
         }
     }
     /**
-     * 构建消息列表（渐进式模式下追加工具概览到 System Prompt）
+     * 构建消息列表（渐进式模式下追加工具概览到 System Prompt，有未完成 Todo 时追加 Todo 清单）
      */
     private List<ChatMessage> buildMessages(AgentDefinition agentDef, AgentContext context, boolean progressiveMode) {
         List<ChatMessage> messages = new ArrayList<>();
@@ -158,6 +159,12 @@ public class FunctionCallingEngine implements AgentEngine {
                     systemPrompt += toolSummary;
                 }
             }
+
+            // Todo 清单注入：有未完成任务时追加到系统提示词
+            String todoSection = buildTodoSection(context);
+            if (!todoSection.isEmpty()) {
+                systemPrompt += todoSection;
+            }
             
             messages.add(SystemMessage.from(systemPrompt));
         }
@@ -167,6 +174,49 @@ public class FunctionCallingEngine implements AgentEngine {
             messages.addAll(history);
         }
         return messages;
+    }
+
+    /**
+     * 构建 Todo 清单提示词片段
+     * 仅当存在未完成（pending）的 Todo 时才返回非空字符串
+     */
+    private String buildTodoSection(AgentContext context) {
+        List<TodoItem> todos = context.getTodos();
+        if (todos == null || todos.isEmpty()) {
+            return "";
+        }
+
+        boolean hasPending = todos.stream()
+            .anyMatch(t -> TodoItem.TodoStatus.pending == t.getStatus());
+        if (!hasPending) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("\n\n## 当前任务清单\n\n");
+        sb.append("> 你有未完成的任务，请优先推进以下待办项，完成每项后及时调用 system_todo_write 更新状态。\n\n");
+
+        todos.stream()
+            .sorted((a, b) -> {
+                if (a.getStatus() != b.getStatus()) {
+                    if (a.getStatus() == TodoItem.TodoStatus.pending) return -1;
+                    if (b.getStatus() == TodoItem.TodoStatus.pending) return 1;
+                }
+                return Integer.compare(a.getPriority(), b.getPriority());
+            })
+            .forEach(item -> {
+                String mark = switch (item.getStatus()) {
+                    case completed -> "- [x]";
+                    case cancelled -> "- [-]";
+                    default        -> "- [ ]";
+                };
+                sb.append(mark)
+                  .append(" [P").append(item.getPriority()).append("]")
+                  .append(" (id: ").append(item.getId()).append(") ")
+                  .append(item.getContent()).append("\n");
+            });
+
+        return sb.toString();
     }
 
     /**

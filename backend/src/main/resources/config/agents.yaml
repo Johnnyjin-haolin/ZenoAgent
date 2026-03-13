@@ -9,6 +9,7 @@ agents:
         - RAG_QUERY
         - ASK_USER_QUESTION
         - RESOLVE_TOOLS
+        - TODO_WRITE
   - id: "cloud-assistant"
     name: "云资源助手"
     description: "专注云资源管理"
@@ -21,3 +22,4 @@ agents:
         - ASK_USER_QUESTION
         - SUB_AGENT
         - RESOLVE_TOOLS
+        - TODO_WRITE
