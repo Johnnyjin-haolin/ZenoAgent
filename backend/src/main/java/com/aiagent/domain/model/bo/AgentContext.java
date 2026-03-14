@@ -152,6 +152,15 @@ public class AgentContext implements Serializable {
     private transient Set<String> activeMcpToolNames = new HashSet<>();
 
     /**
+     * 本次推理执行过程记录（iterations / steps）
+     * 由 FunctionCallingEngine 在 execute() 完成后写入，由 AgentServiceImpl 读取并持久化到
+     * MessageEntity.metadata.executionProcess，供历史对话加载时还原 ReAct 迭代展示。
+     * 运行时对象，不需要序列化到 Redis。
+     */
+    @JsonIgnore
+    private transient ExecutionProcessRecord executionProcess;
+
+    /**
      * Todo 任务清单（与会话绑定，随 AgentContext 持久化到 Redis）
      * 由 system_todo_write 工具读写，FunctionCallingEngine 在每轮构建系统提示词时注入
      */

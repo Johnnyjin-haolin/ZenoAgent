@@ -74,14 +74,56 @@ public class MessageService {
     }
     
     /**
-     * 获取会话消息列表
+     * 获取会话消息列表（仅返回对话展示有意义的 user / assistant 消息）
+     *
+     * <p>过滤规则：
+     * <ul>
+     *   <li>{@code role=tool} — 工具执行结果消息，执行过程已内嵌到对应 assistant 消息的
+     *       {@code metadata.executionProcess}，此处无需单独展示。</li>
+     *   <li>{@code role=assistant + content 为空 + metadata.messageData.toolExecutionRequests 非空} —
+     *       LangChain4j 产生的工具调用请求消息（AiMessage with tool_calls），其信息同样内嵌在
+     *       {@code executionProcess} 里，对用户无展示价值。</li>
+     * </ul>
      */
     public List<MessageResponse> getMessages(String conversationId, int limit) {
         List<MessageEntity> entities = messageMapper.selectByConversationId(conversationId, limit);
-        
+
         return entities.stream()
+            .filter(this::isDisplayableMessage)
             .map(this::convertToResponse)
             .collect(Collectors.toList());
+    }
+
+    /**
+     * 判断消息是否需要展示给前端
+     * 过滤掉工具执行结果消息和空内容的工具调用请求消息（这些已内嵌到 executionProcess 中）
+     */
+    private boolean isDisplayableMessage(MessageEntity entity) {
+        // 过滤掉 role=tool 的工具执行结果消息
+        if ("tool".equals(entity.getRole())) {
+            return false;
+        }
+
+        // 过滤掉 role=assistant 且 content 为空且包含 toolExecutionRequests 的中间消息
+        if ("assistant".equals(entity.getRole())
+                && (entity.getContent() == null || entity.getContent().isBlank())) {
+            String metadata = entity.getMetadata();
+            if (metadata != null && metadata.contains("toolExecutionRequests")) {
+                try {
+                    com.alibaba.fastjson2.JSONObject meta = JSON.parseObject(metadata);
+                    com.alibaba.fastjson2.JSONObject messageData = meta.getJSONObject("messageData");
+                    if (messageData != null
+                            && messageData.containsKey("toolExecutionRequests")
+                            && !messageData.getJSONArray("toolExecutionRequests").isEmpty()) {
+                        return false;
+                    }
+                } catch (Exception ignored) {
+                    // 解析失败则保留该消息
+                }
+            }
+        }
+
+        return true;
     }
     
     /**

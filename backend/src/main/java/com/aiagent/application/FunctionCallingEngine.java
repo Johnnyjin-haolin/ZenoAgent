@@ -7,6 +7,9 @@ import com.aiagent.domain.agent.AgentDefinitionLoader;
 import com.aiagent.domain.llm.SimpleLLMChatHandler;
 import com.aiagent.domain.model.bo.AgentContext;
 import com.aiagent.domain.model.bo.AgentExecutionResult;
+import com.aiagent.domain.model.bo.ExecutionProcessRecord;
+import com.aiagent.domain.model.bo.ExecutionProcessRecord.Iteration;
+import com.aiagent.domain.model.bo.ExecutionProcessRecord.Step;
 import com.aiagent.domain.tool.ToolRegistry;
 import com.aiagent.domain.tool.todo.TodoItem;
 import com.alibaba.fastjson2.JSON;
@@ -78,6 +81,10 @@ public class FunctionCallingEngine implements AgentEngine {
 
         int toolRound = 0;
 
+        // 执行过程记录（用于持久化到历史消息 metadata）
+        ExecutionProcessRecord processRecord = new ExecutionProcessRecord();
+        processRecord.setIterations(new ArrayList<>());
+
         try {
             while (toolRound <= MAX_TOOL_ROUNDS) {
                 log.info("Function Calling 循环第 {} 轮", toolRound);
@@ -109,12 +116,34 @@ public class FunctionCallingEngine implements AgentEngine {
                 if (FinishReason.TOOL_EXECUTION.equals(finishReason) && aiMessage.hasToolExecutionRequests()) {
                     // 工具调用轮：把本轮缓冲的 token 作为思考内容发出
                     isToolRound[0] = true;
+                    String thinkingContent = roundBuffer.toString();
                     flushThinkingBuffer(publisher, roundBuffer);
 
                     toolRound++;
                     List<ToolExecutionRequest> toolRequests = aiMessage.toolExecutionRequests();
 
+                    // 创建本轮迭代记录
+                    long iterStartNs = System.nanoTime();
+                    Iteration iteration = new Iteration();
+                    iteration.setIterationNumber(toolRound);
+                    iteration.setSteps(new ArrayList<>());
+
+                    // 记录思考步骤（如有）
+                    if (!thinkingContent.isBlank()) {
+                        iteration.getSteps().add(Step.builder()
+                            .type("thinking")
+                            .content(thinkingContent)
+                            .build());
+                    }
+
                     for (ToolExecutionRequest toolRequest : toolRequests) {
+                        // 记录工具调用步骤
+                        iteration.getSteps().add(Step.builder()
+                            .type("tool_call")
+                            .toolName(toolRequest.name())
+                            .toolParams(toolRequest.arguments())
+                            .build());
+
                         // 发布工具调用事件
                         if (publisher != null) {
                             publisher.onToolCall(toolRequest.name(), parseArguments(toolRequest.arguments()));
@@ -127,16 +156,31 @@ public class FunctionCallingEngine implements AgentEngine {
                         messages.add(resultMsg);
                         context.addMessage(resultMsg);
 
+                        // 记录工具结果步骤
+                        boolean isError = resultMsg.text() != null && resultMsg.text().startsWith("[ERROR]");
+                        iteration.getSteps().add(Step.builder()
+                            .type("tool_result")
+                            .toolName(toolRequest.name())
+                            .toolResult(resultMsg.text())
+                            .toolDurationMs(toolDurationMs)
+                            .error(isError)
+                            .errorMessage(isError ? resultMsg.text() : null)
+                            .build());
+
                         // 发布工具结果事件
                         if (publisher != null) {
                             publisher.onToolResult(
                                 toolRequest.name(),
                                 resultMsg.text(),
                                 toolDurationMs,
-                                null
+                                isError ? resultMsg.text() : null
                             );
                         }
                     }
+
+                    // 完成本轮迭代记录
+                    iteration.setDurationMs(elapsedMs(iterStartNs));
+                    processRecord.getIterations().add(iteration);
 
                     // 渐进式加载：检测是否有新的工具加载请求
                     if (progressiveMode && context.getActiveMcpToolNames() != null
@@ -166,6 +210,10 @@ public class FunctionCallingEngine implements AgentEngine {
             }
 
             long durationMs = elapsedMs(startNs);
+            // 写入执行过程记录到 context，供 AgentServiceImpl 持久化
+            processRecord.setTotalDurationMs(durationMs);
+            context.setExecutionProcess(processRecord);
+
             return AgentExecutionResult.success(context.getMessages(), toolRound, durationMs, AgentState.COMPLETED);
 
         } catch (Exception e) {

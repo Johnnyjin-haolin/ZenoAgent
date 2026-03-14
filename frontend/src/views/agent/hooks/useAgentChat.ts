@@ -22,6 +22,8 @@ import type {
   ThinkingConfig,
   RAGConfig,
   UserQuestion,
+  ExecutionProcess,
+  ReActIteration,
 } from '../agent.types';
 
 export interface UseAgentChatOptions {
@@ -909,6 +911,95 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       // 从 metadata 中提取工具调用和RAG结果
       toolCalls: extractToolCalls(raw.metadata),
       ragResults: extractRagResults(raw.metadata),
+      // 从 metadata.executionProcess 还原 ReAct 迭代执行过程
+      process: extractExecutionProcess(raw.metadata),
+    };
+  };
+
+  /**
+   * 从 metadata.executionProcess 还原执行过程（iterations / steps）
+   * 将后端 ExecutionProcessRecord 的扁平结构映射为前端 ExecutionProcess
+   */
+  const extractExecutionProcess = (metadata: any): ExecutionProcess | undefined => {
+    if (!metadata || typeof metadata !== 'object') return undefined;
+
+    const ep = metadata.executionProcess;
+    if (!ep || !Array.isArray(ep.iterations) || ep.iterations.length === 0) return undefined;
+
+    const iterations = ep.iterations.map((iter: any, idx: number) => {
+      const steps: ProcessStep[] = [];
+
+      // 将 thinking / tool_call / tool_result 三种 Step 按顺序映射到前端 ProcessStep
+      const rawSteps: any[] = Array.isArray(iter.steps) ? iter.steps : [];
+
+      // 聚合连续 thinking step 内容
+      let thinkingContent = '';
+      for (const s of rawSteps) {
+        if (s.type === 'thinking') {
+          thinkingContent += s.content || '';
+        }
+      }
+
+      // 先插入 thinking step（如有）
+      if (thinkingContent) {
+        const thinkingStep = createStep('thinking', t('agent.chat.thinkingProcess'), 'success');
+        thinkingStep.subSteps = [{
+          id: `substep-hist-${idx}-thinking`,
+          message: thinkingContent,
+          timestamp: 0,
+        }];
+        thinkingStep.status = 'success';
+        steps.push(thinkingStep);
+      }
+
+      // 按序插入 tool_call / tool_result 配对
+      for (const s of rawSteps) {
+        if (s.type === 'tool_call') {
+          const toolStep = createStep(
+            'tool_call',
+            t('agent.chat.callingToolStep', { tool: s.toolName || '' }),
+            s.error ? 'error' : 'success',
+            {
+              toolName: s.toolName,
+              toolParams: (() => {
+                try { return s.toolParams ? JSON.parse(s.toolParams) : {}; } catch { return s.toolParams || {}; }
+              })(),
+            }
+          );
+          toolStep.status = 'success';
+          steps.push(toolStep);
+        } else if (s.type === 'tool_result') {
+          // 找到刚才插入的同名 tool_call step，补充结果信息
+          const paired = [...steps].reverse().find(
+            (st: any) => st.type === 'tool_call' && st.metadata?.toolName === s.toolName
+          );
+          if (paired) {
+            paired.status = s.error ? 'error' : 'success';
+            if (paired.metadata) {
+              paired.metadata.toolResult = s.toolResult;
+              paired.metadata.toolDuration = s.toolDurationMs;
+              paired.metadata.toolError = s.error ? s.errorMessage : undefined;
+            }
+            paired.duration = s.toolDurationMs;
+          }
+        }
+      }
+
+      return {
+        iterationNumber: iter.iterationNumber ?? (idx + 1),
+        steps,
+        status: 'completed' as const,
+        startTime: 0,
+        endTime: iter.durationMs ?? 0,
+        totalDuration: iter.durationMs ?? 0,
+        collapsed: true, // 历史消息默认折叠
+      };
+    });
+
+    return {
+      iterations,
+      totalDuration: ep.totalDurationMs ?? 0,
+      completedCount: iterations.length,
     };
   };
 

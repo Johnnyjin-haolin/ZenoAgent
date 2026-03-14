@@ -1,6 +1,7 @@
 package com.aiagent.application;
 
 import com.aiagent.domain.context.AgentContextService;
+import com.aiagent.domain.model.bo.ExecutionProcessRecord;
 import com.aiagent.domain.model.bo.MessageBO;
 import com.aiagent.infrastructure.config.AgentConfig;
 import com.aiagent.common.constant.AgentConstants;
@@ -319,6 +320,10 @@ public class AgentServiceImpl implements IAgentService {
     /**
      * 批量保存本轮新增的 AI/Tool 消息到 MySQL
      * 策略：从 messageDTOs 中找出新增的非 USER 消息（通过简单时序判断）
+     *
+     * <p>对于最后一条（最新）AI 最终回复消息，会将 {@code context.executionProcess}（执行过程记录）
+     * 注入到 customMetadata，持久化到 {@code MessageEntity.metadata.executionProcess}，
+     * 供历史对话加载时还原 ReAct 迭代展示。
      */
     private void saveNewAssistantMessages(AgentContext context, String modelId, String conversationId) {
         List<MessageBO> allDTOs = context.getMessageBOS();
@@ -326,9 +331,14 @@ public class AgentServiceImpl implements IAgentService {
             return;
         }
 
+        // 判断是否有执行过程记录（有工具调用时才有）
+        ExecutionProcessRecord executionProcess = context.getExecutionProcess();
+
         // 简单策略：遍历最后几条消息，保存所有 AI / TOOL_EXECUTION 类型
         // （因为执行循环中多次 addMessage，这些消息一定是新增的）
         int savedCount = 0;
+        boolean firstAiSaved = false; // 是否已保存过最后一条 AI 消息（最终回复）
+
         for (int i = allDTOs.size() - 1; i >= 0 && savedCount < 20; i--) {
             MessageBO dto = allDTOs.get(i);
             String type = dto.getType();
@@ -338,7 +348,15 @@ public class AgentServiceImpl implements IAgentService {
                 try {
                     ChatMessage message = dto.toChatMessage();
                     if (message != null) {
-                        memorySystem.saveShortTermMemory(conversationId, message, modelId, null, null, null);
+                        // 对最后一条 AI 消息（最终回复），附带执行过程记录
+                        java.util.Map<String, Object> metadata = null;
+                        if ("AI".equals(type) && !firstAiSaved && executionProcess != null
+                                && !executionProcess.getIterations().isEmpty()) {
+                            metadata = new java.util.HashMap<>();
+                            metadata.put("executionProcess", executionProcess);
+                            firstAiSaved = true;
+                        }
+                        memorySystem.saveShortTermMemory(conversationId, message, modelId, null, null, metadata);
                         savedCount++;
                     }
                 } catch (Exception e) {
@@ -351,7 +369,8 @@ public class AgentServiceImpl implements IAgentService {
         }
 
         if (savedCount > 0) {
-            log.info("批量保存本轮新增消息完成: conversationId={}, count={}", conversationId, savedCount);
+            log.info("批量保存本轮新增消息完成: conversationId={}, count={}, hasExecutionProcess={}",
+                conversationId, savedCount, executionProcess != null && !executionProcess.getIterations().isEmpty());
         }
     }
 }
