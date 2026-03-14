@@ -267,6 +267,7 @@ public class FunctionCallingEngine implements AgentEngine {
                                 );
                             }
                         }
+                        log.info("迭代执行结果：{}", resultMsg);
                     }
 
                     iteration.setDurationMs(elapsedMs(iterStartNs));

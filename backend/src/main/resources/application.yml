@@ -144,6 +144,16 @@ aiagent:
   
   tools:
     enabled-by-default: true
+    # Web 搜索工具配置（system_web_search / system_fetch_url）
+    web-search:
+      # HTTP 请求超时（秒）
+      timeout-seconds: 15
+      # 搜索结果最大条数
+      max-results: 5
+      # system_fetch_url 返回正文最大字符数
+      max-content-chars: 5000
+      # 模拟浏览器 User-Agent
+      user-agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
   
   # MCP工具配置
   # 注意：MCP服务器配置已迁移到 JSON 文件

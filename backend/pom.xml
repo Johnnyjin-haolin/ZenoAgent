@@ -169,6 +169,13 @@
             <version>1.24.0</version>
         </dependency>
 
+        <!-- Jsoup (HTML 解析，用于 Web Search 网页正文提取) -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.18.3</version>
+        </dependency>
+
         <!-- Swagger (API文档) -->
         <dependency>
             <groupId>org.springdoc</groupId>

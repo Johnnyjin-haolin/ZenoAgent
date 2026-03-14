@@ -165,6 +165,34 @@ public class AgentConfig {
          * 当 MCP 工具数量超过此值时，启用渐进式加载（仅展示工具概览，需要时按需加载详情）
          */
         private int progressiveThreshold = 20;
+
+        /**
+         * Web 搜索工具配置
+         */
+        private WebSearchConfig webSearch = new WebSearchConfig();
+
+        @Data
+        public static class WebSearchConfig {
+            /**
+             * HTTP 请求超时（秒）
+             */
+            private int timeoutSeconds = 15;
+
+            /**
+             * 搜索结果最大条数
+             */
+            private int maxResults = 5;
+
+            /**
+             * system_fetch_url 返回正文最大字符数
+             */
+            private int maxContentChars = 5000;
+
+            /**
+             * 模拟浏览器 User-Agent
+             */
+            private String userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+        }
     }
 }
 
