@@ -17,6 +17,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -70,9 +72,12 @@ public class WebSearchTool implements SystemTool {
 
     @Override
     public ToolSpecification getSpecification() {
+        String today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日"));
+        String description = "在互联网上搜索信息。当用户询问最新资讯、实时数据、外部知识或你不确定的事实时，调用此工具获取搜索结果摘要（标题 + 链接 + 简介）。\n"
+            + "当前日期：" + today + "。搜索结果可能包含不同时期的内容，请以摘要中的日期为准，优先引用最近的信息。";
         return ToolSpecification.builder()
             .name(TOOL_NAME)
-            .description("在互联网上搜索信息。当用户询问最新资讯、实时数据、外部知识或你不确定的事实时，调用此工具获取搜索结果摘要（标题 + 链接 + 简介）。")
+            .description(description)
             .parameters(JsonObjectSchema.builder()
                 .addStringProperty("query", "搜索关键词，建议使用具体、简洁的描述，英文效果更佳")
                 .required("query")

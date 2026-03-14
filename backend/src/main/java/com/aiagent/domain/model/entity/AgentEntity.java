@@ -5,10 +5,10 @@ import lombok.Data;
 import java.util.Date;
 
 /**
- * Agent 定义实体类 - 对应数据库 agent_definition 表
+ * Agent 定义实体类 - 对应数据库 agent 表
  */
 @Data
-public class AgentDefinitionEntity {
+public class AgentEntity {
 
     /** Agent ID（UUID 或 builtin-xxx） */
     private String id;

@@ -12,6 +12,8 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 import java.net.URI;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,6 +31,20 @@ import java.util.List;
 public class BingWebSearchEngine implements WebSearchEngine {
 
     private static final String BING_SEARCH_URL = "https://cn.bing.com/search";
+
+    /**
+     * 构建带时间过滤的 Bing 搜索 URL
+     * filters=ex1:"ez1_YYYYMMDD" 表示只返回该日期之后的结果
+     */
+    private String buildSearchUrl(String query) {
+        String oneYearAgo = LocalDate.now().minusYears(1)
+            .format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        return BING_SEARCH_URL
+            + "?q=" + query.replace(" ", "+")
+            + "&filters=ex1:%22ez1_" + oneYearAgo + "%22"
+            + "&setlang=zh-Hans"
+            + "&cc=CN";
+    }
     private static final int DEFAULT_MAX_RESULTS = 5;
 
     private final int timeoutSeconds;
@@ -49,8 +65,9 @@ public class BingWebSearchEngine implements WebSearchEngine {
         log.info("[WebSearch] Bing 搜索: query={}, maxResults={}", query, maxResults);
 
         try {
-            Document doc = Jsoup.connect(BING_SEARCH_URL)
-                .data("q", query)
+            String searchUrl = buildSearchUrl(query);
+            log.debug("[WebSearch] Bing 搜索 URL: {}", searchUrl);
+            Document doc = Jsoup.connect(searchUrl)
                 .userAgent(userAgent)
                 .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
                 .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")

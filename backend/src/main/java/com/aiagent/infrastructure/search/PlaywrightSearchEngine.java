@@ -18,6 +18,8 @@ import org.springframework.stereotype.Component;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -36,7 +38,22 @@ import java.util.List;
 @Component
 public class PlaywrightSearchEngine implements WebSearchEngine {
 
-    private static final String BING_SEARCH_URL = "https://www.bing.com/search?q=";
+    private static final String BING_SEARCH_URL = "https://www.bing.com/search";
+
+    /**
+     * Bing 搜索时间过滤格式：&filters=ex1:"ez1_<YYYYMMDD>"
+     * ez1_ 后接的日期为最早日期，把 1 年前的日期传进去即延近 1 年内的结果
+     */
+    private String buildBingSearchUrl(String encodedQuery) {
+        // 过滤出最近 1 年内的结果，避免返回很老的内容
+        String oneYearAgo = LocalDate.now().minusYears(1)
+            .format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        return BING_SEARCH_URL
+            + "?q=" + encodedQuery
+            + "&filters=ex1:%22ez1_" + oneYearAgo + "%22"
+            + "&setlang=zh-Hans"
+            + "&cc=CN";
+    }
     private static final int DEFAULT_MAX_RESULTS = 5;
 
     @Autowired
@@ -58,7 +75,8 @@ public class PlaywrightSearchEngine implements WebSearchEngine {
         Page page = null;
         try {
             String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
-            String searchUrl = BING_SEARCH_URL + encodedQuery;
+            String searchUrl = buildBingSearchUrl(encodedQuery);
+            log.debug("[PlaywrightSearch] 搜索 URL: {}", searchUrl);
 
             page = playwrightPool.newPage(cfg.getUserAgent());
 

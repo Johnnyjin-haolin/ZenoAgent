@@ -6,12 +6,11 @@ import com.aiagent.api.dto.McpGroupInfo;
 import com.aiagent.api.dto.Page;
 import com.aiagent.api.dto.PageResult;
 import com.aiagent.common.response.Result;
-import com.aiagent.domain.agent.AgentDefinition;
 import com.aiagent.domain.agent.AgentDefinitionLoader;
-import com.aiagent.domain.model.entity.AgentDefinitionEntity;
+import com.aiagent.domain.model.entity.AgentEntity;
 import com.aiagent.domain.tool.SystemTool;
 import com.aiagent.infrastructure.external.mcp.McpGroupManager;
-import com.aiagent.infrastructure.mapper.AgentDefinitionMapper;
+import com.aiagent.infrastructure.mapper.AgentMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,7 +35,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AgentDefinitionController {
 
-    private final AgentDefinitionMapper agentDefinitionMapper;
+    private final AgentMapper agentMapper;
     private final AgentDefinitionLoader agentDefinitionLoader;
     private final McpGroupManager mcpGroupManager;
     private final List<SystemTool> systemTools;
@@ -57,7 +56,7 @@ public class AgentDefinitionController {
 
         // 未传 pageNo 时走全量接口（向后兼容）
         if (pageNo == null) {
-            List<AgentDefinitionEntity> entities = agentDefinitionMapper.selectAll();
+            List<AgentEntity> entities = agentMapper.selectAll();
             List<AgentDefinitionVO> vos = entities.stream()
                     .map(this::toVO)
                     .collect(Collectors.toList());
@@ -69,8 +68,8 @@ public class AgentDefinitionController {
         int validSize = Math.min(Math.max(pageSize, 1), 100);
         int offset = (validPage - 1) * validSize;
 
-        List<AgentDefinitionEntity> entities = agentDefinitionMapper.selectPage(offset, validSize);
-        long total = agentDefinitionMapper.count();
+        List<AgentEntity> entities = agentMapper.selectPage(offset, validSize);
+        long total = agentMapper.count();
 
         List<AgentDefinitionVO> vos = entities.stream()
                 .map(this::toVO)
@@ -90,7 +89,7 @@ public class AgentDefinitionController {
      */
     @GetMapping("/{id}")
     public Result<AgentDefinitionVO> getAgent(@PathVariable String id) {
-        AgentDefinitionEntity entity = agentDefinitionMapper.selectById(id);
+        AgentEntity entity = agentMapper.selectById(id);
         if (entity == null) {
             return Result.error("Agent 不存在");
         }
@@ -108,7 +107,7 @@ public class AgentDefinitionController {
             return Result.error("Agent 名称不能为空");
         }
 
-        AgentDefinitionEntity entity = new AgentDefinitionEntity();
+        AgentEntity entity = new AgentEntity();
         entity.setId(UUID.randomUUID().toString());
         entity.setName(request.getName());
         entity.setDescription(request.getDescription());
@@ -119,10 +118,10 @@ public class AgentDefinitionController {
         entity.setContextConfig(serializeContextConfig(request.getContextConfig()));
         entity.setRagConfig(serializeRagConfig(request.getRagConfig()));
 
-        agentDefinitionMapper.insert(entity);
+        agentMapper.insert(entity);
         log.info("创建 Agent 定义: id={}, name={}", entity.getId(), entity.getName());
 
-        AgentDefinitionEntity saved = agentDefinitionMapper.selectById(entity.getId());
+        AgentEntity saved = agentMapper.selectById(entity.getId());
         return Result.success("创建成功", toVO(saved));
     }
 
@@ -134,12 +133,12 @@ public class AgentDefinitionController {
     @PutMapping("/{id}")
     public Result<AgentDefinitionVO> updateAgent(@PathVariable String id,
                                                   @RequestBody AgentDefinitionRequest request) {
-        AgentDefinitionEntity existing = agentDefinitionMapper.selectById(id);
+        AgentEntity existing = agentMapper.selectById(id);
         if (existing == null) {
             return Result.error("Agent 不存在");
         }
 
-        AgentDefinitionEntity update = new AgentDefinitionEntity();
+        AgentEntity update = new AgentEntity();
         update.setId(id);
         if (existing.getIsBuiltin() == 0) {
             // 用户自建 Agent 允许修改所有字段
@@ -151,10 +150,10 @@ public class AgentDefinitionController {
         update.setContextConfig(serializeContextConfig(request.getContextConfig()));
         update.setRagConfig(serializeRagConfig(request.getRagConfig()));
 
-        agentDefinitionMapper.update(update);
+        agentMapper.update(update);
         log.info("更新 Agent 定义: id={}", id);
 
-        AgentDefinitionEntity updated = agentDefinitionMapper.selectById(id);
+        AgentEntity updated = agentMapper.selectById(id);
         return Result.success("更新成功", toVO(updated));
     }
 
@@ -165,14 +164,14 @@ public class AgentDefinitionController {
      */
     @DeleteMapping("/{id}")
     public Result<Boolean> deleteAgent(@PathVariable String id) {
-        AgentDefinitionEntity existing = agentDefinitionMapper.selectById(id);
+        AgentEntity existing = agentMapper.selectById(id);
         if (existing == null) {
             return Result.error("Agent 不存在");
         }
         if (existing.getIsBuiltin() == 1) {
             return Result.error("内置 Agent 不允许删除");
         }
-        agentDefinitionMapper.deleteById(id);
+        agentMapper.deleteById(id);
         log.info("删除 Agent 定义: id={}", id);
         return Result.success("删除成功", true);
     }
@@ -206,7 +205,7 @@ public class AgentDefinitionController {
 
     // ----------------------------------------------------------------- 转换
 
-    private AgentDefinitionVO toVO(AgentDefinitionEntity entity) {
+    private AgentDefinitionVO toVO(AgentEntity entity) {
         AgentDefinitionVO vo = new AgentDefinitionVO();
         vo.setId(entity.getId());
         vo.setName(entity.getName());

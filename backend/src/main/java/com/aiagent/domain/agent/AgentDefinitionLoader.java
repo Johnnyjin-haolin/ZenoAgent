@@ -1,8 +1,8 @@
 package com.aiagent.domain.agent;
 
 import com.aiagent.api.dto.RAGConfig;
-import com.aiagent.domain.model.entity.AgentDefinitionEntity;
-import com.aiagent.infrastructure.mapper.AgentDefinitionMapper;
+import com.aiagent.domain.model.entity.AgentEntity;
+import com.aiagent.infrastructure.mapper.AgentMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +26,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AgentDefinitionLoader {
 
-    private final AgentDefinitionMapper agentDefinitionMapper;
+    private final AgentMapper agentMapper;
     private final ObjectMapper jsonMapper = new ObjectMapper();
 
     @PostConstruct
@@ -51,13 +51,13 @@ public class AgentDefinitionLoader {
                 return;
             }
             for (AgentDefinition def : config.getAgents()) {
-                int exists = agentDefinitionMapper.countById(def.getId());
+                int exists = agentMapper.countById(def.getId());
                 if (exists > 0) {
                     log.debug("内置 Agent 已存在，跳过: id={}", def.getId());
                     continue;
                 }
-                AgentDefinitionEntity entity = toEntity(def, true);
-                agentDefinitionMapper.insert(entity);
+                AgentEntity entity = toEntity(def, true);
+                agentMapper.insert(entity);
                 log.info("内置 Agent 初始化入库: id={}, name={}", def.getId(), def.getName());
             }
             log.info("内置 Agent 同步完成");
@@ -70,7 +70,7 @@ public class AgentDefinitionLoader {
      * 从数据库根据 ID 获取 AgentDefinition
      */
     public AgentDefinition getById(String agentId) {
-        AgentDefinitionEntity entity = agentDefinitionMapper.selectById(agentId);
+        AgentEntity entity = agentMapper.selectById(agentId);
         return entity == null ? null : toDomain(entity);
     }
 
@@ -78,9 +78,9 @@ public class AgentDefinitionLoader {
      * 从数据库获取所有可用的 AgentDefinition（内置优先）
      */
     public List<AgentDefinition> getAll() {
-        List<AgentDefinitionEntity> entities = agentDefinitionMapper.selectAll();
+        List<AgentEntity> entities = agentMapper.selectAll();
         List<AgentDefinition> result = new ArrayList<>();
-        for (AgentDefinitionEntity e : entities) {
+        for (AgentEntity e : entities) {
             result.add(toDomain(e));
         }
         return result;
@@ -88,8 +88,8 @@ public class AgentDefinitionLoader {
 
     // ------------------------------------------------------------------ 转换
 
-    public AgentDefinitionEntity toEntity(AgentDefinition def, boolean isBuiltin) {
-        AgentDefinitionEntity entity = new AgentDefinitionEntity();
+    public AgentEntity toEntity(AgentDefinition def, boolean isBuiltin) {
+        AgentEntity entity = new AgentEntity();
         entity.setId(def.getId() != null ? def.getId() : UUID.randomUUID().toString());
         entity.setName(def.getName());
         entity.setDescription(def.getDescription());
@@ -123,7 +123,7 @@ public class AgentDefinitionLoader {
         return entity;
     }
 
-    public AgentDefinition toDomain(AgentDefinitionEntity entity) {
+    public AgentDefinition toDomain(AgentEntity entity) {
         AgentDefinition def = new AgentDefinition();
         def.setId(entity.getId());
         def.setName(entity.getName());
