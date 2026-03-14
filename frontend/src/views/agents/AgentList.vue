@@ -11,14 +11,14 @@
           </div>
         </div>
       </div>
-      <a-button type="primary" class="create-btn" @click="openCreateModal">
+      <a-button type="primary" class="create-btn" @click="goToCreate">
         <template #icon><plus-outlined /></template>
         新建 Agent
       </a-button>
     </div>
 
-    <!-- 加载状态 -->
-    <div v-if="loading" class="loading-state">
+    <!-- 初次加载骨架屏 -->
+    <div v-if="initialLoading" class="loading-state">
       <a-spin size="large" />
     </div>
 
@@ -96,7 +96,7 @@
             <template #icon><message-outlined /></template>
             开始对话
           </a-button>
-          <a-button type="text" size="small" class="action-btn edit-btn" @click="openEditModal(agent)">
+          <a-button type="text" size="small" class="action-btn edit-btn" @click="goToEdit(agent)">
             <template #icon><edit-outlined /></template>
             编辑
           </a-button>
@@ -127,101 +127,23 @@
         <robot-outlined class="empty-icon" />
         <p class="empty-text">暂无 Agent</p>
         <p class="empty-hint">点击「新建 Agent」创建第一个自定义 Agent</p>
-        <a-button type="primary" @click="openCreateModal">
+        <a-button type="primary" @click="goToCreate">
           <template #icon><plus-outlined /></template>
           新建 Agent
         </a-button>
       </div>
     </div>
 
-    <!-- 新建 / 编辑 Modal -->
-    <a-modal
-      v-model:open="modalVisible"
-      :title="editingId ? '编辑 Agent' : '新建 Agent'"
-      width="640px"
-      :confirm-loading="saving"
-      ok-text="保存"
-      cancel-text="取消"
-      class="agent-form-modal"
-      @ok="handleSave"
-      @cancel="closeModal"
-    >
-      <div class="modal-form">
-        <div class="form-item">
-          <label class="form-label">名称 <span class="required">*</span></label>
-          <a-input
-            v-model:value="form.name"
-            placeholder="输入 Agent 名称"
-            :disabled="editingBuiltin"
-            class="tech-input"
-            :maxlength="50"
-          />
-        </div>
-
-        <div class="form-item">
-          <label class="form-label">描述</label>
-          <a-textarea
-            v-model:value="form.description"
-            placeholder="描述该 Agent 的用途（可选）"
-            :rows="2"
-            :disabled="editingBuiltin"
-            class="tech-input"
-            :maxlength="200"
-          />
-        </div>
-
-        <div class="form-item">
-          <label class="form-label">系统提示词</label>
-          <a-textarea
-            v-model:value="form.systemPrompt"
-            placeholder="输入系统提示词，定义 Agent 的行为和角色..."
-            :rows="6"
-            class="tech-input"
-          />
-        </div>
-
-        <div class="form-item">
-          <label class="form-label">MCP 工具分组</label>
-          <a-select
-            v-model:value="form.mcpGroups"
-            mode="multiple"
-            placeholder="选择启用的 MCP 工具分组（留空表示允许全部）"
-            :options="mcpGroupOptions"
-            allow-clear
-            class="tech-select-multi"
-          />
-        </div>
-
-        <div class="form-item">
-          <label class="form-label">系统内置工具</label>
-          <a-select
-            v-model:value="form.systemTools"
-            mode="multiple"
-            placeholder="选择启用的系统工具（留空表示允许全部）"
-            :options="systemToolOptions"
-            allow-clear
-            class="tech-select-multi"
-          />
-        </div>
-
-        <div class="form-item">
-          <label class="form-label">关联知识库</label>
-          <a-select
-            v-model:value="form.knowledgeIds"
-            mode="multiple"
-            placeholder="选择关联的知识库（对话时自动检索）"
-            :options="knowledgeOptions"
-            allow-clear
-            class="tech-select-multi"
-          />
-        </div>
-      </div>
-    </a-modal>
+    <!-- 加载更多触发器（IntersectionObserver 锚点） -->
+    <div ref="loadMoreAnchor" class="load-more-anchor">
+      <a-spin v-if="loadingMore" size="small" />
+      <span v-else-if="noMore && agents.length > 0" class="no-more-text">已加载全部 Agent</span>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { message } from 'ant-design-vue';
 import { useRouter } from 'vue-router';
 import {
@@ -235,153 +157,128 @@ import {
   DatabaseOutlined,
 } from '@ant-design/icons-vue';
 import {
-  getAgentDefinitions,
-  createAgentDefinition,
-  updateAgentDefinition,
+  getAgentDefinitionsPage,
   deleteAgentDefinition,
-  getAvailableMcpGroupsForAgent,
-  getAvailableSystemToolsForAgent,
   getKnowledgeList,
 } from '../agent/agent.api';
 import type { AgentDefinition, KnowledgeInfo } from '../agent/agent.types';
+
+// ─── 常量 ──────────────────────────────────────────────────────────────────
+
+const PAGE_SIZE = 12;
 
 // ─── 数据 ──────────────────────────────────────────────────────────────────
 
 const router = useRouter();
 
-const loading = ref(false);
-const saving = ref(false);
+const initialLoading = ref(false);
+const loadingMore = ref(false);
+const noMore = ref(false);
+const currentPage = ref(0);
 const agents = ref<AgentDefinition[]>([]);
 const knowledgeBases = ref<KnowledgeInfo[]>([]);
-const mcpGroupOptions = ref<{ label: string; value: string }[]>([]);
-const systemToolOptions = ref<{ label: string; value: string }[]>([]);
-const knowledgeOptions = ref<{ label: string; value: string }[]>([]);
 
-// ─── Modal 状态 ─────────────────────────────────────────────────────────────
-
-const modalVisible = ref(false);
-const editingId = ref<string | null>(null);
-const editingBuiltin = ref(false);
-
-const form = ref({
-  name: '',
-  description: '',
-  systemPrompt: '',
-  mcpGroups: [] as string[],
-  systemTools: [] as string[],
-  knowledgeIds: [] as string[],
-});
+const loadMoreAnchor = ref<HTMLElement | null>(null);
+let observer: IntersectionObserver | null = null;
 
 // ─── 加载 ───────────────────────────────────────────────────────────────────
 
-async function loadData() {
-  loading.value = true;
+async function loadNextPage() {
+  if (loadingMore.value || noMore.value) return;
+
+  const nextPage = currentPage.value + 1;
+  loadingMore.value = true;
   try {
-    const [agentList, groups, tools, kbList] = await Promise.all([
-      getAgentDefinitions(),
-      getAvailableMcpGroupsForAgent(),
-      getAvailableSystemToolsForAgent(),
-      getKnowledgeList(),
-    ]);
-    agents.value = agentList;
-    knowledgeBases.value = kbList;
-    mcpGroupOptions.value = groups.map((g) => ({
-      label: g.name || g.id,
-      value: g.id,
-    }));
-    systemToolOptions.value = tools.map((t) => ({
-      label: `${t.name}${t.description ? ' — ' + t.description : ''}`,
-      value: t.name,
-    }));
-    knowledgeOptions.value = kbList.map((kb) => ({
-      label: kb.name,
-      value: kb.id,
-    }));
+    const result = await getAgentDefinitionsPage(nextPage, PAGE_SIZE);
+    if (!result) return;
+
+    agents.value.push(...result.records);
+    currentPage.value = nextPage;
+
+    if (agents.value.length >= result.total) {
+      noMore.value = true;
+    }
   } catch {
     message.error('加载 Agent 列表失败');
   } finally {
-    loading.value = false;
+    loadingMore.value = false;
   }
 }
 
-onMounted(() => {
-  loadData();
-});
+async function loadInitial() {
+  initialLoading.value = true;
+  currentPage.value = 0;
+  agents.value = [];
+  noMore.value = false;
+  loadingMore.value = false;
 
-// ─── Modal 操作 ─────────────────────────────────────────────────────────────
-
-function openCreateModal() {
-  editingId.value = null;
-  editingBuiltin.value = false;
-  form.value = { name: '', description: '', systemPrompt: '', mcpGroups: [], systemTools: [], knowledgeIds: [] };
-  modalVisible.value = true;
-}
-
-function openEditModal(agent: AgentDefinition) {
-  editingId.value = agent.id;
-  editingBuiltin.value = agent.builtin;
-  form.value = {
-    name: agent.name,
-    description: agent.description || '',
-    systemPrompt: agent.systemPrompt || '',
-    mcpGroups: agent.tools?.mcpGroups || [],
-    systemTools: agent.tools?.systemTools || [],
-    knowledgeIds: agent.tools?.knowledgeIds || [],
-  };
-  modalVisible.value = true;
-}
-
-function closeModal() {
-  modalVisible.value = false;
-}
-
-async function handleSave() {
-  if (!form.value.name.trim()) {
-    message.warning('请输入 Agent 名称');
-    return;
-  }
-  saving.value = true;
   try {
-    const request = {
-      name: form.value.name.trim(),
-      description: form.value.description.trim(),
-      systemPrompt: form.value.systemPrompt,
-      tools: {
-        mcpGroups: form.value.mcpGroups,
-        systemTools: form.value.systemTools,
-        knowledgeIds: form.value.knowledgeIds,
-      },
-    };
+    const [pageResult, kbList] = await Promise.all([
+      getAgentDefinitionsPage(1, PAGE_SIZE),
+      getKnowledgeList(),
+    ]);
 
-    if (editingId.value) {
-      const result = await updateAgentDefinition(editingId.value, request);
-      if (result) {
-        message.success('保存成功');
-        modalVisible.value = false;
-        await loadData();
-      } else {
-        message.error('保存失败');
-      }
-    } else {
-      const result = await createAgentDefinition(request);
-      if (result) {
-        message.success('创建成功');
-        modalVisible.value = false;
-        await loadData();
-      } else {
-        message.error('创建失败');
+    knowledgeBases.value = kbList;
+
+    if (pageResult) {
+      agents.value = pageResult.records;
+      currentPage.value = 1;
+      if (agents.value.length >= pageResult.total) {
+        noMore.value = true;
       }
     }
+  } catch {
+    message.error('加载 Agent 列表失败');
   } finally {
-    saving.value = false;
+    initialLoading.value = false;
   }
 }
+
+// ─── IntersectionObserver ───────────────────────────────────────────────────
+
+function setupObserver() {
+  if (!loadMoreAnchor.value) return;
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries[0].isIntersecting) {
+        loadNextPage();
+      }
+    },
+    { rootMargin: '120px' }
+  );
+  observer.observe(loadMoreAnchor.value);
+}
+
+onMounted(async () => {
+  await loadInitial();
+  setupObserver();
+});
+
+onBeforeUnmount(() => {
+  observer?.disconnect();
+});
+
+// ─── 路由跳转 ────────────────────────────────────────────────────────────────
+
+function goToCreate() {
+  router.push({ name: 'AgentNew' });
+}
+
+function goToEdit(agent: AgentDefinition) {
+  router.push({ name: 'AgentEdit', params: { id: agent.id } });
+}
+
+function goToChat(agent: AgentDefinition) {
+  router.push({ path: '/agent', query: { agentId: agent.id } });
+}
+
+// ─── 删除 ───────────────────────────────────────────────────────────────────
 
 async function handleDelete(agent: AgentDefinition) {
   const ok = await deleteAgentDefinition(agent.id);
   if (ok) {
     message.success('删除成功');
-    await loadData();
+    await loadInitial();
   } else {
     message.error('删除失败');
   }
@@ -400,10 +297,6 @@ function hasTools(agent: AgentDefinition) {
 function getKbName(kbId: string) {
   const kb = knowledgeBases.value.find((k) => k.id === kbId);
   return kb ? kb.name : kbId;
-}
-
-function goToChat(agent: AgentDefinition) {
-  router.push({ path: '/agent', query: { agentId: agent.id } });
 }
 
 function formatTime(time?: string) {
@@ -767,128 +660,20 @@ function formatTime(time?: string) {
   color: #334155;
   margin: 0 0 8px;
 }
-</style>
 
-<style lang="less">
-.agent-form-modal {
-  .ant-modal-content {
-    background: #0f172a;
-    border: 1px solid rgba(59, 130, 246, 0.2);
-    border-radius: 10px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
-  }
+// ─── 加载更多触发器 ───────────────────────────────────────────────────────────
 
-  .ant-modal-header {
-    background: transparent;
-    border-bottom: 1px solid rgba(59, 130, 246, 0.15);
-    padding: 16px 20px;
-
-    .ant-modal-title {
-      color: #e2e8f0;
-      font-size: 15px;
-      font-weight: 600;
-      font-family: 'Inter', sans-serif;
-    }
-  }
-
-  .ant-modal-body {
-    padding: 20px;
-  }
-
-  .ant-modal-footer {
-    border-top: 1px solid rgba(59, 130, 246, 0.15);
-    padding: 12px 20px;
-
-    .ant-btn-default {
-      background: rgba(255, 255, 255, 0.05);
-      border-color: rgba(255, 255, 255, 0.1);
-      color: #94a3b8;
-
-      &:hover {
-        border-color: rgba(59, 130, 246, 0.4);
-        color: #e2e8f0;
-      }
-    }
-  }
-
-  .ant-modal-close {
-    color: #64748b;
-
-    &:hover {
-      color: #e2e8f0;
-    }
-  }
-}
-
-.modal-form {
+.load-more-anchor {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
+  justify-content: center;
+  align-items: center;
+  padding: 20px 0 8px;
+  min-height: 44px;
 }
 
-.form-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-label {
+.no-more-text {
   font-size: 12px;
-  color: #94a3b8;
+  color: #334155;
   font-family: 'JetBrains Mono', monospace;
-  font-weight: 500;
-}
-
-.required {
-  color: #f87171;
-}
-
-.tech-input {
-  background: rgba(0, 0, 0, 0.2) !important;
-  border-color: rgba(59, 130, 246, 0.2) !important;
-  color: #e2e8f0 !important;
-  font-size: 13px;
-  font-family: 'JetBrains Mono', monospace;
-  border-radius: 6px;
-
-  &:hover,
-  &:focus {
-    border-color: #60a5fa !important;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1) !important;
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-}
-
-.tech-select-multi {
-  width: 100%;
-
-  .ant-select-selector {
-    background: rgba(0, 0, 0, 0.2) !important;
-    border-color: rgba(59, 130, 246, 0.2) !important;
-    color: #e2e8f0 !important;
-    min-height: 36px;
-    border-radius: 6px !important;
-
-    &:hover {
-      border-color: #60a5fa !important;
-    }
-  }
-
-  .ant-select-selection-item {
-    background: rgba(59, 130, 246, 0.15);
-    border-color: rgba(59, 130, 246, 0.3);
-    color: #60a5fa;
-    font-size: 12px;
-    border-radius: 3px;
-  }
-
-  .ant-select-selection-placeholder {
-    color: rgba(148, 163, 184, 0.4);
-    font-size: 12px;
-  }
 }
 </style>

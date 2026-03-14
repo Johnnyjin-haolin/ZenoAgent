@@ -23,10 +23,22 @@ public class AgentDefinitionEntity {
     private String systemPrompt;
 
     /**
-     * 工具配置 JSON 字符串
-     * 结构：{"mcpGroups":["group1"],"systemTools":["tool1"],"mcpTools":["mcpTool1"]}
+     * 工具选择配置 JSON 字符串
+     * 结构：{"mcpGroups":["group1"],"systemTools":["tool1"],"knowledgeIds":["kb1"]}
      */
     private String toolsConfig;
+
+    /**
+     * 上下文行为配置 JSON 字符串（可为 null，使用引擎默认值）
+     * 结构：{"historyMessageLoadLimit":20,"maxToolRounds":8}
+     */
+    private String contextConfig;
+
+    /**
+     * RAG 检索配置 JSON 字符串（可为 null，使用引擎默认值）
+     * 结构：{"maxResults":3,"minScore":0.5,"maxDocumentLength":1000,"maxTotalContentLength":3000}
+     */
+    private String ragConfig;
 
     /** 是否内置（1=内置示例, 0=用户创建） */
     private Integer isBuiltin;

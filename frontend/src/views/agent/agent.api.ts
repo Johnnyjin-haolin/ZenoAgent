@@ -615,7 +615,7 @@ export async function updateConversationAgent(conversationId: string, agentId: s
 // ─── Agent 定义 CRUD ────────────────────────────────────────────────────────
 
 /**
- * 获取所有 Agent 定义
+ * 获取所有 Agent 定义（全量，向后兼容）
  */
 export async function getAgentDefinitions(): Promise<AgentDefinition[]> {
   try {
@@ -627,6 +627,25 @@ export async function getAgentDefinitions(): Promise<AgentDefinition[]> {
   } catch (error) {
     logger.error('获取 Agent 列表失败:', error);
     return [];
+  }
+}
+
+/**
+ * 分页获取 Agent 定义列表
+ */
+export async function getAgentDefinitionsPage(
+  pageNo: number,
+  pageSize = 12
+): Promise<PageResult<AgentDefinition> | null> {
+  try {
+    const response = await http.get(
+      { url: AgentApi.agentDefinitions, params: { pageNo, pageSize } },
+      { isTransformResponse: false }
+    );
+    return response.data || null;
+  } catch (error) {
+    logger.error('分页获取 Agent 列表失败:', error);
+    return null;
   }
 }
 

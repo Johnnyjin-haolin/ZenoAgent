@@ -1,5 +1,6 @@
 package com.aiagent.domain.agent;
 
+import com.aiagent.api.dto.RAGConfig;
 import com.aiagent.domain.model.entity.AgentDefinitionEntity;
 import com.aiagent.infrastructure.mapper.AgentDefinitionMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -95,12 +96,30 @@ public class AgentDefinitionLoader {
         entity.setSystemPrompt(def.getSystemPrompt());
         entity.setIsBuiltin(isBuiltin ? 1 : 0);
         entity.setStatus("active");
+
         try {
             entity.setToolsConfig(jsonMapper.writeValueAsString(def.getTools()));
         } catch (Exception e) {
-            log.warn("序列化 tools 配置失败: {}", e.getMessage());
+            log.warn("序列化 toolsConfig 失败: {}", e.getMessage());
             entity.setToolsConfig("{}");
         }
+
+        if (def.getContextConfig() != null) {
+            try {
+                entity.setContextConfig(jsonMapper.writeValueAsString(def.getContextConfig()));
+            } catch (Exception e) {
+                log.warn("序列化 contextConfig 失败: {}", e.getMessage());
+            }
+        }
+
+        if (def.getRagConfig() != null) {
+            try {
+                entity.setRagConfig(jsonMapper.writeValueAsString(def.getRagConfig()));
+            } catch (Exception e) {
+                log.warn("序列化 ragConfig 失败: {}", e.getMessage());
+            }
+        }
+
         return entity;
     }
 
@@ -110,15 +129,36 @@ public class AgentDefinitionLoader {
         def.setName(entity.getName());
         def.setDescription(entity.getDescription());
         def.setSystemPrompt(entity.getSystemPrompt());
+
         if (entity.getToolsConfig() != null) {
             try {
                 AgentDefinition.ToolsConfig tools =
                         jsonMapper.readValue(entity.getToolsConfig(), AgentDefinition.ToolsConfig.class);
                 def.setTools(tools);
             } catch (Exception e) {
-                log.warn("反序列化 tools 配置失败: id={}, err={}", entity.getId(), e.getMessage());
+                log.warn("反序列化 toolsConfig 失败: id={}, err={}", entity.getId(), e.getMessage());
             }
         }
+
+        if (entity.getContextConfig() != null) {
+            try {
+                AgentDefinition.ContextConfig ctxCfg =
+                        jsonMapper.readValue(entity.getContextConfig(), AgentDefinition.ContextConfig.class);
+                def.setContextConfig(ctxCfg);
+            } catch (Exception e) {
+                log.warn("反序列化 contextConfig 失败: id={}, err={}", entity.getId(), e.getMessage());
+            }
+        }
+
+        if (entity.getRagConfig() != null) {
+            try {
+                RAGConfig ragCfg = jsonMapper.readValue(entity.getRagConfig(), RAGConfig.class);
+                def.setRagConfig(ragCfg);
+            } catch (Exception e) {
+                log.warn("反序列化 ragConfig 失败: id={}, err={}", entity.getId(), e.getMessage());
+            }
+        }
+
         return def;
     }
 

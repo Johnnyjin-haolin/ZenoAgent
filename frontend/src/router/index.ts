@@ -49,6 +49,22 @@ const routes: RouteRecordRaw[] = [
           title: 'Agent 管理',
         },
       },
+      {
+        path: 'agents/new',
+        name: 'AgentNew',
+        component: () => import('@/views/agents/AgentEdit.vue'),
+        meta: {
+          title: '新建 Agent',
+        },
+      },
+      {
+        path: 'agents/:id/edit',
+        name: 'AgentEdit',
+        component: () => import('@/views/agents/AgentEdit.vue'),
+        meta: {
+          title: '编辑 Agent',
+        },
+      },
     ],
   },
 ];

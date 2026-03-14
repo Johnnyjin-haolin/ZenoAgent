@@ -17,12 +17,22 @@ import com.aiagent.common.constant.AgentConstants;
 public interface AgentEventPublisher {
 
     /**
-     * 工具调用开始
+     * 工具调用开始（自动模式）
      *
      * @param toolName 工具名称
      * @param params   工具参数（已解析为 Map 或原始字符串）
      */
     void onToolCall(String toolName, Object params);
+
+    /**
+     * 工具调用开始（支持手动确认模式）
+     *
+     * @param toolName             工具名称
+     * @param params               工具参数
+     * @param requiresConfirmation 是否需要用户确认（MANUAL 模式下为 true）
+     * @param toolExecutionId      工具执行 ID，需要确认时由前端回传
+     */
+    void onToolCall(String toolName, Object params, boolean requiresConfirmation, String toolExecutionId);
 
     /**
      * 工具调用完成

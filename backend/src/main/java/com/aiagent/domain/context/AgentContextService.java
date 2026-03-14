@@ -1,5 +1,8 @@
 package com.aiagent.domain.context;
 
+import com.aiagent.domain.agent.AgentDefinition;
+import com.aiagent.domain.agent.AgentDefinitionLoader;
+import com.aiagent.domain.model.bo.AgentRuntimeConfig;
 import com.aiagent.domain.model.bo.KnowledgeBase;
 import com.aiagent.domain.model.bo.MessageBO;
 import com.aiagent.domain.rag.KnowledgeBaseService;
@@ -13,6 +16,7 @@ import com.aiagent.api.dto.AgentEventData;
 import com.aiagent.domain.model.bo.AgentKnowledgeResult;
 import com.aiagent.api.dto.AgentRequest;
 import com.aiagent.api.dto.ConversationInfo;
+import com.aiagent.api.dto.RAGConfig;
 import com.aiagent.domain.conversation.ConversationService;
 import com.aiagent.domain.model.entity.MessageEntity;
 import com.aiagent.infrastructure.mapper.MessageMapper;
@@ -33,6 +37,13 @@ import java.util.function.Consumer;
 
 /**
  * Agent 上下文相关逻辑
+ * <p>
+ * 配置优先级（高 → 低）：
+ * <ol>
+ *   <li>前端请求 {@link AgentRequest} 中携带的运行时参数</li>
+ *   <li>{@link AgentDefinition} 中持久化的默认配置（contextConfig / ragConfig）</li>
+ *   <li>{@link AgentRuntimeConfig} 字段硬编码默认值</li>
+ * </ol>
  */
 @Slf4j
 @Service
@@ -46,12 +57,15 @@ public class AgentContextService {
 
     @Autowired
     private RAGEnhancer ragEnhancer;
-    
+
     @Autowired
     private KnowledgeBaseService knowledgeBaseService;
-    
+
     @Autowired
     private MessageMapper messageMapper;
+
+    @Autowired
+    private AgentDefinitionLoader agentDefinitionLoader;
 
     public String normalizeConversationId(String conversationId) {
         if (StringUtils.isEmpty(conversationId) || conversationId.startsWith("temp-")) {
@@ -66,7 +80,6 @@ public class AgentContextService {
         AgentContext context = memorySystem.getContext(conversationId);
 
         if (context == null) {
-            // agentId 优先级：request > DB 会话绑定 > 默认值
             String resolvedAgentId = resolveAgentId(request.getAgentId(), conversationId);
             context = AgentContext.builder()
                 .conversationId(conversationId)
@@ -77,56 +90,65 @@ public class AgentContextService {
                 .iterations(0)
                 .build();
         } else if (StringUtils.isNotEmpty(request.getAgentId())) {
-            // 若请求中明确指定了 agentId，更新 context（支持对话中途切换 Agent）
             context.setAgentId(request.getAgentId());
         }
 
-        if (StringUtils.isNotEmpty(request.getModelId())) {
-            context.setModelId(request.getModelId());
-        }
-        if (request.getKnowledgeIds() != null) {
-            context.setKnowledgeIds(request.getKnowledgeIds());
-            // 批量加载知识库信息并存储到 context
-            if (!request.getKnowledgeIds().isEmpty()) {
-                Map<String, KnowledgeBase> knowledgeBaseMap =
-                    knowledgeBaseService.getKnowledgeBasesByIds(request.getKnowledgeIds());
-                context.setKnowledgeBaseMap(knowledgeBaseMap);
-                log.debug("批量加载知识库信息: count={}", knowledgeBaseMap.size());
-            }
-        }
+        // ── 加载 AgentDefinition，从中读取持久化的默认配置 ─────────────────
+        AgentDefinition agentDef = agentDefinitionLoader.getById(context.getAgentId());
+
+        // ── 构建本次请求的运行时配置 ──────────────────────────────────────────
+        AgentRuntimeConfig.AgentRuntimeConfigBuilder cfgBuilder = AgentRuntimeConfig.builder();
+
+        // 模型：请求指定 > context 缓存（Redis 中的旧值）
+        String modelId = StringUtils.isNotEmpty(request.getModelId())
+            ? request.getModelId()
+            : (context.getConfig() != null ? context.getConfig().getModelId() : null);
+        cfgBuilder.modelId(modelId);
+
+        // 执行模式
+        cfgBuilder.mode(request.getMode() != null ? request.getMode()
+            : (context.getConfig() != null && context.getConfig().getMode() != null
+                ? context.getConfig().getMode()
+                : com.aiagent.common.enums.AgentMode.AUTO));
+
+        // 工具 & 知识库（请求覆盖）
         if (request.getEnabledMcpGroups() != null) {
-            context.setEnabledMcpGroups(request.getEnabledMcpGroups());
+            cfgBuilder.enabledMcpGroups(request.getEnabledMcpGroups());
+        } else if (context.getConfig() != null) {
+            cfgBuilder.enabledMcpGroups(context.getConfig().getEnabledMcpGroups());
         }
         if (request.getEnabledTools() != null) {
-            context.setEnabledTools(request.getEnabledTools());
+            cfgBuilder.enabledTools(request.getEnabledTools());
+        } else if (context.getConfig() != null) {
+            cfgBuilder.enabledTools(context.getConfig().getEnabledTools());
         }
-        if (request.getMode() != null) {
-            context.setMode(request.getMode());
-        }
-        // 设置思考引擎配置（如果前端传入）
-        if (request.getThinkingConfig() != null) {
-            context.setThinkingConfig(request.getThinkingConfig());
-        } else {
-            // 如果前端未传入，使用默认配置
-            context.setThinkingConfig(com.aiagent.api.dto.ThinkingConfig.builder().build());
-        }
-        
-        // 设置RAG配置（如果前端传入）
-        if (request.getRagConfig() != null) {
-            context.setRagConfig(request.getRagConfig());
-            log.debug("使用前端传入的RAG配置: maxResults={}, minScore={}", 
-                request.getRagConfig().getMaxResults(), 
-                request.getRagConfig().getMinScore());
-        } else {
-            // 如果前端未传入，使用默认配置
-            context.setRagConfig(com.aiagent.api.dto.RAGConfig.builder().build());
-            log.debug("使用默认RAG配置");
-        }
-        
-        // 强制从数据库加载最新的历史对话消息，覆盖Redis中的缓存（确保消息列表与ThinkingConfig配置一致）
-        loadHistoryMessages(context, conversationId);
 
-        // 注意：此处不添加用户消息，由 AgentServiceImpl 统一通过 context.addMessage() 写入
+        List<String> knowledgeIds = request.getKnowledgeIds() != null
+            ? request.getKnowledgeIds()
+            : (context.getConfig() != null ? context.getConfig().getKnowledgeIds() : null);
+        cfgBuilder.knowledgeIds(knowledgeIds);
+
+        if (knowledgeIds != null && !knowledgeIds.isEmpty()) {
+            Map<String, KnowledgeBase> knowledgeBaseMap =
+                knowledgeBaseService.getKnowledgeBasesByIds(knowledgeIds);
+            cfgBuilder.knowledgeBaseMap(knowledgeBaseMap);
+            log.debug("批量加载知识库信息: count={}", knowledgeBaseMap.size());
+        }
+
+        // 上下文行为参数：AgentDefinition > 默认值
+        cfgBuilder.historyMessageLoadLimit(resolveHistoryLoadLimit(agentDef));
+        cfgBuilder.maxToolRounds(resolveMaxToolRounds(agentDef));
+
+        // RAG 配置：AgentDefinition > 默认值（直接使用 RAGConfig，无需字段复制）
+        RAGConfig ragConfig = resolveRagConfig(agentDef);
+        cfgBuilder.ragConfig(ragConfig);
+        log.debug("RAG 配置: maxResults={}, minScore={}", ragConfig.getMaxResults(), ragConfig.getMinScore());
+
+        context.setConfig(cfgBuilder.build());
+
+        int historyLoadLimit = context.getConfig().getHistoryMessageLoadLimit();
+        // 强制从数据库加载最新的历史对话消息
+        loadHistoryMessages(context, conversationId, historyLoadLimit);
 
         return context;
     }
@@ -136,7 +158,6 @@ public class AgentContextService {
             ConversationInfo existingConversation = conversationService.getConversation(conversationId);
 
             if (existingConversation == null) {
-                // 如果MySQL中不存在，创建新的会话
                 ConversationInfo conversationInfo = ConversationInfo.builder()
                     .id(conversationId)
                     .title(generateTitle(request.getContent()))
@@ -173,7 +194,7 @@ public class AgentContextService {
                 .conversationId(context.getConversationId())
                 .build());
 
-            AgentKnowledgeResult ragResult = ragEnhancer.retrieve(query, context.getKnowledgeBaseMap(),context.getRagConfig());
+            AgentKnowledgeResult ragResult = ragEnhancer.retrieve(query, context.getKnowledgeBaseMap(), context.getRagConfig());
 
             if (ragResult != null && ragResult.isNotEmpty()) {
                 context.setInitialRagResult(ragResult);
@@ -196,39 +217,63 @@ public class AgentContextService {
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // 私有：配置解析（优先级：AgentDefinition > 硬编码默认值）
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private int resolveHistoryLoadLimit(AgentDefinition agentDef) {
+        if (agentDef != null && agentDef.getContextConfig() != null
+                && agentDef.getContextConfig().getHistoryMessageLoadLimit() != null) {
+            return agentDef.getContextConfig().getHistoryMessageLoadLimit();
+        }
+        return 20;
+    }
+
+    private int resolveMaxToolRounds(AgentDefinition agentDef) {
+        if (agentDef != null && agentDef.getContextConfig() != null
+                && agentDef.getContextConfig().getMaxToolRounds() != null) {
+            return agentDef.getContextConfig().getMaxToolRounds();
+        }
+        return 8;
+    }
+
+    /**
+     * 从 AgentDefinition 解析 RAG 配置。
+     * AgentDefinition.ragConfig 已直接使用 {@link RAGConfig}，无需字段复制。
+     */
+    private RAGConfig resolveRagConfig(AgentDefinition agentDef) {
+        if (agentDef != null && agentDef.getRagConfig() != null) {
+            return agentDef.getRagConfig();
+        }
+        return new RAGConfig();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+
     private String generateTitle(String content) {
         if (StringUtils.isEmpty(content)) {
             return AgentConstants.DEFAULT_CONVERSATION_TITLE;
         }
-
         String title = content.length() > 30 ? content.substring(0, 30) : content;
         return title.trim();
     }
-    
+
     /**
      * 从数据库加载历史对话消息
-     * 
-     * @param context Agent上下文
-     * @param conversationId 会话ID
      */
-    private void loadHistoryMessages(AgentContext context, String conversationId) {
+    private void loadHistoryMessages(AgentContext context, String conversationId, int limit) {
         try {
-            // 1. 获取历史消息加载数量配置（从 ThinkingConfig 中获取）
-            int limit = context.getThinkingConfig().getHistoryMessageLoadLimitOrDefault();
-            
-            // 2. 从数据库查询历史消息
             List<MessageEntity> historyEntities = messageMapper.selectByConversationId(
-                conversationId, 
+                conversationId,
                 limit
             );
-            
+
             if (historyEntities == null || historyEntities.isEmpty()) {
                 log.debug("会话 {} 没有历史消息", conversationId);
                 context.setMessages(new ArrayList<>());
                 return;
             }
-            
-            // 3. 转换为 ChatMessage 列表
+
             List<ChatMessage> historyMessages = new ArrayList<>();
             for (MessageEntity entity : historyEntities) {
                 ChatMessage message = convertToChatMessage(entity);
@@ -236,51 +281,44 @@ public class AgentContextService {
                     historyMessages.add(message);
                 }
             }
-            // 4. 设置到 context
             context.setMessages(historyMessages);
-            
-            log.info("加载历史对话消息成功，会话: {}, 消息数: {}", 
+
+            log.info("加载历史对话消息成功，会话: {}, 消息数: {}",
                 conversationId, historyMessages.size());
-                
+
         } catch (Exception e) {
             log.error("加载历史对话消息失败，会话: {}", conversationId, e);
-            // 失败不影响主流程，使用空消息列表
             if (context.getMessages() == null) {
                 context.setMessages(new ArrayList<>());
             }
         }
     }
-    
+
     /**
      * 将 MessageEntity 转换为 ChatMessage
-     * 优先从 metadata.messageData 无损还原（支持 tool_calls），降级使用 role+content
-     * 
-     * @param entity 消息实体
-     * @return ChatMessage
      */
     private ChatMessage convertToChatMessage(MessageEntity entity) {
         if (entity == null) {
             return null;
         }
-        
-        // 优先从 metadata.messageData 还原（完整信息，支持 tool_calls）
+
         if (entity.getMetadata() != null && !entity.getMetadata().isEmpty()) {
             try {
                 JSONObject metadata = JSON.parseObject(entity.getMetadata());
                 if (metadata != null && metadata.containsKey("messageData")) {
                     Object messageDataObj = metadata.get("messageData");
                     MessageBO dto = null;
-                    
+
                     if (messageDataObj instanceof JSONObject) {
                         dto = ((JSONObject) messageDataObj).toJavaObject(MessageBO.class);
                     } else if (messageDataObj instanceof String) {
                         dto = JSON.parseObject((String) messageDataObj, MessageBO.class);
                     }
-                    
+
                     if (dto != null) {
                         ChatMessage restored = dto.toChatMessage();
                         if (restored != null) {
-                            return restored;  // 无损还原成功
+                            return restored;
                         }
                     }
                 }
@@ -289,11 +327,10 @@ public class AgentContextService {
                     entity.getConversationId(), e.getMessage());
             }
         }
-        
-        // 降级方案：用 role + content 简单还原（兼容旧数据）
+
         String role = entity.getRole();
         String content = entity.getContent() != null ? entity.getContent() : "";
-        
+
         if ("user".equalsIgnoreCase(role)) {
             return new UserMessage(content);
         } else if ("assistant".equalsIgnoreCase(role) || "ai".equalsIgnoreCase(role)) {
@@ -301,7 +338,6 @@ public class AgentContextService {
         } else if ("system".equalsIgnoreCase(role)) {
             return SystemMessage.from(content);
         } else if ("tool".equalsIgnoreCase(role)) {
-            // 旧数据的 ToolExecutionResultMessage 无法还原，降级为 AiMessage 或跳过
             log.warn("无法还原 tool 类型消息（缺少 metadata.messageData），跳过: messageId={}",
                 entity.getMessageId());
             return null;
@@ -312,7 +348,7 @@ public class AgentContextService {
     }
 
     /**
-     * 解析 agentId：优先取请求中显式指定的值；其次从数据库会话中读取绑定的 agentId；最后兜底默认值
+     * 解析 agentId
      */
     private String resolveAgentId(String requestAgentId, String conversationId) {
         if (StringUtils.isNotEmpty(requestAgentId)) {
@@ -330,4 +366,3 @@ public class AgentContextService {
         return AgentConstants.DEFAULT_AGENT_ID;
     }
 }
-

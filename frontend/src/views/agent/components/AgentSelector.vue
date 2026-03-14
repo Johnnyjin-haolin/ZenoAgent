@@ -126,6 +126,12 @@ onMounted(() => {
     font-size: 12px;
     color: #e2e8f0;
     line-height: 26px;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    max-width: 100%;
   }
 
   :deep(.ant-select-arrow) {
@@ -150,6 +156,12 @@ onMounted(() => {
   font-size: 12px;
   color: #e2e8f0;
   font-family: 'JetBrains Mono', monospace;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  flex: 1;
+  min-width: 0;
 }
 
 .builtin-badge {

@@ -19,8 +19,6 @@ import type {
   ProcessStepStatus,
   PlanInfo,
   ProcessSubStep,
-  ThinkingConfig,
-  RAGConfig,
   UserQuestion,
   ExecutionProcess,
   ReActIteration,
@@ -209,8 +207,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       knowledgeIds?: string[];
       enabledTools?: string[];
       mode?: 'AUTO' | 'MANUAL';
-      thinkingConfig?: ThinkingConfig;
-      ragConfig?: RAGConfig;
       images?: string[];
     } = {}
   ) => {
@@ -275,8 +271,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       knowledgeIds: options.knowledgeIds || defaultKnowledgeIds,
       enabledTools: options.enabledTools || defaultEnabledTools,
       mode: options.mode || 'AUTO',
-      thinkingConfig: options.thinkingConfig,
-      ragConfig: options.ragConfig,
     };
 
     try {

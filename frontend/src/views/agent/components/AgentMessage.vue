@@ -657,59 +657,127 @@ function handleToggleStepExpand(stepId: string) {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 
   .markdown-body {
-    background: transparent;
-    color: inherit;
+    background-color: transparent !important;
+    color: #cbd5e1 !important;
     font-family: 'Inter', sans-serif;
-    
+
     :deep(p) {
       margin-bottom: 1em;
       &:last-child {
         margin-bottom: 0;
       }
     }
-    
+
     :deep(code) {
-      background: rgba(255, 255, 255, 0.1);
-      padding: 2px 4px;
+      background: rgba(255, 255, 255, 0.08) !important;
+      color: #93c5fd !important;
+      padding: 2px 6px;
       border-radius: 4px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.9em;
+      font-size: 0.875em;
     }
-    
+
     :deep(pre) {
-      background: #0d1117;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: #0d1117 !important;
+      border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 8px;
-      padding: 12px;
-      margin: 16px 0;
+      padding: 0;
+      margin: 14px 0;
       overflow-x: auto;
-      
+
       code {
-        background: transparent;
+        background: transparent !important;
+        color: #e6edf3 !important;
         padding: 0;
         border-radius: 0;
-        color: #e6edf3;
+        font-size: 13px;
       }
     }
-    
+
     :deep(a) {
-      color: #60A5FA;
+      color: #60a5fa;
       text-decoration: none;
       &:hover {
+        color: #93c5fd;
         text-decoration: underline;
       }
     }
-    
+
     :deep(ul), :deep(ol) {
       padding-left: 20px;
       margin-bottom: 1em;
+      color: #cbd5e1;
     }
-    
-    :deep(h1), :deep(h2), :deep(h3), :deep(h4) {
-      color: #f1f5f9;
-      margin-top: 1.5em;
+
+    :deep(li) {
+      color: #cbd5e1;
+      margin-bottom: 4px;
+    }
+
+    :deep(h1), :deep(h2), :deep(h3), :deep(h4), :deep(h5), :deep(h6) {
+      color: #f1f5f9 !important;
+      border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+      margin-top: 1.4em;
       margin-bottom: 0.5em;
       font-weight: 600;
+    }
+
+    :deep(blockquote) {
+      background: rgba(59, 130, 246, 0.06) !important;
+      border-left: 3px solid rgba(59, 130, 246, 0.5) !important;
+      color: #94a3b8 !important;
+      padding: 8px 14px;
+      margin: 12px 0;
+      border-radius: 0 6px 6px 0;
+
+      p {
+        color: #94a3b8 !important;
+      }
+    }
+
+    :deep(hr) {
+      background-color: rgba(255, 255, 255, 0.08) !important;
+      border: none;
+      height: 1px;
+      margin: 16px 0;
+    }
+
+    :deep(table) {
+      background-color: transparent !important;
+      border-collapse: collapse;
+      width: 100%;
+      margin: 12px 0;
+    }
+
+    :deep(th) {
+      background-color: rgba(59, 130, 246, 0.08) !important;
+      color: #e2e8f0 !important;
+      border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      padding: 6px 12px;
+      font-weight: 600;
+    }
+
+    :deep(td) {
+      background-color: transparent !important;
+      color: #cbd5e1 !important;
+      border: 1px solid rgba(255, 255, 255, 0.06) !important;
+      padding: 6px 12px;
+    }
+
+    :deep(tr) {
+      background-color: transparent !important;
+      &:nth-child(even) td {
+        background-color: rgba(255, 255, 255, 0.02) !important;
+      }
+    }
+
+    :deep(strong) {
+      color: #f1f5f9;
+      font-weight: 600;
+    }
+
+    :deep(em) {
+      color: #94a3b8;
     }
   }
 

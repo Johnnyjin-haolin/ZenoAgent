@@ -2,7 +2,6 @@ package com.aiagent.domain.tinking;
 
 import com.aiagent.api.dto.AgentEventData;
 import com.aiagent.api.dto.McpToolInfo;
-import com.aiagent.api.dto.ThinkingConfig;
 import com.aiagent.domain.action.ActionInputDTO;
 import com.aiagent.domain.action.ActionResult;
 import com.aiagent.domain.action.AgentAction;
@@ -225,8 +224,7 @@ public class OpenAIReasoningThinkingEngine implements ThinkingEngine {
         List<ChatMessage> messages = new ArrayList<>();
         
         // 历史消息
-        ThinkingConfig cfg = context.getThinkingConfig();
-        int historyLimit = (cfg != null) ? cfg.getHistoryMessageLoadLimitOrDefault() : 10;
+        int historyLimit = context.getHistoryMessageLoadLimit();
         if (context.getMessages() != null) {
             List<ChatMessage> history = context.getMessages();
             int start = Math.max(0, history.size() - historyLimit);

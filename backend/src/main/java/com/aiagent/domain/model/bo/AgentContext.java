@@ -1,5 +1,6 @@
 package com.aiagent.domain.model.bo;
 
+import com.aiagent.api.dto.RAGConfig;
 import com.aiagent.application.AgentEventPublisher;
 import com.aiagent.domain.action.ActionResult;
 import com.aiagent.common.enums.AgentMode;
@@ -22,154 +23,102 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Agent 上下文
- * 维护Agent执行过程中的状态和历史
- * 
- * @author aiagent
+ * Agent 执行上下文
+ * <p>
+ * 职责：维护 Agent 执行过程中的**状态与历史**，以及运行时 I/O 通道。
+ * 所有运行时配置（模型、模式、工具、RAG、上下文行为参数）统一聚合在
+ * {@link AgentRuntimeConfig config} 字段中，由
+ * {@link com.aiagent.domain.context.AgentContextService} 在请求初始化阶段构建。
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class AgentContext implements Serializable {
-    
+
     private static final long serialVersionUID = 1L;
-    
-    /**
-     * 会话ID
-     */
+
+    // ── 会话标识 ──────────────────────────────────────────────────────────────
+
+    /** 会话 ID */
     private String conversationId;
-    
-    /**
-     * Agent配置ID
-     */
+
+    /** 绑定的 Agent 定义 ID */
     private String agentId;
-    
+
+    // ── 运行时配置（本次请求生效，每次请求重新构建）────────────────────────────
+
     /**
-     * 对话历史（存储DTO格式，用于序列化）
-     * 注意：存储到Redis时使用MessageDTO，读取后转换回ChatMessage
+     * 运行时配置（模型/模式/工具/知识库/RAG/上下文行为参数）。
+     * 由 AgentContextService 在 loadOrCreateContext 中构建，序列化到 Redis。
+     */
+    @Builder.Default
+    private AgentRuntimeConfig config = new AgentRuntimeConfig();
+
+    // ── 运行时状态（随会话持久化到 Redis）─────────────────────────────────────
+
+    /**
+     * 对话历史（存储 BO 格式，用于 Redis 序列化）
      */
     private List<MessageBO> messageBOS;
-    
+
     /**
      * 动作执行历史（按 ReACT 迭代轮次组织）
-     * 外层 List：迭代轮次索引（第0轮、第1轮、第2轮...）
-     * 内层 List：该轮迭代中执行的所有 ActionResult
+     * 外层 List：轮次索引；内层 List：该轮所有 ActionResult
      */
     private List<List<ActionResult>> actionExecutionHistory;
 
-    /**
-     * RAG检索历史
-     */
+    /** RAG 检索历史 */
     private List<Map<String, Object>> ragRetrieveHistory;
-    
-    /**
-     * 迭代次数
-     */
+
+    /** 迭代次数 */
     private Integer iterations;
-    
-    /**
-     * 模型ID
-     */
-    private String modelId;
 
     /**
-     * 执行模式（自动/手动）
+     * Todo 任务清单（与会话绑定，随 AgentContext 持久化到 Redis）
      */
-    private AgentMode mode;
-    
-    /**
-     * 启用的MCP分组列表
-     */
-    private List<String> enabledMcpGroups;
-    
-    /**
-     * 启用的工具名称列表（为空则允许所有工具）
-     */
-    private List<String> enabledTools;
-    
-    /**
-     * 知识库ID列表
-     */
-    private List<String> knowledgeIds;
-    
-    /**
-     * 知识库信息映射（knowledgeId -> KnowledgeBase）
-     * 在初始化时批量加载，避免在 ThinkingEngine 中重复查询
-     */
-    @JsonIgnore
-    private Map<String, KnowledgeBase> knowledgeBaseMap;
-    
-    /**
-     * 思考引擎配置
-     * 用于控制提示词构建时的历史长度、截断等行为
-     */
-    @JsonIgnore
-    private com.aiagent.api.dto.ThinkingConfig thinkingConfig;
-    
-    /**
-     * RAG配置
-     * 用于控制知识库检索的参数（检索数量、相似度阈值、内容长度限制等）
-     */
-    @JsonIgnore
-    private com.aiagent.api.dto.RAGConfig ragConfig;
+    @Builder.Default
+    private List<TodoItem> todos = new ArrayList<>();
 
-    /**
-     * 用户名
-     */
+    // ── 运行时 I/O（transient，不序列化）──────────────────────────────────────
+
+    /** 用户名 */
     private String username;
-    
-    /**
-     * 请求ID（用于关联SSE事件，不需要序列化）
-     */
+
+    /** 请求 ID（关联 SSE 事件） */
     @JsonIgnore
     private transient String requestId;
-    
-    /**
-     * 流式输出回调（运行时使用，不需要序列化）
-     */
+
+    /** 流式输出回调 */
     @JsonIgnore
     private transient StreamingCallback streamingCallback;
-    
+
     /**
-     * 事件发布器（用于向前端发送进度事件，不需要序列化）
-     * 通过 {@link AgentEventPublisher} 接口与传输协议解耦，当前实现为 {@code SseAgentEventPublisher}。
+     * 事件发布器（向前端发送进度事件）
      */
     @JsonIgnore
     private transient AgentEventPublisher eventPublisher;
-    
-    /**
-     * 初始 RAG 检索结果（仅在第一次请求时使用，不序列化）
-     */
+
+    /** 初始 RAG 检索结果（仅第一次请求使用） */
     @JsonIgnore
     private transient AgentKnowledgeResult initialRagResult;
 
     /**
-     * 渐进式工具加载：本轮 LLM 通过 system_resolve_tools 工具请求加载的 MCP 工具名称集合
-     * 工具执行后由 NativeFunctionCallingEngine 消费并清空，不需要序列化
+     * 渐进式工具加载：本轮 LLM 通过 system_resolve_tools 请求加载的 MCP 工具名称集合
      */
     @JsonIgnore
     private transient Set<String> activeMcpToolNames = new HashSet<>();
 
     /**
-     * 本次推理执行过程记录（iterations / steps）
-     * 由 FunctionCallingEngine 在 execute() 完成后写入，由 AgentServiceImpl 读取并持久化到
-     * MessageEntity.metadata.executionProcess，供历史对话加载时还原 ReAct 迭代展示。
-     * 运行时对象，不需要序列化到 Redis。
+     * 本次推理执行过程记录，由 FunctionCallingEngine 写入，AgentServiceImpl 读取后持久化。
      */
     @JsonIgnore
     private transient ExecutionProcessRecord executionProcess;
 
-    /**
-     * Todo 任务清单（与会话绑定，随 AgentContext 持久化到 Redis）
-     * 由 system_todo_write 工具读写，FunctionCallingEngine 在每轮构建系统提示词时注入
-     */
-    @Builder.Default
-    private List<TodoItem> todos = new ArrayList<>();
+    // ── 消息操作 ─────────────────────────────────────────────────────────────
 
     /**
-     * 从 ChatMessage 列表设置消息（自动转换为DTO）
-     * 注意：添加 @JsonIgnore 避免 Jackson 序列化此方法，防止与 messageDTOs 字段冲突
+     * 从 ChatMessage 列表设置消息（自动转换为 BO）
      */
     @JsonIgnore
     public void setMessages(List<ChatMessage> messages) {
@@ -181,10 +130,9 @@ public class AgentContext implements Serializable {
                 .collect(Collectors.toList());
         }
     }
-    
+
     /**
-     * 获取 ChatMessage 列表（从DTO转换）
-     * 注意：添加 @JsonIgnore 避免 Jackson 序列化此方法，防止与 messageDTOs 字段冲突
+     * 获取 ChatMessage 列表（从 BO 转换）
      */
     @JsonIgnore
     public List<ChatMessage> getMessages() {
@@ -196,19 +144,116 @@ public class AgentContext implements Serializable {
             .filter(Objects::nonNull)
             .collect(Collectors.toList());
     }
-    
-    /**
-     * 添加消息
-     */
+
+    /** 追加单条消息 */
     public void addMessage(ChatMessage message) {
         if (messageBOS == null) {
             messageBOS = new ArrayList<>();
         }
-        MessageBO dto = MessageBO.from(message);
-        if (dto != null) {
-            messageBOS.add(dto);
+        MessageBO bo = MessageBO.from(message);
+        if (bo != null) {
+            messageBOS.add(bo);
         }
     }
+
+    // ── 配置委托（从 config 透传，保持旧调用点无感知）─────────────────────────
+
+    @JsonIgnore
+    public String getModelId() {
+        return config != null ? config.getModelId() : null;
+    }
+
+    @JsonIgnore
+    public void setModelId(String modelId) {
+        ensureConfig().setModelId(modelId);
+    }
+
+    @JsonIgnore
+    public AgentMode getMode() {
+        return config != null ? config.getMode() : AgentMode.AUTO;
+    }
+
+    @JsonIgnore
+    public void setMode(AgentMode mode) {
+        ensureConfig().setMode(mode);
+    }
+
+    @JsonIgnore
+    public List<String> getEnabledMcpGroups() {
+        return config != null ? config.getEnabledMcpGroups() : null;
+    }
+
+    @JsonIgnore
+    public void setEnabledMcpGroups(List<String> groups) {
+        ensureConfig().setEnabledMcpGroups(groups);
+    }
+
+    @JsonIgnore
+    public List<String> getEnabledTools() {
+        return config != null ? config.getEnabledTools() : null;
+    }
+
+    @JsonIgnore
+    public void setEnabledTools(List<String> tools) {
+        ensureConfig().setEnabledTools(tools);
+    }
+
+    @JsonIgnore
+    public List<String> getKnowledgeIds() {
+        return config != null ? config.getKnowledgeIds() : null;
+    }
+
+    @JsonIgnore
+    public void setKnowledgeIds(List<String> ids) {
+        ensureConfig().setKnowledgeIds(ids);
+    }
+
+    @JsonIgnore
+    public Map<String, KnowledgeBase> getKnowledgeBaseMap() {
+        return config != null ? config.getKnowledgeBaseMap() : null;
+    }
+
+    @JsonIgnore
+    public void setKnowledgeBaseMap(Map<String, KnowledgeBase> map) {
+        ensureConfig().setKnowledgeBaseMap(map);
+    }
+
+    @JsonIgnore
+    public int getHistoryMessageLoadLimit() {
+        return config != null ? config.getHistoryMessageLoadLimit() : 20;
+    }
+
+    @JsonIgnore
+    public void setHistoryMessageLoadLimit(int limit) {
+        ensureConfig().setHistoryMessageLoadLimit(limit);
+    }
+
+    @JsonIgnore
+    public int getMaxToolRounds() {
+        return config != null ? config.getMaxToolRounds() : 8;
+    }
+
+    @JsonIgnore
+    public void setMaxToolRounds(int rounds) {
+        ensureConfig().setMaxToolRounds(rounds);
+    }
+
+    @JsonIgnore
+    public RAGConfig getRagConfig() {
+        return config != null ? config.getRagConfig() : null;
+    }
+
+    @JsonIgnore
+    public void setRagConfig(RAGConfig ragConfig) {
+        ensureConfig().setRagConfig(ragConfig);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private AgentRuntimeConfig ensureConfig() {
+        if (config == null) {
+            config = new AgentRuntimeConfig();
+        }
+        return config;
+    }
 }
-
-

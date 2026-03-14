@@ -1,17 +1,21 @@
 package com.aiagent.application;
 
 import com.aiagent.common.constant.AgentConstants;
+import com.aiagent.common.enums.AgentMode;
 import com.aiagent.common.enums.AgentState;
 import com.aiagent.domain.agent.AgentDefinition;
 import com.aiagent.domain.agent.AgentDefinitionLoader;
 import com.aiagent.domain.llm.SimpleLLMChatHandler;
 import com.aiagent.domain.model.bo.AgentContext;
 import com.aiagent.domain.model.bo.AgentExecutionResult;
+import com.aiagent.domain.model.bo.AgentRuntimeConfig;
 import com.aiagent.domain.model.bo.ExecutionProcessRecord;
 import com.aiagent.domain.model.bo.ExecutionProcessRecord.Iteration;
 import com.aiagent.domain.model.bo.ExecutionProcessRecord.Step;
 import com.aiagent.domain.tool.ToolRegistry;
 import com.aiagent.domain.tool.todo.TodoItem;
+import com.aiagent.infrastructure.external.mcp.ToolConfirmationDecision;
+import com.aiagent.infrastructure.external.mcp.ToolConfirmationManager;
 import com.alibaba.fastjson2.JSON;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
@@ -28,6 +32,7 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 基于 LangChain4j 原生 Function Calling 的标准 Agent 推理引擎（默认引擎）
@@ -36,17 +41,22 @@ import java.util.List;
  * 通过 {@code toolSpecifications} 将工具定义以结构化参数传递给 LLM，
  * 依据 {@code FinishReason.TOOL_EXECUTION} 驱动推理循环，无需 Prompt 解析。
  *
- * <p>引擎通过 {@link AgentEventPublisher} 接口发布进度事件，与传输协议完全解耦。
- * 如需使用不支持 Function Calling 的模型，切换 {@code AgentServiceImpl} 中的
- * {@code @Qualifier} 值为 {@code "promptReActEngine"}。
+ * <p>支持两种执行模式：
+ * <ul>
+ *   <li>{@link AgentMode#AUTO}   - 工具立即执行，无需用户确认</li>
+ *   <li>{@link AgentMode#MANUAL} - 每个工具执行前发出确认请求，等待用户批准/拒绝，
+ *       通过 {@link ToolConfirmationManager} + Redis BlockingQueue 实现阻塞等待</li>
+ * </ul>
  *
- * @see PromptReActEngine
+ * <p>最大工具轮数通过 {@code context.getMaxToolRounds()} 读取（委托到 {@link AgentRuntimeConfig}），
+ * 默认值 8，可在 {@link AgentDefinition.ContextConfig} 中配置。
  */
 @Slf4j
 @Component
 public class FunctionCallingEngine implements AgentEngine {
 
-    private static final int MAX_TOOL_ROUNDS = 8;
+    /** MANUAL 模式下等待用户确认的超时时间（毫秒），5 分钟 */
+    private static final long MANUAL_CONFIRM_TIMEOUT_MS = 5 * 60_000L;
 
     @Autowired
     private SimpleLLMChatHandler llmChatHandler;
@@ -56,6 +66,9 @@ public class FunctionCallingEngine implements AgentEngine {
 
     @Autowired
     private ToolRegistry toolRegistry;
+
+    @Autowired
+    private ToolConfirmationManager toolConfirmationManager;
 
     @Override
     public AgentExecutionResult execute(AgentContext context) {
@@ -69,32 +82,35 @@ public class FunctionCallingEngine implements AgentEngine {
             agentDef = agentDefinitionLoader.getById(AgentConstants.DEFAULT_AGENT_ID);
         }
 
+        // 最大工具轮数（从 context 读取，由 AgentContextService 注入）
+        int maxToolRounds = context.getMaxToolRounds();
+
+        // 是否启用 MANUAL 手动确认模式
+        boolean manualMode = AgentMode.MANUAL.equals(context.getMode());
+
         // 判断是否启用渐进式加载
         boolean progressiveMode = toolRegistry.isProgressiveMode(agentDef);
-        log.info("渐进式工具加载模式: {}", progressiveMode ? "已启用" : "未启用");
+        log.info("执行模式: {}, 渐进式工具加载: {}",
+            manualMode ? "MANUAL" : "AUTO",
+            progressiveMode ? "已启用" : "未启用");
 
-        // 初始化 messages（渐进式模式下追加工具概览到 System Prompt）
+        // 初始化 messages
         List<ChatMessage> messages = buildMessages(agentDef, context, progressiveMode);
 
-        // 初始化 toolSpecs（渐进式模式下仅包含系统工具，不加载 MCP 工具）
+        // 初始化 toolSpecs
         List<ToolSpecification> toolSpecs = resolveInitialToolSpecs(agentDef, progressiveMode);
 
         int toolRound = 0;
 
-        // 执行过程记录（用于持久化到历史消息 metadata）
         ExecutionProcessRecord processRecord = new ExecutionProcessRecord();
         processRecord.setIterations(new ArrayList<>());
 
         try {
-            while (toolRound <= MAX_TOOL_ROUNDS) {
+            while (toolRound <= maxToolRounds) {
                 log.info("Function Calling 循环第 {} 轮", toolRound);
 
-                // 判断当前轮是否为工具轮（尚未确定），先用"思考"回调；
-                // 若最终是工具轮则 token 路由到 onThinkingToken，否则路由到 onToken。
-                // 通过 isToolRound 标记在轮次结束后决定——此处构建包装回调。
                 final boolean[] isToolRound = {false};
                 final StringBuilder roundBuffer = new StringBuilder();
-
                 StreamingCallback roundCallback = buildRoundCallback(context, roundBuffer, isToolRound);
 
                 ChatResponse response = llmChatHandler.chatWithToolsStreaming(
@@ -114,7 +130,6 @@ public class FunctionCallingEngine implements AgentEngine {
                 log.info("LLM 返回 finishReason={}", finishReason);
 
                 if (FinishReason.TOOL_EXECUTION.equals(finishReason) && aiMessage.hasToolExecutionRequests()) {
-                    // 工具调用轮：把本轮缓冲的 token 作为思考内容发出
                     isToolRound[0] = true;
                     String thinkingContent = roundBuffer.toString();
                     flushThinkingBuffer(publisher, roundBuffer);
@@ -122,13 +137,11 @@ public class FunctionCallingEngine implements AgentEngine {
                     toolRound++;
                     List<ToolExecutionRequest> toolRequests = aiMessage.toolExecutionRequests();
 
-                    // 创建本轮迭代记录
                     long iterStartNs = System.nanoTime();
                     Iteration iteration = new Iteration();
                     iteration.setIterationNumber(toolRound);
                     iteration.setSteps(new ArrayList<>());
 
-                    // 记录思考步骤（如有）
                     if (!thinkingContent.isBlank()) {
                         iteration.getSteps().add(Step.builder()
                             .type("thinking")
@@ -137,48 +150,125 @@ public class FunctionCallingEngine implements AgentEngine {
                     }
 
                     for (ToolExecutionRequest toolRequest : toolRequests) {
-                        // 记录工具调用步骤
                         iteration.getSteps().add(Step.builder()
                             .type("tool_call")
                             .toolName(toolRequest.name())
                             .toolParams(toolRequest.arguments())
                             .build());
 
-                        // 发布工具调用事件
-                        if (publisher != null) {
-                            publisher.onToolCall(toolRequest.name(), parseArguments(toolRequest.arguments()));
-                        }
+                        ToolExecutionResultMessage resultMsg;
 
-                        long toolStart = System.nanoTime();
-                        ToolExecutionResultMessage resultMsg = toolRegistry.execute(toolRequest, context);
-                        long toolDurationMs = (System.nanoTime() - toolStart) / 1_000_000;
+                        if (manualMode) {
+                            // ── MANUAL 模式：先通知前端等待确认，再阻塞等待用户决策 ─────
+                            String toolExecutionId = UUID.randomUUID().toString();
+                            toolConfirmationManager.register(toolExecutionId);
 
-                        messages.add(resultMsg);
-                        context.addMessage(resultMsg);
+                            if (publisher != null) {
+                                publisher.onToolCall(
+                                    toolRequest.name(),
+                                    parseArguments(toolRequest.arguments()),
+                                    true,
+                                    toolExecutionId
+                                );
+                            }
 
-                        // 记录工具结果步骤
-                        boolean isError = resultMsg.text() != null && resultMsg.text().startsWith("[ERROR]");
-                        iteration.getSteps().add(Step.builder()
-                            .type("tool_result")
-                            .toolName(toolRequest.name())
-                            .toolResult(resultMsg.text())
-                            .toolDurationMs(toolDurationMs)
-                            .error(isError)
-                            .errorMessage(isError ? resultMsg.text() : null)
-                            .build());
+                            log.info("[MANUAL] 等待用户确认: toolName={}, toolExecutionId={}",
+                                toolRequest.name(), toolExecutionId);
 
-                        // 发布工具结果事件
-                        if (publisher != null) {
-                            publisher.onToolResult(
-                                toolRequest.name(),
-                                resultMsg.text(),
-                                toolDurationMs,
-                                isError ? resultMsg.text() : null
-                            );
+                            ToolConfirmationDecision decision =
+                                toolConfirmationManager.waitForDecision(toolExecutionId, MANUAL_CONFIRM_TIMEOUT_MS);
+
+                            log.info("[MANUAL] 用户决策: toolName={}, decision={}",
+                                toolRequest.name(), decision);
+
+                            if (ToolConfirmationDecision.APPROVED.equals(decision)) {
+                                long toolStart = System.nanoTime();
+                                resultMsg = toolRegistry.execute(toolRequest, context);
+                                long toolDurationMs = (System.nanoTime() - toolStart) / 1_000_000;
+
+                                messages.add(resultMsg);
+                                context.addMessage(resultMsg);
+
+                                boolean isError = resultMsg.text() != null && resultMsg.text().startsWith("[ERROR]");
+                                iteration.getSteps().add(Step.builder()
+                                    .type("tool_result")
+                                    .toolName(toolRequest.name())
+                                    .toolResult(resultMsg.text())
+                                    .toolDurationMs(toolDurationMs)
+                                    .error(isError)
+                                    .errorMessage(isError ? resultMsg.text() : null)
+                                    .build());
+
+                                if (publisher != null) {
+                                    publisher.onToolResult(
+                                        toolRequest.name(),
+                                        resultMsg.text(),
+                                        toolDurationMs,
+                                        isError ? resultMsg.text() : null
+                                    );
+                                }
+                            } else {
+                                // 拒绝或超时：构造拒绝结果，让 LLM 感知并重新规划
+                                String rejectMsg = ToolConfirmationDecision.TIMEOUT.equals(decision)
+                                    ? "用户未在规定时间内确认，工具执行已取消"
+                                    : "用户拒绝了工具执行请求";
+                                resultMsg = ToolExecutionResultMessage.builder()
+                                    .id(toolRequest.id())
+                                    .toolName(toolRequest.name())
+                                    .text(rejectMsg)
+                                    .isError(false)
+                                    .build();
+
+                                messages.add(resultMsg);
+                                context.addMessage(resultMsg);
+
+                                iteration.getSteps().add(Step.builder()
+                                    .type("tool_result")
+                                    .toolName(toolRequest.name())
+                                    .toolResult(rejectMsg)
+                                    .toolDurationMs(0L)
+                                    .error(false)
+                                    .build());
+
+                                if (publisher != null) {
+                                    publisher.onToolResult(toolRequest.name(), rejectMsg, 0L, null);
+                                }
+                            }
+
+                        } else {
+                            // ── AUTO 模式：直接执行工具 ──────────────────────────────────
+                            if (publisher != null) {
+                                publisher.onToolCall(toolRequest.name(), parseArguments(toolRequest.arguments()));
+                            }
+
+                            long toolStart = System.nanoTime();
+                            resultMsg = toolRegistry.execute(toolRequest, context);
+                            long toolDurationMs = (System.nanoTime() - toolStart) / 1_000_000;
+
+                            messages.add(resultMsg);
+                            context.addMessage(resultMsg);
+
+                            boolean isError = resultMsg.text() != null && resultMsg.text().startsWith("[ERROR]");
+                            iteration.getSteps().add(Step.builder()
+                                .type("tool_result")
+                                .toolName(toolRequest.name())
+                                .toolResult(resultMsg.text())
+                                .toolDurationMs(toolDurationMs)
+                                .error(isError)
+                                .errorMessage(isError ? resultMsg.text() : null)
+                                .build());
+
+                            if (publisher != null) {
+                                publisher.onToolResult(
+                                    toolRequest.name(),
+                                    resultMsg.text(),
+                                    toolDurationMs,
+                                    isError ? resultMsg.text() : null
+                                );
+                            }
                         }
                     }
 
-                    // 完成本轮迭代记录
                     iteration.setDurationMs(elapsedMs(iterStartNs));
                     processRecord.getIterations().add(iteration);
 
@@ -196,21 +286,18 @@ public class FunctionCallingEngine implements AgentEngine {
                     continue;
                 }
 
-                // 最终回复轮：StreamingCallback 已通过 onToken 逐 token 发出，
-                // 流式完成由原始 StreamingCallback.onComplete 负责发出 onStreamComplete。
                 log.info("Function Calling 循环结束，共执行 {} 轮工具调用", toolRound);
                 break;
             }
 
-            if (toolRound > MAX_TOOL_ROUNDS) {
-                log.warn("工具调用轮次超限，强制终止推理循环");
+            if (toolRound > maxToolRounds) {
+                log.warn("工具调用轮次超限（max={}），强制终止推理循环", maxToolRounds);
                 long durationMs = elapsedMs(startNs);
                 return AgentExecutionResult.failure("工具调用轮次超限", "MAX_ITERATIONS_EXCEEDED",
                     context.getMessages(), toolRound, durationMs, AgentState.FAILED);
             }
 
             long durationMs = elapsedMs(startNs);
-            // 写入执行过程记录到 context，供 AgentServiceImpl 持久化
             processRecord.setTotalDurationMs(durationMs);
             context.setExecutionProcess(processRecord);
 
@@ -229,16 +316,12 @@ public class FunctionCallingEngine implements AgentEngine {
 
     // ── 私有辅助方法 ──────────────────────────────────────────────────────────
 
-    /**
-     * 构建消息列表（渐进式模式下追加工具概览到 System Prompt，有未完成 Todo 时追加 Todo 清单）
-     */
     private List<ChatMessage> buildMessages(AgentDefinition agentDef, AgentContext context, boolean progressiveMode) {
         List<ChatMessage> messages = new ArrayList<>();
 
         if (agentDef != null && agentDef.getSystemPrompt() != null && !agentDef.getSystemPrompt().isEmpty()) {
             String systemPrompt = agentDef.getSystemPrompt();
 
-            // 渐进式模式：追加 MCP 工具概览
             if (progressiveMode) {
                 String toolSummary = toolRegistry.buildMcpToolSummary(agentDef);
                 if (!toolSummary.isEmpty()) {
@@ -246,7 +329,6 @@ public class FunctionCallingEngine implements AgentEngine {
                 }
             }
 
-            // Todo 清单注入：有未完成任务时追加到系统提示词
             String todoSection = buildTodoSection(context);
             if (!todoSection.isEmpty()) {
                 systemPrompt += todoSection;
@@ -262,10 +344,6 @@ public class FunctionCallingEngine implements AgentEngine {
         return messages;
     }
 
-    /**
-     * 构建 Todo 清单提示词片段
-     * 仅当存在未完成（pending）的 Todo 时才返回非空字符串
-     */
     private String buildTodoSection(AgentContext context) {
         List<TodoItem> todos = context.getTodos();
         if (todos == null || todos.isEmpty()) {
@@ -305,10 +383,6 @@ public class FunctionCallingEngine implements AgentEngine {
         return sb.toString();
     }
 
-    /**
-     * 解析初始 ToolSpecification 列表
-     * 渐进式模式下仅包含系统工具，非渐进式模式包含全量工具
-     */
     private List<ToolSpecification> resolveInitialToolSpecs(AgentDefinition agentDef, boolean progressiveMode) {
         List<ToolSpecification> result = new ArrayList<>();
 
@@ -318,12 +392,10 @@ public class FunctionCallingEngine implements AgentEngine {
 
         List<ToolSpecification> allSpecs = toolRegistry.resolveToolSpecifications(agentDef);
 
-        // 系统工具：始终加载
         allSpecs.stream()
             .filter(spec -> spec.name().startsWith("system_"))
             .forEach(result::add);
 
-        // MCP 工具：渐进式模式下不加载（通过 system_resolve_tools 按需加载）
         if (!progressiveMode) {
             allSpecs.stream()
                 .filter(spec -> !spec.name().startsWith("system_"))
@@ -334,16 +406,6 @@ public class FunctionCallingEngine implements AgentEngine {
         return result;
     }
 
-    /**
-     * 构建本轮的 StreamingCallback。
-     *
-     * <p>策略：所有轮次的流式 token 先缓冲到 {@code roundBuffer}。
-     * <ul>
-     *   <li>工具调用轮（{@code isToolRound[0]=true}）：由 {@link #flushThinkingBuffer} 统一发为 onThinkingToken</li>
-     *   <li>最终回复轮（{@code isToolRound[0]=false}）：每个 token 实时路由给 {@code publisher.onToken}</li>
-     * </ul>
-     * onComplete / onError 透传给原始回调（负责发 onStreamComplete + 释放 CountDownLatch）。
-     */
     private StreamingCallback buildRoundCallback(AgentContext context,
                                                   StringBuilder roundBuffer,
                                                   boolean[] isToolRound) {
@@ -353,22 +415,17 @@ public class FunctionCallingEngine implements AgentEngine {
         return new StreamingCallback() {
             @Override
             public void onToken(String token) {
-                // 如果尚未确定是工具轮，先缓冲
-                // 工具轮结束后由 flushThinkingBuffer 处理；最终轮直接发 onToken
                 if (!isToolRound[0]) {
-                    // 最终轮：直接路由给 publisher（实时流式）
                     if (publisher != null) {
                         publisher.onToken(token);
                     }
                 } else {
-                    // 已知是工具轮：缓冲（稍后由 flushThinkingBuffer 统一发出）
                     roundBuffer.append(token);
                 }
             }
 
             @Override
             public void onThinking(String thinkingToken) {
-                // 深度思考模型的 reasoning_content：始终作为 thinkingToken 发出
                 if (publisher != null) {
                     publisher.onThinkingToken(thinkingToken);
                 }
@@ -397,9 +454,6 @@ public class FunctionCallingEngine implements AgentEngine {
         };
     }
 
-    /**
-     * 将工具调用轮缓冲的 token 作为思考内容统一发出，然后清空缓冲区
-     */
     private void flushThinkingBuffer(AgentEventPublisher publisher, StringBuilder buffer) {
         if (publisher == null || buffer.isEmpty()) {
             buffer.setLength(0);
@@ -407,16 +461,11 @@ public class FunctionCallingEngine implements AgentEngine {
         }
         String content = buffer.toString();
         buffer.setLength(0);
-        // 逐字符发出，保持流式体验
         for (int i = 0; i < content.length(); i++) {
             publisher.onThinkingToken(String.valueOf(content.charAt(i)));
         }
     }
 
-    /**
-     * 安全解析工具参数 JSON 字符串
-     * 返回 Map（可序列化为 JSON），解析失败则返回原始字符串
-     */
     private Object parseArguments(String arguments) {
         if (arguments == null || arguments.isBlank()) {
             return new HashMap<>();

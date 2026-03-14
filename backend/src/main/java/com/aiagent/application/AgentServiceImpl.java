@@ -132,14 +132,13 @@ public class AgentServiceImpl implements IAgentService {
             context.addMessage(userMessage);
             stepStartNs = logStep("save_user_message", stepStartNs, requestId, conversationId, null, emitter);
 
-            // 3. 设置上下文变量（使用具体属性）
-            // 智能选择模型：如果未指定modelId，使用配置的默认模型
-            String modelId = request.getModelId();
+            // 3. 补充：若 AgentContextService 未能确定 modelId（请求和缓存均为空），则 fallback 到系统默认模型
+            String modelId = context.getModelId();
             if (modelId == null || modelId.trim().isEmpty()) {
                 modelId = agentConfig.getModel().getDefaultModelId();
+                context.setModelId(modelId);
                 log.info("未指定模型，使用默认模型: {}", modelId);
 
-                // 发送模型选择事件
                 streamingService.sendEvent(emitter, AgentEventData.builder()
                     .requestId(requestId)
                     .event(AgentConstants.EVENT_AGENT_THINKING)
@@ -149,11 +148,6 @@ public class AgentServiceImpl implements IAgentService {
             } else {
                 log.info("使用指定模型: {}", modelId);
             }
-            context.setModelId(modelId);
-            context.setEnabledMcpGroups(request.getEnabledMcpGroups());
-            context.setKnowledgeIds(request.getKnowledgeIds());
-            // 设置启用的工具名称列表（为空则允许所有工具）
-            context.setEnabledTools(request.getEnabledTools());
             context.setRequestId(requestId);
             stepStartNs = logStep("init_context_vars", stepStartNs, requestId, conversationId,
                 "modelId=" + modelId, emitter);

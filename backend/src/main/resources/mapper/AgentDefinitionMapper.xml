@@ -8,16 +8,18 @@
         <result column="name"         property="name"/>
         <result column="description"  property="description"/>
         <result column="system_prompt" property="systemPrompt"/>
-        <result column="tools_config" property="toolsConfig"/>
-        <result column="is_builtin"   property="isBuiltin"/>
+        <result column="tools_config"   property="toolsConfig"/>
+        <result column="context_config" property="contextConfig"/>
+        <result column="rag_config"     property="ragConfig"/>
+        <result column="is_builtin"     property="isBuiltin"/>
         <result column="status"       property="status"/>
         <result column="create_time"  property="createTime"/>
         <result column="update_time"  property="updateTime"/>
     </resultMap>
 
     <insert id="insert">
-        INSERT INTO agent (id, name, description, system_prompt, tools_config, is_builtin, status)
-        VALUES (#{id}, #{name}, #{description}, #{systemPrompt}, #{toolsConfig}, #{isBuiltin}, #{status})
+        INSERT INTO agent (id, name, description, system_prompt, tools_config, context_config, rag_config, is_builtin, status)
+        VALUES (#{id}, #{name}, #{description}, #{systemPrompt}, #{toolsConfig}, #{contextConfig}, #{ragConfig}, #{isBuiltin}, #{status})
     </insert>
 
     <select id="selectById" resultMap="BaseResultMap">
@@ -26,6 +28,16 @@
 
     <select id="selectAll" resultMap="BaseResultMap">
         SELECT * FROM agent WHERE status != 'deleted' ORDER BY is_builtin DESC, create_time ASC
+    </select>
+
+    <select id="selectPage" resultMap="BaseResultMap">
+        SELECT * FROM agent WHERE status != 'deleted'
+        ORDER BY is_builtin DESC, create_time ASC
+        LIMIT #{pageSize} OFFSET #{offset}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM agent WHERE status != 'deleted'
     </select>
 
     <select id="selectByStatus" resultMap="BaseResultMap">
@@ -39,6 +51,8 @@
             <if test="description != null">description = #{description},</if>
             <if test="systemPrompt != null">system_prompt = #{systemPrompt},</if>
             <if test="toolsConfig != null">tools_config = #{toolsConfig},</if>
+            <if test="contextConfig != null">context_config = #{contextConfig},</if>
+            <if test="ragConfig != null">rag_config = #{ragConfig},</if>
             <if test="status != null">status = #{status},</if>
         </set>
         WHERE id = #{id}

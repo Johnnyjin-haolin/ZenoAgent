@@ -3,6 +3,8 @@ package com.aiagent.api.controller;
 import com.aiagent.api.dto.AgentDefinitionRequest;
 import com.aiagent.api.dto.AgentDefinitionVO;
 import com.aiagent.api.dto.McpGroupInfo;
+import com.aiagent.api.dto.Page;
+import com.aiagent.api.dto.PageResult;
 import com.aiagent.common.response.Result;
 import com.aiagent.domain.agent.AgentDefinition;
 import com.aiagent.domain.agent.AgentDefinitionLoader;
@@ -43,15 +45,44 @@ public class AgentDefinitionController {
     // ----------------------------------------------------------------- 查询
 
     /**
-     * 获取所有 Agent 定义列表（内置优先）
+     * 获取 Agent 定义列表（内置优先，支持分页）
+     * <p>
+     * pageNo 和 pageSize 均为可选，不传时返回全量数据（用于兼容老调用方）。
+     * 前端分页滚动场景请传分页参数。
      */
     @GetMapping
-    public Result<List<AgentDefinitionVO>> listAgents() {
-        List<AgentDefinitionEntity> entities = agentDefinitionMapper.selectAll();
+    public Result<?> listAgents(
+            @RequestParam(required = false) Integer pageNo,
+            @RequestParam(required = false, defaultValue = "12") Integer pageSize) {
+
+        // 未传 pageNo 时走全量接口（向后兼容）
+        if (pageNo == null) {
+            List<AgentDefinitionEntity> entities = agentDefinitionMapper.selectAll();
+            List<AgentDefinitionVO> vos = entities.stream()
+                    .map(this::toVO)
+                    .collect(Collectors.toList());
+            return Result.success(vos);
+        }
+
+        // 分页查询
+        int validPage = Math.max(pageNo, 1);
+        int validSize = Math.min(Math.max(pageSize, 1), 100);
+        int offset = (validPage - 1) * validSize;
+
+        List<AgentDefinitionEntity> entities = agentDefinitionMapper.selectPage(offset, validSize);
+        long total = agentDefinitionMapper.count();
+
         List<AgentDefinitionVO> vos = entities.stream()
                 .map(this::toVO)
                 .collect(Collectors.toList());
-        return Result.success(vos);
+
+        Page<AgentDefinitionVO> page = new Page<>();
+        page.setRecords(vos);
+        page.setTotal(total);
+        page.setCurrent(validPage);
+        page.setSize(validSize);
+
+        return Result.success(PageResult.from(page));
     }
 
     /**
@@ -85,6 +116,8 @@ public class AgentDefinitionController {
         entity.setIsBuiltin(0);
         entity.setStatus("active");
         entity.setToolsConfig(serializeTools(request.getTools()));
+        entity.setContextConfig(serializeContextConfig(request.getContextConfig()));
+        entity.setRagConfig(serializeRagConfig(request.getRagConfig()));
 
         agentDefinitionMapper.insert(entity);
         log.info("创建 Agent 定义: id={}, name={}", entity.getId(), entity.getName());
@@ -96,7 +129,7 @@ public class AgentDefinitionController {
     // ----------------------------------------------------------------- 更新
 
     /**
-     * 更新 Agent 定义（内置 Agent 仅允许修改 systemPrompt 和 tools）
+     * 更新 Agent 定义（内置 Agent 仅允许修改 systemPrompt / tools / contextConfig / ragConfig）
      */
     @PutMapping("/{id}")
     public Result<AgentDefinitionVO> updateAgent(@PathVariable String id,
@@ -115,6 +148,8 @@ public class AgentDefinitionController {
         }
         update.setSystemPrompt(request.getSystemPrompt());
         update.setToolsConfig(serializeTools(request.getTools()));
+        update.setContextConfig(serializeContextConfig(request.getContextConfig()));
+        update.setRagConfig(serializeRagConfig(request.getRagConfig()));
 
         agentDefinitionMapper.update(update);
         log.info("更新 Agent 定义: id={}", id);
@@ -195,6 +230,26 @@ public class AgentDefinitionController {
             vo.setTools(new AgentDefinitionVO.ToolsConfigVO());
         }
 
+        if (entity.getContextConfig() != null) {
+            try {
+                AgentDefinitionVO.ContextConfigVO ctxVO =
+                        objectMapper.readValue(entity.getContextConfig(), AgentDefinitionVO.ContextConfigVO.class);
+                vo.setContextConfig(ctxVO);
+            } catch (Exception e) {
+                log.warn("反序列化 contextConfig 失败: id={}", entity.getId());
+            }
+        }
+
+        if (entity.getRagConfig() != null) {
+            try {
+                AgentDefinitionVO.RagConfigVO ragVO =
+                        objectMapper.readValue(entity.getRagConfig(), AgentDefinitionVO.RagConfigVO.class);
+                vo.setRagConfig(ragVO);
+            } catch (Exception e) {
+                log.warn("反序列化 ragConfig 失败: id={}", entity.getId());
+            }
+        }
+
         return vo;
     }
 
@@ -211,6 +266,30 @@ public class AgentDefinitionController {
         } catch (Exception e) {
             log.warn("序列化 tools 配置失败", e);
             return "{}";
+        }
+    }
+
+    private String serializeContextConfig(AgentDefinitionRequest.ContextConfigRequest cfg) {
+        if (cfg == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(cfg);
+        } catch (Exception e) {
+            log.warn("序列化 contextConfig 失败", e);
+            return null;
+        }
+    }
+
+    private String serializeRagConfig(AgentDefinitionRequest.RagConfigRequest cfg) {
+        if (cfg == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(cfg);
+        } catch (Exception e) {
+            log.warn("序列化 ragConfig 失败", e);
+            return null;
         }
     }
 }

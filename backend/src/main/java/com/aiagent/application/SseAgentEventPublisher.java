@@ -34,10 +34,22 @@ public class SseAgentEventPublisher implements AgentEventPublisher {
 
     @Override
     public void onToolCall(String toolName, Object params) {
+        onToolCall(toolName, params, false, null);
+    }
+
+    @Override
+    public void onToolCall(String toolName, Object params, boolean requiresConfirmation, String toolExecutionId) {
         java.util.Map<String, Object> data = new java.util.HashMap<>();
         data.put("toolName", toolName);
         data.put("params", params);
-        send(AgentConstants.EVENT_AGENT_TOOL_CALL, "调用工具: " + toolName, null, data);
+        data.put("requiresConfirmation", requiresConfirmation);
+        if (toolExecutionId != null) {
+            data.put("toolExecutionId", toolExecutionId);
+        }
+        String msg = requiresConfirmation
+            ? "等待确认工具: " + toolName
+            : "调用工具: " + toolName;
+        send(AgentConstants.EVENT_AGENT_TOOL_CALL, msg, null, data);
     }
 
     @Override

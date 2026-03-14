@@ -2,7 +2,7 @@
   <a-modal
     v-model:open="visible"
     title="Agent 管理"
-    width="780px"
+    width="860px"
     :footer="null"
     :mask-closable="true"
     class="agent-config-modal"
@@ -62,6 +62,9 @@
           </div>
 
           <div class="edit-form">
+            <!-- 基本信息 -->
+            <div class="form-section-title">基本信息</div>
+
             <div class="form-item">
               <label class="form-label">名称 <span class="required">*</span></label>
               <a-input
@@ -92,6 +95,9 @@
                 class="tech-input"
               />
             </div>
+
+            <!-- 工具配置 -->
+            <div class="form-section-title">工具配置</div>
 
             <div class="form-item">
               <label class="form-label">MCP 工具分组</label>
@@ -128,6 +134,128 @@
                 class="tech-select-multi"
               />
             </div>
+
+            <!-- 对话配置 -->
+            <div class="form-section-title">
+              对话配置
+              <span class="section-hint">定义对话行为的默认参数</span>
+            </div>
+
+            <div class="form-row">
+              <div class="form-item half">
+                <label class="form-label">
+                  历史消息加载数
+                  <a-tooltip title="从数据库加载的历史消息条数上限，影响 Agent 的上下文记忆深度">
+                    <Icon icon="ant-design:question-circle-outlined" class="help-icon" />
+                  </a-tooltip>
+                </label>
+                <a-input-number
+                  v-model:value="editingConversationConfig.historyMessageLoadLimit"
+                  :min="1"
+                  :max="100"
+                  :step="5"
+                  :placeholder="`默认 ${DEFAULT_CONVERSATION_CONFIG.historyMessageLoadLimit}`"
+                  class="tech-input-number"
+                />
+              </div>
+
+              <div class="form-item half">
+                <label class="form-label">
+                  最大工具调用轮数
+                  <a-tooltip title="单次对话中 Agent 最多调用工具的轮数，防止无限循环">
+                    <Icon icon="ant-design:question-circle-outlined" class="help-icon" />
+                  </a-tooltip>
+                </label>
+                <a-input-number
+                  v-model:value="editingConversationConfig.maxToolRounds"
+                  :min="1"
+                  :max="30"
+                  :step="1"
+                  :placeholder="`默认 ${DEFAULT_CONVERSATION_CONFIG.maxToolRounds}`"
+                  class="tech-input-number"
+                />
+              </div>
+            </div>
+
+            <!-- RAG 检索配置 -->
+            <div class="form-section-title">
+              RAG 检索配置
+              <span class="section-hint">定义知识库检索的默认参数</span>
+            </div>
+
+            <div class="form-row">
+              <div class="form-item half">
+                <label class="form-label">
+                  最大检索结果数
+                  <a-tooltip title="每次检索最多返回的文档数量">
+                    <Icon icon="ant-design:question-circle-outlined" class="help-icon" />
+                  </a-tooltip>
+                </label>
+                <a-input-number
+                  v-model:value="editingRagConfig.maxResults"
+                  :min="1"
+                  :max="20"
+                  :step="1"
+                  :placeholder="`默认 ${DEFAULT_RAG_CONFIG.maxResults}`"
+                  class="tech-input-number"
+                />
+              </div>
+
+              <div class="form-item half">
+                <label class="form-label">
+                  最小相似度分数
+                  <a-tooltip title="低于此分数的检索结果将被过滤，范围 0~1">
+                    <Icon icon="ant-design:question-circle-outlined" class="help-icon" />
+                  </a-tooltip>
+                </label>
+                <a-input-number
+                  v-model:value="editingRagConfig.minScore"
+                  :min="0"
+                  :max="1"
+                  :step="0.05"
+                  :placeholder="`默认 ${DEFAULT_RAG_CONFIG.minScore}`"
+                  class="tech-input-number"
+                />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-item half">
+                <label class="form-label">
+                  单文档长度限制
+                  <a-tooltip title="每篇文档摘入 Prompt 的最大字符数，留空表示不限制">
+                    <Icon icon="ant-design:question-circle-outlined" class="help-icon" />
+                  </a-tooltip>
+                </label>
+                <a-input-number
+                  v-model:value="editingRagConfig.maxDocumentLength"
+                  :min="100"
+                  :max="10000"
+                  :step="100"
+                  placeholder="留空不限制"
+                  class="tech-input-number"
+                  allow-clear
+                />
+              </div>
+
+              <div class="form-item half">
+                <label class="form-label">
+                  总内容长度限制
+                  <a-tooltip title="所有检索文档合并后的最大字符数，留空表示不限制">
+                    <Icon icon="ant-design:question-circle-outlined" class="help-icon" />
+                  </a-tooltip>
+                </label>
+                <a-input-number
+                  v-model:value="editingRagConfig.maxTotalContentLength"
+                  :min="500"
+                  :max="50000"
+                  :step="500"
+                  placeholder="留空不限制"
+                  class="tech-input-number"
+                  allow-clear
+                />
+              </div>
+            </div>
           </div>
 
           <div class="form-actions">
@@ -159,7 +287,13 @@ import {
   getAvailableSystemToolsForAgent,
   getKnowledgeList,
 } from '../agent.api';
-import type { AgentDefinition, AgentDefinitionRequest } from '../agent.types';
+import type {
+  AgentDefinition,
+  AgentDefinitionRequest,
+  AgentContextConfig,
+  AgentRagConfig,
+} from '../agent.types';
+import { DEFAULT_CONTEXT_CONFIG, DEFAULT_RAG_CONFIG } from '../agent.types';
 
 const props = defineProps<{
   open: boolean;
@@ -182,6 +316,8 @@ const editingAgent = ref<(AgentDefinitionRequest & { id?: string; builtin?: bool
 const editingMcpGroups = ref<string[]>([]);
 const editingSystemTools = ref<string[]>([]);
 const editingKnowledgeIds = ref<string[]>([]);
+const editingConversationConfig = ref<AgentContextConfig>({ ...DEFAULT_CONTEXT_CONFIG });
+const editingRagConfig = ref<AgentRagConfig>({ ...DEFAULT_RAG_CONFIG });
 const saving = ref(false);
 
 const mcpGroupOptions = ref<{ label: string; value: string }[]>([]);
@@ -236,10 +372,20 @@ function handleSelect(agent: AgentDefinition) {
     systemPrompt: agent.systemPrompt || '',
     builtin: agent.builtin,
     tools: agent.tools,
+    contextConfig: agent.contextConfig,
+    ragConfig: agent.ragConfig,
   };
   editingMcpGroups.value = agent.tools?.mcpGroups || [];
   editingSystemTools.value = agent.tools?.systemTools || [];
   editingKnowledgeIds.value = agent.tools?.knowledgeIds || [];
+  editingConversationConfig.value = {
+    ...DEFAULT_CONTEXT_CONFIG,
+    ...(agent.contextConfig || {}),
+  };
+  editingRagConfig.value = {
+    ...DEFAULT_RAG_CONFIG,
+    ...(agent.ragConfig || {}),
+  };
 }
 
 function handleCreateNew() {
@@ -253,6 +399,8 @@ function handleCreateNew() {
   editingMcpGroups.value = [];
   editingSystemTools.value = [];
   editingKnowledgeIds.value = [];
+  editingConversationConfig.value = { ...DEFAULT_CONTEXT_CONFIG };
+  editingRagConfig.value = { ...DEFAULT_RAG_CONFIG };
 }
 
 function handleCancelEdit() {
@@ -277,9 +425,11 @@ async function handleSave() {
         systemTools: editingSystemTools.value,
         knowledgeIds: editingKnowledgeIds.value,
       },
+      contextConfig: editingConversationConfig.value,
+      ragConfig: editingRagConfig.value,
     };
 
-    const agentId = (editingAgent.value as any).id;
+    const agentId = (editingAgent.value as AgentDefinition).id;
     if (agentId) {
       const updated = await updateAgentDefinition(agentId, request);
       if (updated) {
@@ -318,7 +468,7 @@ function handleDelete(agent: AgentDefinition) {
       if (ok) {
         message.success('删除成功');
         emit('change');
-        if (editingAgent.value && (editingAgent.value as any).id === agent.id) {
+        if (editingAgent.value && (editingAgent.value as AgentDefinition).id === agent.id) {
           editingAgent.value = null;
         }
         await loadAll();
@@ -338,7 +488,7 @@ function handleClose() {
 .modal-body {
   display: flex;
   gap: 16px;
-  height: 520px;
+  height: 580px;
 }
 
 // ─── 左侧列表 ───────────────────────────────────────────────────────────────
@@ -485,16 +635,66 @@ function handleClose() {
   }
 }
 
+.form-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #60a5fa;
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 12px 0 8px;
+  border-bottom: 1px solid rgba(59, 130, 246, 0.1);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  &:first-child {
+    padding-top: 0;
+  }
+
+  .section-hint {
+    font-size: 11px;
+    color: #475569;
+    text-transform: none;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 0;
+}
+
 .form-item {
-  margin-bottom: 16px;
+  margin-bottom: 14px;
+
+  &.half {
+    flex: 1;
+    min-width: 0;
+  }
 }
 
 .form-label {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 12px;
   color: #94a3b8;
   margin-bottom: 6px;
   font-family: 'JetBrains Mono', monospace;
+
+  .help-icon {
+    color: rgba(148, 163, 184, 0.5);
+    cursor: help;
+    font-size: 11px;
+
+    &:hover {
+      color: #60a5fa;
+    }
+  }
 }
 
 .required {
@@ -517,6 +717,41 @@ function handleClose() {
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+}
+
+.tech-input-number {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 4px;
+  color: #e2e8f0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+
+  &:hover,
+  &:focus,
+  &:global(.ant-input-number-focused) {
+    border-color: #60a5fa;
+    box-shadow: 0 0 6px rgba(59, 130, 246, 0.2);
+  }
+
+  :deep(.ant-input-number-input) {
+    color: #e2e8f0;
+    height: 32px;
+  }
+
+  :deep(.ant-input-number-handler-wrap) {
+    background: rgba(255, 255, 255, 0.04);
+    border-left: 1px solid rgba(59, 130, 246, 0.2);
+  }
+
+  :deep(.ant-input-number-handler) {
+    border-bottom: 1px solid rgba(59, 130, 246, 0.15);
+
+    &:hover .anticon {
+      color: #60a5fa;
+    }
   }
 }
 

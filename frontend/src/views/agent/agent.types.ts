@@ -3,62 +3,56 @@
  * @date 2025-11-30
  */
 
-/**
- * 思考引擎配置
- */
-export interface ThinkingConfig {
-  /** 对话历史轮数（默认3轮，最近的N轮对话） */
-  conversationHistoryRounds?: number;
-  /** 单条消息最大长度（默认200字符，超过截断） */
-  maxMessageLength?: number;
-  /** 动作执行历史轮数（默认2轮，最近的N轮迭代） */
-  actionExecutionHistoryCount?: number;
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Agent 定义级别配置（持久化到数据库）
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * 思考引擎配置的默认值
+ * Agent 上下文行为配置（对应后端 AgentDefinition.ContextConfig）
  */
-export const DEFAULT_THINKING_CONFIG: Required<ThinkingConfig> = {
-  conversationHistoryRounds: 3,
-  maxMessageLength: 200,
-  actionExecutionHistoryCount: 2,
+export interface AgentContextConfig {
+  /** 从数据库加载的历史消息条数上限（默认 20） */
+  historyMessageLoadLimit?: number;
+  /** 最大工具调用轮数（默认 8） */
+  maxToolRounds?: number;
+}
+
+/** Agent 上下文配置的默认值 */
+export const DEFAULT_CONTEXT_CONFIG: Required<AgentContextConfig> = {
+  historyMessageLoadLimit: 20,
+  maxToolRounds: 8,
 };
 
 /**
- * RAG配置
+ * RAG 检索参数（AgentDefinition.ragConfig 的映射）
  */
 export interface RAGConfig {
-  /** 最大检索文档数量（默认3） */
+  /** 最大检索文档数量（默认 3） */
   maxResults?: number;
-  /** 最小相似度分数（默认0.5，范围0-1） */
+  /** 最小相似度分数（默认 0.5，范围 0-1） */
   minScore?: number;
-  /** 单个文档最大字符数（null或不传表示无限制） */
+  /** 单个文档最大字符数（null 表示不限制） */
   maxDocumentLength?: number | null;
-  /** 所有文档总长度限制（null或不传表示无限制） */
+  /** 所有文档总内容最大字符数（null 表示不限制） */
   maxTotalContentLength?: number | null;
-  /** 是否在提示词中包含RAG结果（默认true） */
-  includeInPrompt?: boolean;
-  /** 是否启用智能摘要（默认false，实验性） */
-  enableSmartSummary?: boolean;
 }
 
-/**
- * RAG配置的默认值
- */
+/** RAG 配置的默认值 */
 export const DEFAULT_RAG_CONFIG: RAGConfig = {
   maxResults: 3,
   minScore: 0.5,
-  maxDocumentLength: 1000,  // 默认限制
-  maxTotalContentLength: 3000,  // 默认限制
-  includeInPrompt: true,
-  enableSmartSummary: false,
+  maxDocumentLength: 1000,
+  maxTotalContentLength: 3000,
 };
 
+/** Agent 定义中的 RAG 配置（与 RAGConfig 类型共用） */
+export type AgentRagConfig = RAGConfig;
+
 /**
- * Agent 工具配置
+ * Agent 工具选择配置（对应后端 AgentDefinition.ToolsConfig）
  */
 export interface AgentToolsConfig {
-  /** MCP 工具分组 ID 列表 */
+  /** MCP 服务器分组 ID 列表 */
   mcpGroups?: string[];
   /** 系统内置工具名称列表 */
   systemTools?: string[];
@@ -78,8 +72,12 @@ export interface AgentDefinition {
   description?: string;
   /** 系统提示词 */
   systemPrompt?: string;
-  /** 工具配置 */
+  /** 工具选择配置 */
   tools?: AgentToolsConfig;
+  /** 上下文行为配置 */
+  contextConfig?: AgentContextConfig;
+  /** RAG 检索配置 */
+  ragConfig?: AgentRagConfig;
   /** 是否内置 */
   builtin: boolean;
   /** 状态 */
@@ -98,6 +96,8 @@ export interface AgentDefinitionRequest {
   description?: string;
   systemPrompt?: string;
   tools?: AgentToolsConfig;
+  contextConfig?: AgentContextConfig;
+  ragConfig?: AgentRagConfig;
 }
 
 /**
@@ -128,10 +128,6 @@ export interface AgentRequest {
   enabledMcpGroups?: string[];
   /** 执行模式：AUTO-自动 / MANUAL-手动 */
   mode?: 'AUTO' | 'MANUAL';
-  /** 思考引擎配置（可选，不传则使用默认值） */
-  thinkingConfig?: ThinkingConfig;
-  /** RAG配置（可选，不传则使用默认值） */
-  ragConfig?: RAGConfig;
   /** 自定义上下文参数 */
   context?: Record<string, any>;
 }

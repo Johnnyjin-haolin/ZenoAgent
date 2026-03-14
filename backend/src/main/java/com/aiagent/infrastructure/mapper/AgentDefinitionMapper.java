@@ -20,6 +20,16 @@ public interface AgentDefinitionMapper {
 
     List<AgentDefinitionEntity> selectByStatus(@Param("status") String status);
 
+    /**
+     * 分页查询（内置优先，按创建时间升序）
+     */
+    List<AgentDefinitionEntity> selectPage(@Param("offset") int offset, @Param("pageSize") int pageSize);
+
+    /**
+     * 查询总数（不含已删除）
+     */
+    long count();
+
     void update(AgentDefinitionEntity entity);
 
     void deleteById(@Param("id") String id);
