@@ -304,22 +304,20 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         onIterationStart: (event) => {
           logger.debug('迭代开始:', event);
           updateConversationId(event);
-          
-          const iterationNumber = event.data?.iterationNumber || 1;
-          
-          // 创建新迭代
+
+          const iterationNumber = event.data?.iterationNumber ?? (assistantMessage.process!.iterations.length + 1);
           const newIteration: any = reactive({
             iterationNumber,
             steps: [],
             status: 'running',
             startTime: Date.now(),
-            collapsed: false,  // 默认展开
+            collapsed: false,
           });
-          
+
           assistantMessage.process!.iterations.push(newIteration);
           currentIteration = newIteration;
-          
-          logger.debug(`🔁 创建第 ${iterationNumber} 轮迭代（展开）`);
+
+          logger.debug(`🔁 创建第 ${iterationNumber} 轮迭代`);
         },
 
         onStatusUpdate: (event) => {
@@ -392,8 +390,10 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           logger.debug('AI 思考片段:', event.content);
           updateConversationId(event);
           assistantMessage.status = 'thinking';
+
           if (!currentIteration) return;
 
+          // 中间推理 token：追加到当前迭代的思考步骤
           let thinkingStep = currentIteration.steps.find((s: any) => s.type === 'thinking');
           if (!thinkingStep) {
             thinkingStep = createStep('thinking', t('agent.chat.thinkingProcess'), 'running');
@@ -483,7 +483,19 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             : t('agent.chat.callingToolStep', { tool: event.data?.toolName || '' });
           currentStatus.value = assistantMessage.statusText || '';
 
-          if (!currentIteration) return;
+          // 兜底：若迭代还未创建，自动创建一个（lazy create）
+          if (!currentIteration) {
+            const newIteration = reactive({
+              iterationNumber: assistantMessage.process!.iterations.length + 1,
+              steps: [],
+              status: 'running',
+              startTime: Date.now(),
+              collapsed: false,
+            });
+            assistantMessage.process!.iterations.push(newIteration);
+            currentIteration = newIteration;
+            logger.debug(`🔁 [onToolCall] 自动创建迭代 #${newIteration.iterationNumber}`);
+          }
 
           // 完成思考步骤
           const thinkingStep = currentIteration.steps.find((s: any) => s.type === 'thinking');
@@ -527,76 +539,58 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           updateConversationId(event);
           currentStatus.value = t('agent.chat.toolExecDone');
 
-          // 更新最后一个工具调用的结果
-          if (event.data && assistantMessage.toolCalls && assistantMessage.toolCalls.length > 0) {
-            const lastTool = assistantMessage.toolCalls[assistantMessage.toolCalls.length - 1];
-            if (lastTool && lastTool.name === event.data.toolName) {
-              lastTool.result = event.data.result;
-              lastTool.status = event.data.error ? 'error' : 'success';
-              if (event.data.error) {
-                lastTool.error = event.data.error;
-              }
+          if (!event.data) return;
 
-              // 更新当前迭代中的工具调用步骤
-              if (currentIteration && currentIteration.steps.length > 0) {
-                const steps = currentIteration.steps;
-                const toolStep = steps.reverse().find(
-                  (step: any) => step.type === 'tool_call' && step.metadata?.toolName === event.data.toolName
-                );
-                steps.reverse(); // 恢复原顺序
-                
-                if (toolStep) {
-                  toolStep.status = event.data.error ? 'error' : 'success';
-                  toolStep.endTime = Date.now();
-                  toolStep.duration = toolStep.startTime ? toolStep.endTime - toolStep.startTime : undefined;
-                  if (toolStep.metadata) {
-                    toolStep.metadata.toolResult = event.data.result;
-                    toolStep.metadata.toolError = event.data.error;
-                  }
-                }
+          const { toolName, result, error, duration } = event.data;
+
+          // 更新 toolCalls 记录（用于消息气泡内的工具列表）
+          if (assistantMessage.toolCalls && assistantMessage.toolCalls.length > 0) {
+            const lastTool = assistantMessage.toolCalls[assistantMessage.toolCalls.length - 1];
+            if (lastTool && lastTool.name === toolName) {
+              lastTool.result = result;
+              lastTool.status = error ? 'error' : 'success';
+              lastTool.duration = duration;
+              if (error) {
+                lastTool.error = error;
               }
+            }
+          }
+
+          if (!currentIteration) return;
+
+          // 倒序遍历查找对应工具步骤（避免 reverse() 原地修改响应式数组）
+          const steps: any[] = currentIteration.steps;
+          let toolStep: any = null;
+          for (let i = steps.length - 1; i >= 0; i--) {
+            if (steps[i].type === 'tool_call' && steps[i].metadata?.toolName === toolName) {
+              toolStep = steps[i];
+              break;
+            }
+          }
+
+          if (toolStep) {
+            toolStep.status = error ? 'error' : 'success';
+            toolStep.endTime = Date.now();
+            // 优先使用后端传回的精准耗时，兜底用前端计时
+            toolStep.duration = duration ?? (toolStep.startTime ? toolStep.endTime - toolStep.startTime : undefined);
+            if (toolStep.metadata) {
+              toolStep.metadata.toolResult = result;
+              toolStep.metadata.toolError = error;
+              toolStep.metadata.toolDuration = duration;
             }
           }
         },
 
         onMessage: (event) => {
-          // 流式内容
+          // 最终回复 token：直接追加到 content
           logger.debug('[useAgentChat] 收到消息片段:', event.content);
           updateConversationId(event);
-          
-          // 标记流式输出已开始
-          if (!assistantMessage.process!.streamingStarted) {
-            assistantMessage.process!.streamingStarted = true;
-            // 完成思考阶段
-            if (currentIteration && currentIteration.thinkingPhase && !currentIteration.thinkingPhase.duration) {
-              currentIteration.thinkingPhase.duration = Date.now() - currentIteration.thinkingPhase.startTime;
-            }
-          }
-          
+
           assistantMessage.status = 'generating';
           assistantMessage.statusText = t('agent.chat.generating');
           assistantMessage.loading = true;
           assistantMessage.content += event.content || '';
-          
           currentStatus.value = t('agent.chat.generating');
-
-          if (!currentIteration) return;
-
-          // 完成当前迭代的所有运行中的步骤（除了生成步骤）
-          currentIteration.steps.forEach((step: any) => {
-            if (step.status === 'running' && step.type !== 'generating') {
-              step.status = 'success';
-              step.endTime = Date.now();
-              step.duration = step.startTime ? step.endTime - step.startTime : undefined;
-            }
-          });
-
-          // 添加生成回答步骤（只添加一次）
-          const generatingStep = currentIteration.steps.find((s: any) => s.type === 'generating');
-          if (!generatingStep) {
-            const step = createStep('generating', t('agent.chat.generateAnswer'), 'running');
-            currentIteration.steps.push(step);
-          }
         },
 
         onIterationEnd: (event) => {
@@ -614,24 +608,14 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             }
           });
 
-          // 更新迭代状态
+          // 更新迭代状态并折叠
           currentIteration.status = 'completed';
           currentIteration.endTime = Date.now();
-          currentIteration.totalDuration = event.data?.durationMs || 
-            (currentIteration.endTime - currentIteration.startTime);
-          currentIteration.shouldContinue = event.data?.shouldContinue;
-          currentIteration.terminationReason = event.data?.terminationReason;
-          currentIteration.terminationMessage = event.data?.message;
-
-          // 自动折叠已完成的迭代
+          currentIteration.totalDuration = currentIteration.endTime - currentIteration.startTime;
           currentIteration.collapsed = true;
 
           logger.debug(`🔁 完成第 ${currentIteration.iterationNumber} 轮迭代（自动折叠）`);
-
-          // 如果不继续迭代，清空 currentIteration
-          if (!event.data?.shouldContinue) {
-            currentIteration = null;
-          }
+          currentIteration = null;
         },
 
         onStreamComplete: (event) => {

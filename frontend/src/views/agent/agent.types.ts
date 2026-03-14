@@ -119,8 +119,8 @@ export type AgentEventType =
   | 'agent:tool_call'       // 工具调用中
   | 'agent:tool_result'     // 工具执行结果
   | 'agent:message'         // 流式内容
-  | 'agent:iteration_start' // 迭代开始
-  | 'agent:iteration_end'       // 迭代结束
+  | 'agent:iteration_start' // 迭代开始（tool_call 事件触发时自动创建）
+  | 'agent:iteration_end'   // 迭代结束（tool_result 后触发）
   | 'agent:status:analyzing'          // 正在分析任务和用户意图
   | 'agent:status:thinking_process'     // 思考过程
   | 'agent:status:planning'             // 正在规划

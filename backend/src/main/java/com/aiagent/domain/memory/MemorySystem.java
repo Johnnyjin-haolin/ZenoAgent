@@ -78,7 +78,7 @@ public class MemorySystem {
             // 这些字段已经有 @JsonIgnore，但为了兼容性和安全性，显式设为 null
             String requestId = context.getRequestId();
             StreamingCallback streamingCallback = context.getStreamingCallback();
-            java.util.function.Consumer<com.aiagent.api.dto.AgentEventData> eventPublisher = context.getEventPublisher();
+            com.aiagent.application.AgentEventPublisher eventPublisher = context.getEventPublisher();
             AgentKnowledgeResult initialRagResult = context.getInitialRagResult();
             
             context.setRequestId(null);

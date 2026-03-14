@@ -11,6 +11,7 @@ import com.aiagent.api.dto.AgentEventData;
 import com.aiagent.api.dto.AgentRequest;
 import com.aiagent.domain.model.bo.AgentContext;
 import com.aiagent.common.util.UUIDGenerator;
+import com.aiagent.application.SseAgentEventPublisher;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
 import lombok.extern.slf4j.Slf4j;
@@ -156,42 +157,26 @@ public class AgentServiceImpl implements IAgentService {
             stepStartNs = logStep("init_context_vars", stepStartNs, requestId, conversationId,
                 "modelId=" + modelId, emitter);
 
-            // 设置事件发布器，用于各个Engine向前端发送进度事件
-            context.setEventPublisher(eventData -> {
-                // 自动填充requestId和conversationId
-                if (eventData.getRequestId() == null) {
-                    eventData.setRequestId(requestId);
-                }
-                if (eventData.getConversationId() == null) {
-                    eventData.setConversationId(context.getConversationId());
-                }
-                streamingService.sendEvent(emitter, eventData);
-            });
+            // 设置事件发布器（SseAgentEventPublisher 将语义调用翻译为 SSE 事件）
+            SseAgentEventPublisher publisher = new SseAgentEventPublisher(
+                requestId, context.getConversationId(), emitter, streamingService);
+            context.setEventPublisher(publisher);
 
             // 3.1 设置流式输出回调（使用CountDownLatch确保流式完成后再关闭SSE）
+            // onToken / onComplete 委托给 publisher 路由，引擎内部只调 publisher 接口
             CountDownLatch streamingCompleteLatch = new CountDownLatch(1);
             context.setStreamingCallback(new StreamingCallback() {
                 @Override
                 public void onToken(String token) {
-                    // 实时发送token到前端
-                    streamingService.sendEvent(emitter, AgentEventData.builder()
-                        .requestId(requestId)
-                        .event(AgentConstants.EVENT_AGENT_MESSAGE)
-                        .content(token)
-                        .conversationId(context.getConversationId())
-                        .build());
+                    // FunctionCallingEngine 内部已通过 publisher.onToken / publisher.onThinkingToken 路由
+                    // 此处仅作兜底（PromptReActEngine 等可能直接触发此回调）
+                    publisher.onToken(token);
                 }
 
                 @Override
                 public void onComplete(String fullText) {
                     log.debug("LLM生成完成，文本长度: {}", fullText.length());
-                    // 发送流式完成事件，通知前端所有token都已发送
-                    streamingService.sendEvent(emitter, AgentEventData.builder()
-                        .requestId(requestId)
-                        .event(AgentConstants.EVENT_AGENT_STREAM_COMPLETE)
-                    .message(AgentConstants.MESSAGE_STREAM_COMPLETE)
-                        .conversationId(context.getConversationId())
-                        .build());
+                    publisher.onStreamComplete();
                     // 释放锁，允许主线程继续执行并关闭SSE
                     streamingCompleteLatch.countDown();
                 }
@@ -199,12 +184,7 @@ public class AgentServiceImpl implements IAgentService {
                 @Override
                 public void onError(Throwable error) {
                     log.error("LLM流式输出错误", error);
-                    streamingService.sendEvent(emitter, AgentEventData.builder()
-                        .requestId(requestId)
-                        .event(AgentConstants.EVENT_AGENT_ERROR)
-                        .message("生成失败: " + error.getMessage())
-                        .conversationId(context.getConversationId())
-                        .build());
+                    publisher.onError("生成失败: " + error.getMessage());
                     // 发生错误也要释放锁
                     streamingCompleteLatch.countDown();
                 }

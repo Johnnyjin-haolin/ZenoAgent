@@ -343,12 +343,8 @@ function dispatchEvent(event: AgentEvent, callbacks: AgentEventCallbacks) {
       break;
 
     case 'agent:tool_executing':
+      // tool_executing 已合并到 tool_call 事件，此处保留兼容
       logger.debug('[Agent] 正在执行工具:', event.message);
-      callbacks.onThinking?.({
-        ...event,
-        message: event.message || t('agent.status.calling_tool'),
-        statusText: t('agent.status.calling_tool')
-      });
       break;
 
     case 'agent:rag_querying':

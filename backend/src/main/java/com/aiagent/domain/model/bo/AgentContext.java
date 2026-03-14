@@ -1,6 +1,6 @@
 package com.aiagent.domain.model.bo;
 
-import com.aiagent.api.dto.AgentEventData;
+import com.aiagent.application.AgentEventPublisher;
 import com.aiagent.domain.action.ActionResult;
 import com.aiagent.common.enums.AgentMode;
 import com.aiagent.application.StreamingCallback;
@@ -19,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -134,9 +133,10 @@ public class AgentContext implements Serializable {
     
     /**
      * 事件发布器（用于向前端发送进度事件，不需要序列化）
+     * 通过 {@link AgentEventPublisher} 接口与传输协议解耦，当前实现为 {@code SseAgentEventPublisher}。
      */
     @JsonIgnore
-    private transient Consumer<AgentEventData> eventPublisher;
+    private transient AgentEventPublisher eventPublisher;
     
     /**
      * 初始 RAG 检索结果（仅在第一次请求时使用，不序列化）
@@ -157,7 +157,7 @@ public class AgentContext implements Serializable {
      */
     @Builder.Default
     private List<TodoItem> todos = new ArrayList<>();
-    
+
     /**
      * 从 ChatMessage 列表设置消息（自动转换为DTO）
      * 注意：添加 @JsonIgnore 避免 Jackson 序列化此方法，防止与 messageDTOs 字段冲突

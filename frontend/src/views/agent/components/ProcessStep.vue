@@ -131,7 +131,12 @@
 
           <!-- 结果 -->
           <div v-if="step.metadata?.toolResult" class="detail-section">
-            <div class="detail-label">{{ t('agent.process.executionResult') }}</div>
+            <div class="detail-label-row">
+              <span class="detail-label">{{ t('agent.process.executionResult') }}</span>
+              <span v-if="step.metadata?.toolDuration != null" class="tool-duration-badge">
+                {{ formatDuration(step.metadata.toolDuration) }}
+              </span>
+            </div>
             <pre class="detail-code">{{ formatResult(step.metadata.toolResult) }}</pre>
           </div>
 
@@ -465,6 +470,27 @@ const formatResult = (result: any) => {
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.detail-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+
+  .detail-label {
+    margin-bottom: 0;
+  }
+}
+
+.tool-duration-badge {
+  font-size: 10px;
+  color: #10B981;
+  font-family: 'JetBrains Mono', monospace;
+  padding: 1px 6px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 4px;
 }
 
 .detail-code {
