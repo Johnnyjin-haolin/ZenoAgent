@@ -31,6 +31,7 @@ export default {
   menu: {
     agent: 'AGENT CHAT',
     knowledgeBase: 'KNOWLEDGE BASE',
+    agentManage: 'AGENT MANAGE',
     settings: 'SETTINGS',
     language: 'LANGUAGE',
   },

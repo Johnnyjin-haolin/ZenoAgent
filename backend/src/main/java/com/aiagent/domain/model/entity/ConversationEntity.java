@@ -26,7 +26,12 @@ public class ConversationEntity {
      * 用户ID（预留）
      */
     private String userId;
-    
+
+    /**
+     * 绑定的 Agent ID
+     */
+    private String agentId;
+
     /**
      * 使用的模型ID
      */

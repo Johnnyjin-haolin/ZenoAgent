@@ -1,7 +1,10 @@
 package com.aiagent.domain.agent;
 
+import com.aiagent.domain.model.entity.AgentDefinitionEntity;
+import com.aiagent.infrastructure.mapper.AgentDefinitionMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -9,56 +12,114 @@ import javax.annotation.PostConstruct;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.UUID;
 
 /**
  * Agent 定义加载器
- * 启动时从 classpath:config/agents.yaml 加载所有 AgentDefinition
- *
- * @author aiagent
+ * <p>
+ * 启动时将 classpath:config/agents.yaml 中的内置 Agent upsert 入 DB，
+ * 之后所有 Agent 定义统一从数据库读取，支持用户自定义。
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class AgentDefinitionLoader {
 
-    private final Map<String, AgentDefinition> agentMap = new ConcurrentHashMap<>();
+    private final AgentDefinitionMapper agentDefinitionMapper;
+    private final ObjectMapper jsonMapper = new ObjectMapper();
 
     @PostConstruct
     public void init() {
+        syncBuiltinAgentsToDb();
+    }
+
+    /**
+     * 将 agents.yaml 中的内置 Agent 同步到数据库（不存在则插入，已存在则跳过）
+     */
+    private void syncBuiltinAgentsToDb() {
         try {
-            ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
-            mapper.findAndRegisterModules();
+            ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
+            yamlMapper.findAndRegisterModules();
             InputStream is = getClass().getClassLoader().getResourceAsStream("config/agents.yaml");
             if (is == null) {
-                log.warn("agents.yaml 未找到，跳过 Agent 定义加载");
+                log.warn("agents.yaml 未找到，跳过内置 Agent 初始化");
                 return;
             }
-            AgentsConfig config = mapper.readValue(is, AgentsConfig.class);
-            if (config != null && config.getAgents() != null) {
-                for (AgentDefinition def : config.getAgents()) {
-                    agentMap.put(def.getId(), def);
-                    log.info("加载 Agent 定义: id={}, name={}", def.getId(), def.getName());
-                }
+            AgentsConfig config = yamlMapper.readValue(is, AgentsConfig.class);
+            if (config == null || config.getAgents() == null) {
+                return;
             }
-            log.info("Agent 定义加载完成，共 {} 个", agentMap.size());
+            for (AgentDefinition def : config.getAgents()) {
+                int exists = agentDefinitionMapper.countById(def.getId());
+                if (exists > 0) {
+                    log.debug("内置 Agent 已存在，跳过: id={}", def.getId());
+                    continue;
+                }
+                AgentDefinitionEntity entity = toEntity(def, true);
+                agentDefinitionMapper.insert(entity);
+                log.info("内置 Agent 初始化入库: id={}, name={}", def.getId(), def.getName());
+            }
+            log.info("内置 Agent 同步完成");
         } catch (Exception e) {
-            log.error("加载 agents.yaml 失败", e);
+            log.error("内置 Agent 同步失败", e);
         }
     }
 
     /**
-     * 根据 agentId 获取 AgentDefinition，不存在时返回 null
+     * 从数据库根据 ID 获取 AgentDefinition
      */
     public AgentDefinition getById(String agentId) {
-        return agentMap.get(agentId);
+        AgentDefinitionEntity entity = agentDefinitionMapper.selectById(agentId);
+        return entity == null ? null : toDomain(entity);
     }
 
     /**
-     * 获取所有已加载的 AgentDefinition
+     * 从数据库获取所有可用的 AgentDefinition（内置优先）
      */
     public List<AgentDefinition> getAll() {
-        return new ArrayList<>(agentMap.values());
+        List<AgentDefinitionEntity> entities = agentDefinitionMapper.selectAll();
+        List<AgentDefinition> result = new ArrayList<>();
+        for (AgentDefinitionEntity e : entities) {
+            result.add(toDomain(e));
+        }
+        return result;
+    }
+
+    // ------------------------------------------------------------------ 转换
+
+    public AgentDefinitionEntity toEntity(AgentDefinition def, boolean isBuiltin) {
+        AgentDefinitionEntity entity = new AgentDefinitionEntity();
+        entity.setId(def.getId() != null ? def.getId() : UUID.randomUUID().toString());
+        entity.setName(def.getName());
+        entity.setDescription(def.getDescription());
+        entity.setSystemPrompt(def.getSystemPrompt());
+        entity.setIsBuiltin(isBuiltin ? 1 : 0);
+        entity.setStatus("active");
+        try {
+            entity.setToolsConfig(jsonMapper.writeValueAsString(def.getTools()));
+        } catch (Exception e) {
+            log.warn("序列化 tools 配置失败: {}", e.getMessage());
+            entity.setToolsConfig("{}");
+        }
+        return entity;
+    }
+
+    public AgentDefinition toDomain(AgentDefinitionEntity entity) {
+        AgentDefinition def = new AgentDefinition();
+        def.setId(entity.getId());
+        def.setName(entity.getName());
+        def.setDescription(entity.getDescription());
+        def.setSystemPrompt(entity.getSystemPrompt());
+        if (entity.getToolsConfig() != null) {
+            try {
+                AgentDefinition.ToolsConfig tools =
+                        jsonMapper.readValue(entity.getToolsConfig(), AgentDefinition.ToolsConfig.class);
+                def.setTools(tools);
+            } catch (Exception e) {
+                log.warn("反序列化 tools 配置失败: id={}, err={}", entity.getId(), e.getMessage());
+            }
+        }
+        return def;
     }
 
     /** YAML 根节点映射类 */

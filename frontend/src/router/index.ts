@@ -41,6 +41,14 @@ const routes: RouteRecordRaw[] = [
           title: '知识库详情',
         },
       },
+      {
+        path: 'agents',
+        name: 'AgentList',
+        component: () => import('@/views/agents/AgentList.vue'),
+        meta: {
+          title: 'Agent 管理',
+        },
+      },
     ],
   },
 ];

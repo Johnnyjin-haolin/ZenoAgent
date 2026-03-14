@@ -55,6 +55,60 @@ export const DEFAULT_RAG_CONFIG: RAGConfig = {
 };
 
 /**
+ * Agent 工具配置
+ */
+export interface AgentToolsConfig {
+  /** MCP 工具分组 ID 列表 */
+  mcpGroups?: string[];
+  /** 系统内置工具名称列表 */
+  systemTools?: string[];
+  /** 绑定的知识库 ID 列表 */
+  knowledgeIds?: string[];
+}
+
+/**
+ * Agent 定义（用户可配置的 Agent）
+ */
+export interface AgentDefinition {
+  /** Agent ID */
+  id: string;
+  /** Agent 名称 */
+  name: string;
+  /** 描述 */
+  description?: string;
+  /** 系统提示词 */
+  systemPrompt?: string;
+  /** 工具配置 */
+  tools?: AgentToolsConfig;
+  /** 是否内置 */
+  builtin: boolean;
+  /** 状态 */
+  status?: string;
+  /** 创建时间 */
+  createTime?: string;
+  /** 更新时间 */
+  updateTime?: string;
+}
+
+/**
+ * 创建/更新 Agent 的请求体
+ */
+export interface AgentDefinitionRequest {
+  name: string;
+  description?: string;
+  systemPrompt?: string;
+  tools?: AgentToolsConfig;
+}
+
+/**
+ * 系统工具信息
+ */
+export interface SystemToolInfo {
+  name: string;
+  description: string;
+}
+
+/**
  * Agent 请求参数
  */
 export interface AgentRequest {
@@ -62,6 +116,8 @@ export interface AgentRequest {
   content: string;
   /** 会话ID（可选，用于上下文关联） */
   conversationId?: string;
+  /** 指定使用的 Agent ID（可选） */
+  agentId?: string;
   /** 指定使用的模型ID（可选） */
   modelId?: string;
   /** 关联的知识库ID列表 */
@@ -566,6 +622,8 @@ export interface ConversationInfo {
   createTime?: string;
   /** 更新时间 */
   updateTime?: string;
+  /** 绑定的 Agent ID */
+  agentId?: string;
 }
 
 /**

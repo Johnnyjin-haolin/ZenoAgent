@@ -42,6 +42,15 @@
             <span>{{ t('menu.knowledgeBase') }}</span>
           </router-link>
         </a-menu-item>
+
+        <a-menu-item key="agents">
+          <template #icon>
+            <robot-outlined />
+          </template>
+          <router-link to="/agents">
+            <span>{{ t('menu.agentManage') }}</span>
+          </router-link>
+        </a-menu-item>
       </a-menu>
       
       <div class="sidebar-footer" @click="toggleCollapse">
@@ -96,7 +105,7 @@ import { useI18n } from 'vue-i18n';
 import {
   MessageOutlined,
   BookOutlined,
-  SettingOutlined,
+  RobotOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   TranslationOutlined,
@@ -117,17 +126,19 @@ const goHome = () => {
 };
 
 // Sync menu selection with route
-watch(
-  () => route.path,
-  (path) => {
-    if (path.startsWith('/agent')) {
-      selectedKeys.value = ['agent'];
-    } else if (path.startsWith('/knowledge-bases')) {
-      selectedKeys.value = ['knowledge-bases'];
-    }
-  },
-  { immediate: true }
-);
+  watch(
+    () => route.path,
+    (path) => {
+      if (path.startsWith('/agents')) {
+        selectedKeys.value = ['agents'];
+      } else if (path.startsWith('/agent')) {
+        selectedKeys.value = ['agent'];
+      } else if (path.startsWith('/knowledge-bases')) {
+        selectedKeys.value = ['knowledge-bases'];
+      }
+    },
+    { immediate: true }
+  );
 
 const currentRouteTitle = computed(() => {
   return route.meta.title || 'Zeno Agent';

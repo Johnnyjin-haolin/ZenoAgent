@@ -6,11 +6,28 @@ CREATE DATABASE IF NOT EXISTS zeno_agent DEFAULT CHARACTER SET utf8mb4 COLLATE u
 
 USE zeno_agent;
 
+-- Agent 定义表（用户自定义 Agent 配置，先建以便会话表外键引用）
+CREATE TABLE IF NOT EXISTS `agent` (
+  `id`           VARCHAR(64)   PRIMARY KEY                COMMENT 'Agent ID（UUID 或 builtin-xxx）',
+  `name`         VARCHAR(128)  NOT NULL                   COMMENT 'Agent 名称',
+  `description`  VARCHAR(512)  DEFAULT NULL               COMMENT 'Agent 描述',
+  `system_prompt` TEXT         DEFAULT NULL               COMMENT '系统提示词',
+  `tools_config` JSON          DEFAULT NULL               COMMENT '工具配置 JSON，包含 mcpGroups / systemTools / mcpTools',
+  `is_builtin`   TINYINT(1)    NOT NULL DEFAULT 0         COMMENT '是否内置（1=内置示例, 0=用户创建）',
+  `status`       VARCHAR(16)   NOT NULL DEFAULT 'active'  COMMENT '状态：active / deleted',
+  `create_time`  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time`  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  INDEX `idx_status`      (`status`),
+  INDEX `idx_is_builtin`  (`is_builtin`),
+  INDEX `idx_update_time` (`update_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Agent 定义表';
+
 -- 会话表
 CREATE TABLE IF NOT EXISTS `agent_conversation` (
   `id` VARCHAR(64) PRIMARY KEY COMMENT '会话ID（UUID）',
   `title` VARCHAR(255) NOT NULL DEFAULT '新对话' COMMENT '会话标题',
   `user_id` VARCHAR(64) DEFAULT NULL COMMENT '用户ID（预留）',
+  `agent_id` VARCHAR(64) DEFAULT NULL COMMENT '绑定的 Agent ID',
   `model_id` VARCHAR(64) DEFAULT NULL COMMENT '使用的模型ID',
   `model_name` VARCHAR(128) DEFAULT NULL COMMENT '模型名称',
   `status` VARCHAR(32) NOT NULL DEFAULT 'active' COMMENT '状态：active/archived/deleted',
@@ -18,6 +35,7 @@ CREATE TABLE IF NOT EXISTS `agent_conversation` (
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   INDEX `idx_user_id` (`user_id`),
+  INDEX `idx_agent_id` (`agent_id`),
   INDEX `idx_status` (`status`),
   INDEX `idx_update_time` (`update_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Agent会话表';
@@ -72,4 +90,3 @@ CREATE TABLE IF NOT EXISTS `document` (
   CONSTRAINT `fk_document_knowledge_base` FOREIGN KEY (`knowledge_base_id`) 
     REFERENCES `knowledge_base`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文档表';
-

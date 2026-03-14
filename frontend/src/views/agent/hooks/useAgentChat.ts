@@ -204,6 +204,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
   const sendMessage = async (
     content: string,
     options: {
+      agentId?: string;
       modelId?: string;
       knowledgeIds?: string[];
       enabledTools?: string[];
@@ -269,6 +270,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     const request: AgentRequest = {
       content: content.trim(),
       conversationId: conversationId?.value,
+      agentId: options.agentId,
       modelId: options.modelId || defaultModelId,
       knowledgeIds: options.knowledgeIds || defaultKnowledgeIds,
       enabledTools: options.enabledTools || defaultEnabledTools,

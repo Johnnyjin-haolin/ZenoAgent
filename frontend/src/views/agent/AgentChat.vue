@@ -32,6 +32,16 @@
         @open-config="showConfigDrawer = true"
       />
 
+      <!-- Agent 选择器 -->
+      <div class="agent-selector-bar">
+        <span class="agent-selector-label">Agent：</span>
+        <AgentSelector
+          v-model="selectedAgentId"
+          @change="handleAgentChange"
+          @manage="showAgentConfigModal = true"
+        />
+      </div>
+
       <ChatMessages
         ref="chatMessagesRef"
         :messages="messages"
@@ -62,6 +72,12 @@
 
     </div>
 
+    <!-- Agent 管理弹窗 -->
+    <AgentConfigModal
+      v-model:open="showAgentConfigModal"
+      @change="handleAgentDefinitionChange"
+    />
+
     <ChatConfigDrawer
       v-model:open="showConfigDrawer"
       v-model:selectedModelId="selectedModelId"
@@ -82,7 +98,7 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { Icon } from '@/components/Icon';
 import { message } from 'ant-design-vue';
@@ -90,7 +106,7 @@ import logger from '@/utils/logger';
 import { useAgentChat } from './hooks/useAgentChat';
 import { useBrandConfig } from './hooks/useBrandConfig';
 import { useConversationList } from './hooks/useConversationList';
-import { getAvailableModels, getKnowledgeList } from './agent.api';
+import { getAvailableModels, getKnowledgeList, updateConversationAgent } from './agent.api';
 import { getMcpTools } from './agent.api.adapted';
 import ChatConfigDrawer from './components/ChatConfigDrawer.vue';
 import ChatHeader from './components/ChatHeader.vue';
@@ -98,6 +114,8 @@ import ChatInput from './components/ChatInput.vue';
 import ChatMessages from './components/ChatMessages.vue';
 import AgentSlide from './components/AgentSlide.vue';
 import AgentUserQuestion from './components/AgentUserQuestion.vue';
+import AgentSelector from './components/AgentSelector.vue';
+import AgentConfigModal from './components/AgentConfigModal.vue';
 import { AGENT_CONFIG_STORAGE_KEY } from './agent.constants';
 import type { ModelInfo, KnowledgeInfo, ThinkingConfig, RAGConfig } from './agent.types';
 import { DEFAULT_THINKING_CONFIG, DEFAULT_RAG_CONFIG } from './agent.types';
@@ -112,6 +130,7 @@ declare global {
 
 const { t } = useI18n();
 const router = useRouter();
+const route = useRoute();
 
 type BrandLink = {
   label: string;
@@ -121,6 +140,10 @@ const { brandConfig, brandStyle, showBrandTitle, brandLinks, brandVersion, loadB
 
 // 配置抽屉
 const showConfigDrawer = ref(false);
+
+// Agent 选择器
+const selectedAgentId = ref<string | undefined>(undefined);
+const showAgentConfigModal = ref(false);
 
 // 会话 ID（由会话列表与SSE更新）
 const currentConversationId = ref('');
@@ -344,6 +367,7 @@ const handleSend = async () => {
   
   // 发送消息
   await sendMessage(content, {
+    agentId: selectedAgentId.value,
     modelId: selectedModelId.value,
     knowledgeIds: selectedKnowledgeIds.value,
     enabledTools: selectedTools.value,
@@ -399,11 +423,43 @@ const handleRagConfigChange = (config: RAGConfig) => {
   logger.debug('RAG配置变更:', config);
 };
 
+// Agent 选择器处理
+const handleAgentChange = (agentId: string | undefined) => {
+  selectedAgentId.value = agentId;
+  // 若当前已有真实会话，更新会话绑定
+  const convId = currentConversationId.value;
+  if (convId && !convId.startsWith('temp-')) {
+    updateConversationAgent(convId, agentId || null).catch((err) => {
+      logger.warn('更新会话 agentId 失败:', err);
+    });
+  }
+};
+
+// Agent 配置变更后（如新建/删除），刷新列表但不影响当前选中
+function handleAgentDefinitionChange() {
+  // 选择器内部会自动 loadAgents，这里只打日志
+  logger.debug('Agent 定义发生变更');
+}
+
+// 切换会话时同步 selectedAgentId（从会话列表中读取绑定信息）
+watch(currentConversationId, (newId) => {
+  if (!newId) return;
+  const conv = conversations.value.find((c) => c.id === newId);
+  if (conv) {
+    selectedAgentId.value = conv.agentId || undefined;
+  }
+});
+
 // 初始化
 onMounted(() => {
   loadBrandConfig();
   initAgentConfig();
   loadConversations();
+  // 若从 Agent 管理页跳转而来，自动选中对应的 Agent
+  const queryAgentId = route.query.agentId as string | undefined;
+  if (queryAgentId) {
+    selectedAgentId.value = queryAgentId;
+  }
 });
 
 watch(
@@ -486,6 +542,23 @@ watch(
   &.expanded {
     margin-left: 0;
   }
+}
+
+.agent-selector-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-bottom: 1px solid rgba(59, 130, 246, 0.1);
+  background: rgba(15, 23, 42, 0.3);
+  flex-shrink: 0;
+}
+
+.agent-selector-label {
+  font-size: 12px;
+  color: #64748b;
+  font-family: 'JetBrains Mono', monospace;
+  flex-shrink: 0;
 }
 </style>
 

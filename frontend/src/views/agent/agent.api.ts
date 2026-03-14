@@ -16,6 +16,10 @@ import type {
   PageResult,
   HealthResponse,
   UserQuestion,
+  AgentDefinition,
+  AgentDefinitionRequest,
+  McpGroupInfo,
+  SystemToolInfo,
 } from './agent.types';
 import { ModelType } from '@/types/model.types';
 
@@ -43,6 +47,14 @@ export enum AgentApi {
   conversationMessages = '/aiagent/conversation/{id}/messages',
   /** 工具执行确认 */
   toolConfirm = '/aiagent/tool/confirm',
+  /** 更新会话绑定 Agent */
+  conversationAgent = '/aiagent/conversation/agent',
+  /** Agent 定义列表/创建 */
+  agentDefinitions = '/aiagent/agent-definitions',
+  /** 可用 MCP 分组 */
+  availableMcpGroups = '/aiagent/agent-definitions/available-mcp-groups',
+  /** 可用系统工具 */
+  availableSystemTools = '/aiagent/agent-definitions/available-system-tools',
 }
 
 /**
@@ -487,6 +499,7 @@ export async function getConversations(pageNo = 1, pageSize = 50, status?: strin
         status: item.status,
         modelId: item.modelId,
         modelName: item.modelName,
+        agentId: item.agentId || undefined,
         createTime: item.createTime,
         updateTime: item.updateTime,
       }));
@@ -577,5 +590,135 @@ export async function deleteConversation(conversationId: string): Promise<boolea
   } catch (error) {
     logger.error('删除会话失败:', error);
     return false;
+  }
+}
+
+/**
+ * 更新会话绑定的 Agent
+ */
+export async function updateConversationAgent(conversationId: string, agentId: string | null): Promise<boolean> {
+  try {
+    const response = await http.put(
+      {
+        url: AgentApi.conversationAgent,
+        params: { conversationId, agentId },
+      },
+      { joinParamsToUrl: true }
+    );
+    return response.success === true;
+  } catch (error) {
+    logger.error('更新会话 Agent 失败:', error);
+    return false;
+  }
+}
+
+// ─── Agent 定义 CRUD ────────────────────────────────────────────────────────
+
+/**
+ * 获取所有 Agent 定义
+ */
+export async function getAgentDefinitions(): Promise<AgentDefinition[]> {
+  try {
+    const response = await http.get(
+      { url: AgentApi.agentDefinitions },
+      { isTransformResponse: false }
+    );
+    return response.data || [];
+  } catch (error) {
+    logger.error('获取 Agent 列表失败:', error);
+    return [];
+  }
+}
+
+/**
+ * 获取单个 Agent 定义
+ */
+export async function getAgentDefinition(id: string): Promise<AgentDefinition | null> {
+  try {
+    const response = await http.get(
+      { url: `${AgentApi.agentDefinitions}/${id}` },
+      { isTransformResponse: false }
+    );
+    return response.data || null;
+  } catch (error) {
+    logger.error('获取 Agent 详情失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 创建用户自定义 Agent
+ */
+export async function createAgentDefinition(request: AgentDefinitionRequest): Promise<AgentDefinition | null> {
+  try {
+    const response = await http.post(
+      { url: AgentApi.agentDefinitions, params: request },
+      { isTransformResponse: false }
+    );
+    return response.success ? response.data : null;
+  } catch (error) {
+    logger.error('创建 Agent 失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 更新 Agent 定义
+ */
+export async function updateAgentDefinition(id: string, request: AgentDefinitionRequest): Promise<AgentDefinition | null> {
+  try {
+    const response = await http.put(
+      { url: `${AgentApi.agentDefinitions}/${id}`, params: request },
+      { isTransformResponse: false }
+    );
+    return response.success ? response.data : null;
+  } catch (error) {
+    logger.error('更新 Agent 失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 删除 Agent 定义
+ */
+export async function deleteAgentDefinition(id: string): Promise<boolean> {
+  try {
+    const response = await http.delete({ url: `${AgentApi.agentDefinitions}/${id}` });
+    return response.success === true;
+  } catch (error) {
+    logger.error('删除 Agent 失败:', error);
+    return false;
+  }
+}
+
+/**
+ * 获取可用的 MCP 分组列表（用于配置页工具选择器）
+ */
+export async function getAvailableMcpGroupsForAgent(): Promise<McpGroupInfo[]> {
+  try {
+    const response = await http.get(
+      { url: AgentApi.availableMcpGroups },
+      { isTransformResponse: false }
+    );
+    return response.data || [];
+  } catch (error) {
+    logger.error('获取可用 MCP 分组失败:', error);
+    return [];
+  }
+}
+
+/**
+ * 获取可用的系统内置工具列表（用于配置页工具选择器）
+ */
+export async function getAvailableSystemToolsForAgent(): Promise<SystemToolInfo[]> {
+  try {
+    const response = await http.get(
+      { url: AgentApi.availableSystemTools },
+      { isTransformResponse: false }
+    );
+    return response.data || [];
+  } catch (error) {
+    logger.error('获取可用系统工具失败:', error);
+    return [];
   }
 }

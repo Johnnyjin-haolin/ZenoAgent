@@ -21,6 +21,7 @@ public class ConversationInfo {
     private String id;
     private String title;
     private String userId;
+    private String agentId;
     private String status;
     private Integer messageCount;
     private String modelId;

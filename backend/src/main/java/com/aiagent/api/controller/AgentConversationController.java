@@ -78,6 +78,17 @@ public class AgentConversationController {
     }
 
     /**
+     * 更新会话绑定的 Agent
+     */
+    @PutMapping("/conversation/agent")
+    public Result<Boolean> updateConversationAgent(
+            @RequestParam String conversationId,
+            @RequestParam(required = false) String agentId) {
+        conversationService.updateAgentId(conversationId, agentId);
+        return Result.success("更新成功", true);
+    }
+
+    /**
      * 删除会话
      */
     @DeleteMapping("/conversation/{id}")

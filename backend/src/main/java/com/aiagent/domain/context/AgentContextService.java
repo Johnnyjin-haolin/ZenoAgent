@@ -66,14 +66,19 @@ public class AgentContextService {
         AgentContext context = memorySystem.getContext(conversationId);
 
         if (context == null) {
+            // agentId 优先级：request > DB 会话绑定 > 默认值
+            String resolvedAgentId = resolveAgentId(request.getAgentId(), conversationId);
             context = AgentContext.builder()
                 .conversationId(conversationId)
-                .agentId(StringUtils.getString(request.getAgentId(), AgentConstants.DEFAULT_AGENT_ID))
+                .agentId(resolvedAgentId)
                 .messageBOS(new ArrayList<>())
                 .actionExecutionHistory(new ArrayList<>())
                 .ragRetrieveHistory(new ArrayList<>())
                 .iterations(0)
                 .build();
+        } else if (StringUtils.isNotEmpty(request.getAgentId())) {
+            // 若请求中明确指定了 agentId，更新 context（支持对话中途切换 Agent）
+            context.setAgentId(request.getAgentId());
         }
 
         if (StringUtils.isNotEmpty(request.getModelId())) {
@@ -304,6 +309,25 @@ public class AgentContextService {
             log.warn("未知的消息角色类型: {}", role);
             return null;
         }
+    }
+
+    /**
+     * 解析 agentId：优先取请求中显式指定的值；其次从数据库会话中读取绑定的 agentId；最后兜底默认值
+     */
+    private String resolveAgentId(String requestAgentId, String conversationId) {
+        if (StringUtils.isNotEmpty(requestAgentId)) {
+            return requestAgentId;
+        }
+        try {
+            ConversationInfo conv = conversationService.getConversation(conversationId);
+            if (conv != null && StringUtils.isNotEmpty(conv.getAgentId())) {
+                log.debug("从会话绑定中获取 agentId: conversationId={}, agentId={}", conversationId, conv.getAgentId());
+                return conv.getAgentId();
+            }
+        } catch (Exception e) {
+            log.warn("读取会话 agentId 失败，使用默认值: conversationId={}", conversationId);
+        }
+        return AgentConstants.DEFAULT_AGENT_ID;
     }
 }
 
