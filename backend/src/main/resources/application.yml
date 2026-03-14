@@ -146,14 +146,20 @@ aiagent:
     enabled-by-default: true
     # Web 搜索工具配置（system_web_search / system_fetch_url）
     web-search:
-      # HTTP 请求超时（秒）
-      timeout-seconds: 15
+      # 引擎类型：http（轻量 Jsoup 爬取）或 playwright（真实无头浏览器，搜索质量更高）
+      engine: playwright
+      # HTTP 请求超时（秒）；playwright 模式建议 30 以上
+      timeout-seconds: 30
       # 搜索结果最大条数
       max-results: 5
       # system_fetch_url 返回正文最大字符数
       max-content-chars: 5000
       # 模拟浏览器 User-Agent
       user-agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      # Playwright 无头模式（true=无头生产，false=有窗口调试）
+      headless: true
+      # Playwright 持久化用户数据目录（保存 Cookie/Session，提升搜索结果质量）
+      user-data-dir: ./playwright-data
   
   # MCP工具配置
   # 注意：MCP服务器配置已迁移到 JSON 文件

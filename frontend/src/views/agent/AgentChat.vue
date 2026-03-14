@@ -49,12 +49,7 @@
         @apply-prompt="applyScenarioPrompt"
         @confirm-tool="handleConfirmTool"
         @reject-tool="handleRejectTool"
-      />
-
-      <!-- Agent 向用户提问悬浮卡片 -->
-      <AgentUserQuestion
-        :question="pendingQuestion"
-        @submit="resolveQuestion"
+        @answer-question="resolveQuestion"
       />
 
       <ChatInput
@@ -102,7 +97,6 @@ import ChatHeader from './components/ChatHeader.vue';
 import ChatInput from './components/ChatInput.vue';
 import ChatMessages from './components/ChatMessages.vue';
 import AgentSlide from './components/AgentSlide.vue';
-import AgentUserQuestion from './components/AgentUserQuestion.vue';
 import AgentSelector from './components/AgentSelector.vue';
 import { AGENT_CONFIG_STORAGE_KEY } from './agent.constants';
 import type { ModelInfo, KnowledgeInfo } from './agent.types';
@@ -159,7 +153,6 @@ const {
   clearMessages,
   loadMessages,
   resolvePendingTool,
-  pendingQuestion,
   resolveQuestion,
 } = useAgentChat({
   conversationId: currentConversationId,  // Ref 会自动响应

@@ -101,6 +101,37 @@ public class SseAgentEventPublisher implements AgentEventPublisher {
         send(AgentConstants.EVENT_AGENT_ERROR, error, null, null);
     }
 
+    /**
+     * Override accept() 以透传 AgentEventPublisher 默认实现不处理的自定义事件
+     * （如 agent:ask_user_question），避免被 default 分支静默丢弃
+     */
+    @Override
+    public void accept(AgentEventData eventData) {
+        if (eventData == null) return;
+        String event = eventData.getEvent();
+        if (event == null) return;
+
+        switch (event) {
+            // 已在父接口 default 方法中处理的事件，走原有路径
+            case AgentConstants.EVENT_AGENT_MESSAGE:
+            case AgentConstants.EVENT_AGENT_THINKING_DELTA:
+            case AgentConstants.EVENT_AGENT_STREAM_COMPLETE:
+            case AgentConstants.EVENT_AGENT_COMPLETE:
+            case AgentConstants.EVENT_AGENT_ERROR:
+            case AgentConstants.EVENT_AGENT_TOOL_CALL:
+            case AgentConstants.EVENT_AGENT_TOOL_RESULT:
+                AgentEventPublisher.super.accept(eventData);
+                break;
+            default:
+                // 其余事件（含 agent:ask_user_question）直接透传 SSE
+                send(event,
+                    eventData.getMessage(),
+                    eventData.getContent(),
+                    eventData.getData());
+                break;
+        }
+    }
+
     // ── 内部工具方法 ──────────────────────────────────────────────────────────
 
     private void send(String event, String message, String content, Object data) {

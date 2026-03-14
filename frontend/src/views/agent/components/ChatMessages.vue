@@ -7,6 +7,7 @@
         :message="msg"
         @confirm-tool="emit('confirm-tool')"
         @reject-tool="emit('reject-tool')"
+        @answer-question="(qId, ans) => emit('answer-question', qId, ans)"
       />
     </template>
 
@@ -79,6 +80,7 @@ const emit = defineEmits<{
   (e: 'apply-prompt', prompt: string): void;
   (e: 'confirm-tool'): void;
   (e: 'reject-tool'): void;
+  (e: 'answer-question', questionId: string, answer: string): void;
 }>();
 
 const { t } = useI18n();

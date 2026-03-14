@@ -464,8 +464,11 @@ export interface ExecutionProcess {
 export interface AgentMessage {
   /** 消息ID */
   id: string;
-  /** 角色 */
-  role: 'user' | 'assistant' | 'system';
+  /**
+   * 角色
+   * - 'question': Agent 通过 AskUserQuestion 工具向用户发起的提问（嵌入在对话流中）
+   */
+  role: 'user' | 'assistant' | 'system' | 'question';
   /** 角色名称 */
   roleName?: string;
   /** 消息内容 */
@@ -498,6 +501,12 @@ export interface AgentMessage {
   duration?: number;
   /** 执行过程（新增） */
   process?: ExecutionProcess;
+  /** AskUserQuestion 提问内容（role === 'question' 时有值） */
+  question?: UserQuestion;
+  /** 是否已回答（role === 'question' 时有效） */
+  questionAnswered?: boolean;
+  /** 用户的回答内容（已回答后写入） */
+  questionAnswer?: string;
 }
 
 /**

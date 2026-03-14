@@ -1,4 +1,5 @@
 <template>
+  <!-- ── 普通消息（user / assistant / system） ───────────────────────────────── -->
   <div class="agent-message" :class="[message.role, { 'has-error': message.error }]">
     <!-- 头像 -->
     <div class="message-avatar">
@@ -44,6 +45,7 @@
         @toggle-step-expand="handleToggleStepExpand"
         @confirm-tool="handleConfirmTool"
         @reject-tool="handleRejectTool"
+        @answer-question="handleAnswerQuestion"
       />
 
       <!-- RAG 检索结果 -->
@@ -150,6 +152,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'confirm-tool'): void;
   (e: 'reject-tool'): void;
+  (e: 'answer-question', questionId: string, answer: string): void;
 }>();
 
 const userStore = useUserStore();
@@ -389,7 +392,6 @@ function formatDuration(ms: number) {
 // 切换步骤展开状态
 function handleToggleStepExpand(stepId: string) {
   if (props.message.process && props.message.process.iterations) {
-    // 遍历所有迭代，查找对应的步骤
     for (const iteration of props.message.process.iterations) {
       if (iteration.steps) {
         const step = iteration.steps.find((s) => s.id === stepId);
@@ -400,6 +402,10 @@ function handleToggleStepExpand(stepId: string) {
       }
     }
   }
+}
+
+function handleAnswerQuestion(questionId: string, answer: string) {
+  emit('answer-question', questionId, answer);
 }
 </script>
 
@@ -813,6 +819,256 @@ function handleToggleStepExpand(stepId: string) {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+// \u2500\u2500\u2500 Agent \u63d0\u95ee\u5361\u7247\u6837\u5f0f \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+.agent-question-message {
+  max-width: 900px;
+  margin: 0 auto 24px;
+  animation: fadeIn 0.3s ease-in;
+}
+
+.question-card {
+  background: rgba(10, 14, 26, 0.85);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  border-left: 3px solid #a78bfa;
+  border-radius: 10px;
+  padding: 16px 20px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(167, 139, 250, 0.08) inset;
+  transition: border-color 0.3s, opacity 0.3s;
+
+  &.answered {
+    border-left-color: rgba(167, 139, 250, 0.35);
+    border-color: rgba(167, 139, 250, 0.12);
+    opacity: 0.75;
+  }
+}
+
+.question-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.question-pulse {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #a78bfa;
+  box-shadow: 0 0 8px #a78bfa;
+  animation: qPulse 2s ease-in-out infinite;
+
+  .answered & {
+    background: #475569;
+    box-shadow: none;
+    animation: none;
+  }
+}
+
+.question-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #a78bfa;
+  text-transform: uppercase;
+
+  .answered & {
+    color: #475569;
+  }
+}
+
+.answered-badge {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #34d399;
+}
+
+.question-text {
+  font-size: 15px;
+  font-weight: 500;
+  color: #e2e8f0;
+  line-height: 1.6;
+  margin: 0 0 14px;
+  font-family: 'Inter', sans-serif;
+
+  .answered & {
+    color: #64748b;
+  }
+}
+
+.answered-answer {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(52, 211, 153, 0.06);
+  border: 1px solid rgba(52, 211, 153, 0.15);
+  border-radius: 6px;
+}
+
+.answered-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: #34d399;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.answered-content {
+  font-size: 13px;
+  color: #94a3b8;
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.q-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.q-option-btn {
+  padding: 6px 16px;
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  border-radius: 20px;
+  background: transparent;
+  font-size: 13px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  &:hover {
+    border-color: #a78bfa;
+    color: #e2e8f0;
+    background: rgba(167, 139, 250, 0.08);
+  }
+
+  &.selected {
+    border-color: #a78bfa;
+    background: rgba(167, 139, 250, 0.18);
+    color: #c4b5fd;
+    font-weight: 500;
+  }
+}
+
+.q-check {
+  font-size: 11px;
+  min-width: 11px;
+  color: #a78bfa;
+}
+
+.q-preview {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  max-height: 160px;
+  overflow-y: auto;
+
+  pre {
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #94a3b8;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin: 0;
+  }
+}
+
+.q-input-area {
+  margin-bottom: 14px;
+}
+
+.q-textarea {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #e2e8f0;
+  resize: none;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+
+  &::placeholder {
+    color: rgba(148, 163, 184, 0.3);
+  }
+
+  &:focus {
+    border-color: #a78bfa;
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
+  }
+}
+
+.q-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.q-btn {
+  padding: 6px 18px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+  border: none;
+  transition: all 0.18s ease;
+  letter-spacing: 0.5px;
+}
+
+.q-btn-skip {
+  background: transparent;
+  color: #475569;
+  border: 1px solid rgba(71, 85, 105, 0.4);
+
+  &:hover {
+    color: #94a3b8;
+    border-color: rgba(148, 163, 184, 0.3);
+  }
+}
+
+.q-btn-submit {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(124, 58, 237, 0.3);
+
+  &:hover:not(:disabled) {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    box-shadow: 0 2px 14px rgba(139, 92, 246, 0.4);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+}
+
+@keyframes qPulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px #a78bfa; }
+  50%       { opacity: 0.4; box-shadow: 0 0 3px #a78bfa; }
 }
 
 @keyframes blink {

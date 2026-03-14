@@ -2,11 +2,13 @@ package com.aiagent.domain.tool;
 
 import com.aiagent.domain.model.bo.AgentContext;
 import com.aiagent.infrastructure.config.AgentConfig;
-import com.aiagent.infrastructure.search.DuckDuckGoWebSearchEngine;
+import com.aiagent.infrastructure.search.BingWebSearchEngine;
+import com.aiagent.infrastructure.search.PlaywrightSearchEngine;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
+import dev.langchain4j.web.search.WebSearchEngine;
 import dev.langchain4j.web.search.WebSearchOrganicResult;
 import dev.langchain4j.web.search.WebSearchRequest;
 import dev.langchain4j.web.search.WebSearchResults;
@@ -20,8 +22,9 @@ import java.util.List;
 /**
  * 系统工具：Web 搜索
  * <p>
- * 调用 DuckDuckGo HTML 端点进行免费网络搜索（无需 API Key），
- * 返回搜索结果的标题、链接和摘要列表，供 LLM 进一步分析使用。
+ * 支持两种引擎模式（通过 aiagent.tools.web-search.engine 配置切换）：
+ * - http：轻量 Jsoup HTTP 爬取 Bing，无需额外依赖，结果质量有限
+ * - playwright：真实 Chromium 无头浏览器，携带完整 Cookie/指纹，返回与用户浏览器一致的高质量结果
  * </p>
  *
  * @author aiagent
@@ -35,16 +38,29 @@ public class WebSearchTool implements SystemTool {
     @Autowired
     private AgentConfig agentConfig;
 
-    private DuckDuckGoWebSearchEngine searchEngine;
+    @Autowired(required = false)
+    private PlaywrightSearchEngine playwrightSearchEngine;
+
+    private WebSearchEngine activeSearchEngine;
 
     @PostConstruct
     public void init() {
         AgentConfig.ToolConfig.WebSearchConfig cfg = agentConfig.getTools().getWebSearch();
-        this.searchEngine = new DuckDuckGoWebSearchEngine(
-            cfg.getTimeoutSeconds(),
-            cfg.getUserAgent()
-        );
-        log.info("[WebSearch] DuckDuckGo 搜索引擎初始化完成，超时={}s，最大结果数={}", cfg.getTimeoutSeconds(), cfg.getMaxResults());
+        String engine = cfg.getEngine();
+
+        if ("playwright".equalsIgnoreCase(engine) && playwrightSearchEngine != null) {
+            this.activeSearchEngine = playwrightSearchEngine;
+            log.info("[WebSearch] 使用 Playwright 真实浏览器搜索引擎，超时={}s，最大结果数={}",
+                cfg.getTimeoutSeconds(), cfg.getMaxResults());
+        } else {
+            this.activeSearchEngine = new BingWebSearchEngine(cfg.getTimeoutSeconds(), cfg.getUserAgent());
+            if ("playwright".equalsIgnoreCase(engine)) {
+                log.warn("[WebSearch] playwright 引擎不可用，降级使用 HTTP Bing 引擎");
+            } else {
+                log.info("[WebSearch] 使用 HTTP Bing 搜索引擎，超时={}s，最大结果数={}",
+                    cfg.getTimeoutSeconds(), cfg.getMaxResults());
+            }
+        }
     }
 
     @Override
@@ -80,13 +96,13 @@ public class WebSearchTool implements SystemTool {
                 .maxResults(cfg.getMaxResults())
                 .build();
 
-            WebSearchResults results = searchEngine.search(request);
+            WebSearchResults results = activeSearchEngine.search(request);
 
             if (results == null || results.results() == null || results.results().isEmpty()) {
                 return "未找到与「" + query + "」相关的搜索结果。可能是搜索服务暂时不可用，请稍后重试或换用其他关键词。";
             }
 
-            return formatResults(query, results.results());
+            return formatResults(query, results.results(), cfg.getEngine());
 
         } catch (Exception e) {
             log.error("[WebSearch] 工具执行失败", e);
@@ -94,7 +110,7 @@ public class WebSearchTool implements SystemTool {
         }
     }
 
-    private String formatResults(String query, List<WebSearchOrganicResult> results) {
+    private String formatResults(String query, List<WebSearchOrganicResult> results, String engine) {
         StringBuilder sb = new StringBuilder();
         sb.append("以下是「").append(query).append("」的搜索结果：\n\n");
 
@@ -109,6 +125,12 @@ public class WebSearchTool implements SystemTool {
         }
 
         sb.append("如需获取某条结果的完整内容，可调用 system_fetch_url 工具传入对应链接。");
+
+        if (!"playwright".equalsIgnoreCase(engine)) {
+            sb.append("\n\n⚠️ 注意：以上结果通过 HTTP HTML 解析获取，非官方 API，质量可能不稳定。");
+            sb.append("请结合摘要内容判断结果可信度，若摘要信息不足或疑似不准确，建议调用 system_fetch_url 获取原文后再作判断。");
+        }
+
         return sb.toString();
     }
 }

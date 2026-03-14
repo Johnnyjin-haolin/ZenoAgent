@@ -176,6 +176,13 @@
             <version>1.18.3</version>
         </dependency>
 
+        <!-- Playwright (无头浏览器，用于真实浏览器搜索/抓取) -->
+        <dependency>
+            <groupId>com.microsoft.playwright</groupId>
+            <artifactId>playwright</artifactId>
+            <version>1.44.0</version>
+        </dependency>
+
         <!-- Swagger (API文档) -->
         <dependency>
             <groupId>org.springdoc</groupId>

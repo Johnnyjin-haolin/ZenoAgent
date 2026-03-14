@@ -9,6 +9,7 @@
           <Icon v-else-if="step.status === 'success'" icon="ant-design:check-circle-filled" />
           <Icon v-else-if="step.status === 'error'" icon="ant-design:close-circle-filled" />
           <Icon v-else-if="step.status === 'skipped'" icon="ant-design:pause-circle-filled" />
+          <Icon v-else-if="step.status === 'waiting' && step.metadata?.isAskUser" icon="ant-design:question-circle-outlined" />
           <Icon v-else icon="ant-design:clock-circle-outlined" />
         </div>
 
@@ -20,10 +21,15 @@
           {{ t('agent.process.stepProgress', { current: step.stepProgress.current, total: step.stepProgress.total }) }}
         </a-tag>
 
-        <!-- 工具名称标签 -->
-        <a-tag v-if="step.type === 'tool_call' && step.metadata?.toolName" size="small" color="blue">
-          {{ step.metadata.toolName }}
-        </a-tag>
+        <!-- 工具名称标签（ask_user 步骤显示特定标签，其余显示工具名） -->
+        <template v-if="step.type === 'tool_call' && step.metadata?.toolName">
+          <a-tag v-if="step.metadata.isAskUser" size="small" color="purple">
+            User Input
+          </a-tag>
+          <a-tag v-else size="small" color="blue">
+            {{ step.metadata.toolName }}
+          </a-tag>
+        </template>
 
         <!-- 检索数量标签 -->
         <a-tag v-if="step.type === 'rag_retrieve' && step.metadata?.retrieveCount" size="small" color="green">
@@ -74,6 +80,108 @@
     <!-- 步骤详情 -->
     <transition name="slide-fade">
       <div v-if="step.expanded && hasDetails" class="step-details">
+
+        <!-- ── AskUser 提问 UI ──────────────────────────────── -->
+        <template v-if="isAskUserStep">
+          <div class="ask-user-section">
+            <!-- 回答完成后显示 -->
+            <template v-if="step.metadata?.toolResult !== undefined && step.status === 'success'">
+              <div class="ask-answered">
+                <div class="ask-answered-label">
+                  <Icon icon="ant-design:check-circle-filled" class="ask-answered-icon" />
+                  YOUR ANSWER
+                </div>
+                <div class="ask-answered-content">{{ step.metadata.toolResult }}</div>
+              </div>
+            </template>
+
+            <!-- 未回答：交互区 -->
+            <template v-else-if="step.metadata?.question">
+              <p class="ask-question-text">{{ step.metadata.question.question }}</p>
+
+              <!-- SINGLE_SELECT -->
+              <div v-if="step.metadata.question.questionType === 'SINGLE_SELECT'" class="q-options">
+                <button
+                  v-for="opt in step.metadata.question.options"
+                  :key="opt"
+                  class="q-option-btn"
+                  :class="{ selected: selectedOptions.includes(opt) }"
+                  @click.stop="selectSingle(opt)"
+                >
+                  {{ opt }}
+                </button>
+              </div>
+              <!-- 单选「其他」自由输入 -->
+              <div
+                v-if="step.metadata.question.questionType === 'SINGLE_SELECT' && selectedOptions.includes('其他')"
+                class="q-input-area"
+              >
+                <textarea
+                  v-model="otherValue"
+                  placeholder="请输入您的内容..."
+                  rows="2"
+                  class="q-textarea"
+                  @click.stop
+                />
+              </div>
+
+              <!-- MULTI_SELECT -->
+              <div v-else-if="step.metadata.question.questionType === 'MULTI_SELECT'" class="q-options">
+                <button
+                  v-for="opt in step.metadata.question.options"
+                  :key="opt"
+                  class="q-option-btn multi"
+                  :class="{ selected: selectedOptions.includes(opt) }"
+                  @click.stop="toggleMulti(opt)"
+                >
+                  <span class="q-check">{{ selectedOptions.includes(opt) ? '✓' : '' }}</span>
+                  {{ opt }}
+                </button>
+              </div>
+              <!-- 多选「其他」自由输入 -->
+              <div
+                v-if="step.metadata.question.questionType === 'MULTI_SELECT' && selectedOptions.includes('其他')"
+                class="q-input-area"
+              >
+                <textarea
+                  v-model="otherValue"
+                  placeholder="请输入「其他」的具体内容..."
+                  rows="2"
+                  class="q-textarea"
+                  @click.stop
+                />
+              </div>
+
+              <!-- PREVIEW 预览内容 -->
+              <div v-if="step.metadata.question.questionType === 'PREVIEW' && step.metadata.question.previewContent" class="q-preview">
+                <pre>{{ step.metadata.question.previewContent }}</pre>
+              </div>
+
+              <!-- INPUT / PREVIEW 文本输入 -->
+              <div
+                v-if="step.metadata.question.questionType === 'INPUT' || step.metadata.question.questionType === 'PREVIEW'"
+                class="q-input-area"
+              >
+                <textarea
+                  v-model="inputValue"
+                  placeholder="请输入您的回答..."
+                  rows="3"
+                  class="q-textarea"
+                  @click.stop
+                />
+              </div>
+
+              <!-- 操作按钮 -->
+              <div class="q-footer">
+                <button class="q-btn q-btn-skip" @click.stop="handleSkip">跳过</button>
+                <button class="q-btn q-btn-submit" :disabled="!canSubmit" @click.stop="handleSubmit">
+                  提交回答
+                </button>
+              </div>
+            </template>
+          </div>
+        </template>
+
         <!-- 子步骤列表（思考步骤） -->
         <template v-if="hasSubSteps">
           <div class="detail-section">
@@ -121,8 +229,8 @@
           </div>
         </template>
 
-        <!-- 工具调用详情 -->
-        <template v-if="step.type === 'tool_call'">
+        <!-- 工具调用详情（非 ask_user） -->
+        <template v-if="step.type === 'tool_call' && !isAskUserStep">
           <!-- 参数 -->
           <div v-if="step.metadata?.toolParams" class="detail-section">
             <div class="detail-label">{{ t('agent.process.callParams') }}</div>
@@ -174,7 +282,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Icon } from '@/components/Icon';
 import type { ProcessStep } from '../agent.types';
@@ -189,7 +297,86 @@ const emit = defineEmits<{
   toggleExpand: [stepId: string];
   confirmTool: [];
   rejectTool: [];
+  answerQuestion: [questionId: string, answer: string];
 }>();
+
+// ── AskUser 交互状态 ─────────────────────────────────────────────────────────
+const selectedOptions = ref<string[]>([]);
+const inputValue = ref('');
+const otherValue = ref('');
+
+// 当问题切换时重置输入状态
+watch(
+  () => props.step.metadata?.question?.questionId,
+  () => {
+    selectedOptions.value = [];
+    inputValue.value = '';
+    otherValue.value = '';
+  }
+);
+
+const isAskUserStep = computed(() =>
+  props.step.type === 'tool_call' && !!props.step.metadata?.isAskUser
+);
+
+const hasOtherSelected = computed(() => selectedOptions.value.includes('其他'));
+
+const canSubmit = computed(() => {
+  const q = props.step.metadata?.question;
+  if (!q) return false;
+  switch (q.questionType) {
+    case 'SINGLE_SELECT':
+      if (selectedOptions.value.length !== 1) return false;
+      if (hasOtherSelected.value) return otherValue.value.trim().length > 0;
+      return true;
+    case 'MULTI_SELECT':
+      if (selectedOptions.value.length === 0) return false;
+      if (hasOtherSelected.value) return otherValue.value.trim().length > 0;
+      return true;
+    case 'INPUT':   return inputValue.value.trim().length > 0;
+    case 'PREVIEW': return true;
+    default:        return false;
+  }
+});
+
+function selectSingle(opt: string) {
+  selectedOptions.value = [opt];
+}
+
+function toggleMulti(opt: string) {
+  const idx = selectedOptions.value.indexOf(opt);
+  if (idx === -1) {
+    selectedOptions.value.push(opt);
+  } else {
+    selectedOptions.value.splice(idx, 1);
+  }
+}
+
+function handleSubmit() {
+  const q = props.step.metadata?.question;
+  if (!q) return;
+  let answer = '';
+  if (q.questionType === 'SINGLE_SELECT') {
+    const selected = selectedOptions.value[0] || '';
+    answer = selected === '其他' ? otherValue.value.trim() : selected;
+  } else if (q.questionType === 'MULTI_SELECT') {
+    const resolvedOpts = selectedOptions.value.map((opt) =>
+      opt === '其他' && otherValue.value.trim() ? otherValue.value.trim() : opt
+    );
+    answer = resolvedOpts.join(', ');
+  } else {
+    answer = inputValue.value.trim();
+  }
+  emit('answerQuestion', q.questionId, answer);
+}
+
+function handleSkip() {
+  const q = props.step.metadata?.question;
+  if (!q) return;
+  emit('answerQuestion', q.questionId, '跳过');
+}
+
+// ── 普通步骤逻辑 ─────────────────────────────────────────────────────────────
 
 // 是否有子步骤
 const hasSubSteps = computed(() => {
@@ -203,6 +390,9 @@ const hasPlanInfo = computed(() => {
 
 // 是否有详情可展开
 const hasDetails = computed(() => {
+  // isAskUser 步骤始终可展开
+  if (isAskUserStep.value) return true;
+
   // 如果有子步骤或规划信息，可以展开
   if (hasSubSteps.value || hasPlanInfo.value) {
     return true;
@@ -264,14 +454,13 @@ const formatDuration = (ms: number) => {
 };
 
 // 格式化 JSON
-const formatJson = (obj: any) => {
+const formatJson = (obj: unknown) => {
   return JSON.stringify(obj, null, 2);
 };
 
 // 格式化结果
-const formatResult = (result: any) => {
+const formatResult = (result: unknown) => {
   if (typeof result === 'string') {
-    // 如果是字符串，尝试截断过长的内容
     if (result.length > 500) {
       return result.substring(0, 500) + '\n... (内容过长，已截断)';
     }
@@ -343,8 +532,9 @@ const formatResult = (result: any) => {
   z-index: 2;
 
   &.waiting {
-    color: #64748b;
-    border-color: #64748b;
+    color: #a78bfa;
+    border-color: #a78bfa;
+    box-shadow: 0 0 8px rgba(167, 139, 250, 0.3);
   }
 
   &.running {
@@ -454,6 +644,190 @@ const formatResult = (result: any) => {
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 6px;
 }
+
+// ── AskUser 提问 UI ───────────────────────────────────────────────────────────
+
+.ask-user-section {
+  margin-bottom: 4px;
+}
+
+.ask-question-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #e2e8f0;
+  line-height: 1.6;
+  margin: 0 0 14px;
+  font-family: 'Inter', sans-serif;
+}
+
+.ask-answered {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ask-answered-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #34d399;
+  text-transform: uppercase;
+}
+
+.ask-answered-icon {
+  font-size: 13px;
+}
+
+.ask-answered-content {
+  font-size: 13px;
+  color: #94a3b8;
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1.5;
+  padding: 8px 12px;
+  background: rgba(52, 211, 153, 0.06);
+  border: 1px solid rgba(52, 211, 153, 0.15);
+  border-radius: 6px;
+  word-break: break-word;
+}
+
+.q-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.q-option-btn {
+  padding: 6px 16px;
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  border-radius: 20px;
+  background: transparent;
+  font-size: 13px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  &:hover {
+    border-color: #a78bfa;
+    color: #e2e8f0;
+    background: rgba(167, 139, 250, 0.08);
+  }
+
+  &.selected {
+    border-color: #a78bfa;
+    background: rgba(167, 139, 250, 0.18);
+    color: #c4b5fd;
+    font-weight: 500;
+  }
+}
+
+.q-check {
+  font-size: 11px;
+  min-width: 11px;
+  color: #a78bfa;
+}
+
+.q-preview {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  max-height: 160px;
+  overflow-y: auto;
+
+  pre {
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #94a3b8;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin: 0;
+  }
+}
+
+.q-input-area {
+  margin-bottom: 14px;
+}
+
+.q-textarea {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #e2e8f0;
+  resize: none;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+
+  &::placeholder {
+    color: rgba(148, 163, 184, 0.3);
+  }
+
+  &:focus {
+    border-color: #a78bfa;
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
+  }
+}
+
+.q-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.q-btn {
+  padding: 6px 18px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+  border: none;
+  transition: all 0.18s ease;
+  letter-spacing: 0.5px;
+}
+
+.q-btn-skip {
+  background: transparent;
+  color: #475569;
+  border: 1px solid rgba(71, 85, 105, 0.4);
+
+  &:hover {
+    color: #94a3b8;
+    border-color: rgba(148, 163, 184, 0.3);
+  }
+}
+
+.q-btn-submit {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(124, 58, 237, 0.3);
+
+  &:hover:not(:disabled) {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    box-shadow: 0 2px 14px rgba(139, 92, 246, 0.4);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+}
+
+// ── 通用详情区样式 ────────────────────────────────────────────────────────────
 
 .detail-section {
   margin-bottom: 12px;
@@ -644,4 +1018,3 @@ const formatResult = (result: any) => {
   opacity: 0;
 }
 </style>
-

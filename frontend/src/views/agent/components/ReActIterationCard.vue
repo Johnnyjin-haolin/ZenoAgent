@@ -41,6 +41,7 @@
         @toggle-expand="$emit('toggleStepExpand', step.id)"
         @confirm-tool="$emit('confirmTool')"
         @reject-tool="$emit('rejectTool')"
+        @answer-question="(qId, ans) => $emit('answerQuestion', qId, ans)"
       />
       
       <!-- 迭代结束提示 -->
@@ -76,6 +77,7 @@ const emit = defineEmits<{
   toggleStepExpand: [stepId: string];
   confirmTool: [];
   rejectTool: [];
+  answerQuestion: [questionId: string, answer: string];
 }>();
 
 const statusIcon = computed(() => {

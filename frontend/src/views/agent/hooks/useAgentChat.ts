@@ -280,12 +280,20 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           logger.debug('[useAgentChat] 收到用户提问:', question);
           pendingQuestion.value = question;
 
-          // 在当前迭代中标记有提问步骤（展示用）
-          if (currentIteration) {
-            const step = createStep('tool_call', t('agent.chat.askingUser', { question: question.question }), 'waiting', {
-              toolName: 'system_ask_user_question',
-            });
-            currentIteration.steps.push(step);
+          // 找到 assistantMessage 迭代中最近一个 isAskUser+waiting 步骤，更新为真实 questionId
+          if (assistantMessage.process?.iterations) {
+            const allIterations = assistantMessage.process.iterations as any[];
+            for (let i = allIterations.length - 1; i >= 0; i--) {
+              const steps: any[] = allIterations[i].steps || [];
+              const askStep = [...steps].reverse().find(
+                (s: any) => s.type === 'tool_call' && s.metadata?.isAskUser && s.status === 'waiting'
+              );
+              if (askStep) {
+                askStep.metadata.question = question;
+                logger.debug('[useAgentChat] 已更新步骤 metadata.question，真实 questionId:', question.questionId);
+                break;
+              }
+            }
           }
         },
 
@@ -474,11 +482,70 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         onToolCall: (event) => {
           logger.debug('工具调用:', event);
           updateConversationId(event);
+
+          const toolName: string = event.data?.toolName || '';
+          const isAskUser = toolName === 'system_ask_user_question';
+
+          // ── system_ask_user_question 特殊处理 ───────────────────────────────
+          // 在迭代中渲染工具步骤（状态 waiting，等待用户回答），同时插入提问卡片占位
+          // agent:ask_user_question 事件到达后 onAskUserQuestion 会更新为真实 questionId
+          if (isAskUser) {
+            // 解析工具参数（可能是 JSON 字符串或对象）
+            let rawParams = event.data?.params;
+            let parsedParams: Record<string, any> = {};
+            if (typeof rawParams === 'string') {
+              try { parsedParams = JSON.parse(rawParams); } catch { /* 解析失败忽略 */ }
+            } else if (rawParams && typeof rawParams === 'object') {
+              parsedParams = rawParams as Record<string, any>;
+            }
+
+            const questionText: string = parsedParams.question || '';
+            const tempId = `pending-${Date.now()}`;
+
+            // 兜底：确保迭代存在
+            if (!currentIteration) {
+              const newIteration = reactive({
+                iterationNumber: assistantMessage.process!.iterations.length + 1,
+                steps: [],
+                status: 'running',
+                startTime: Date.now(),
+                collapsed: false,
+              });
+              assistantMessage.process!.iterations.push(newIteration);
+              currentIteration = newIteration;
+            }
+
+            // 构建临时 question 对象并存入步骤 metadata，等待 onAskUserQuestion 更新真实 questionId
+            const tempQuestion: UserQuestion = {
+              questionId: tempId,
+              question: questionText,
+              questionType: (parsedParams.questionType as any) || 'INPUT',
+              options: parsedParams.options,
+              previewContent: parsedParams.previewContent,
+            };
+            pendingQuestion.value = tempQuestion;
+
+            // 在迭代中插入"等待用户回答"的工具步骤，步骤 metadata 携带 question 信息
+            const askStep = createStep(
+              'tool_call',
+              t('agent.chat.askingUser') || '等待用户回答',
+              'waiting',
+              { toolName, toolParams: parsedParams, isAskUser: true, question: tempQuestion }
+            );
+            // 默认展开，便于用户立即看到提问 UI
+            askStep.expanded = true;
+            currentIteration.steps.push(askStep);
+
+            logger.debug('[useAgentChat] 插入 ask_user 步骤，临时 questionId:', tempId);
+            return;
+          }
+
+          // ── 普通工具调用 ─────────────────────────────────────────────────────
           const requiresConfirmation = Boolean(event.data?.requiresConfirmation);
           assistantMessage.status = 'calling_tool';
           assistantMessage.statusText = requiresConfirmation
-            ? t('agent.chat.waitingConfirm', { tool: event.data?.toolName || '' })
-            : t('agent.chat.callingToolStep', { tool: event.data?.toolName || '' });
+            ? t('agent.chat.waitingConfirm', { tool: toolName })
+            : t('agent.chat.callingToolStep', { tool: toolName });
           currentStatus.value = assistantMessage.statusText || '';
 
           // 兜底：若迭代还未创建，自动创建一个（lazy create）
@@ -503,10 +570,9 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             thinkingStep.duration = thinkingStep.endTime - (thinkingStep.startTime || 0);
           }
 
-          // 添加工具调用记录
-          if (event.data && event.data.toolName) {
+          if (event.data && toolName) {
             const toolCall: ToolCall = {
-              name: event.data.toolName,
+              name: toolName,
               params: event.data.params || {},
               status: 'pending',
             };
@@ -514,8 +580,8 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
             // 添加工具调用步骤
             const stepStatus: ProcessStepStatus = requiresConfirmation ? 'waiting' : 'running';
-            const step = createStep('tool_call', t('agent.chat.callingToolStep', { tool: event.data.toolName }), stepStatus, {
-              toolName: event.data.toolName,
+            const step = createStep('tool_call', t('agent.chat.callingToolStep', { tool: toolName }), stepStatus, {
+              toolName,
               toolParams: event.data.params || {},
               requiresConfirmation,
             });
@@ -525,7 +591,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
               pendingToolConfirmations.value.push({
                 requestId: event.requestId,
                 toolExecutionId: event.data.toolExecutionId,
-                toolName: event.data.toolName,
+                toolName,
                 params: event.data.params || {},
               });
             }
@@ -789,27 +855,32 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
   /**
    * 提交用户对 Agent 提问的回答
-   * 由 AgentUserQuestion 组件在用户填写完毕后调用
+   * 由对话流中的提问卡片触发（role === 'question' 消息内嵌交互）
    */
-  const resolveQuestion = async (answer: string) => {
-    if (!pendingQuestion.value) return;
+  const resolveQuestion = async (questionId: string, answer: string) => {
+    // 1. 标记提问卡片为已回答
+    const questionMsg = messages.value.find(
+      (m) => m.role === 'question' && m.question?.questionId === questionId
+    ) as any;
+    if (questionMsg) {
+      questionMsg.questionAnswered = true;
+      questionMsg.questionAnswer = answer;
+    }
 
-    const { questionId } = pendingQuestion.value;
-    const questionText = pendingQuestion.value.question;
-
-    // 完成当前迭代中 ask_user_question 的步骤
-    const lastAssistantMsg = messages.value[messages.value.length - 1];
-    if (lastAssistantMsg?.process?.iterations?.length) {
-      const iter = lastAssistantMsg.process.iterations[lastAssistantMsg.process.iterations.length - 1] as any;
-      if (iter?.steps) {
-        const step = [...iter.steps].reverse().find(
-          (s: any) => s.type === 'tool_call' && s.metadata?.toolName === 'system_ask_user_question'
+    // 2. 将迭代中对应的 waiting 步骤（isAskUser）更新为 success，并记录用户答案
+    for (const msg of messages.value) {
+      if (msg.role !== 'assistant' || !msg.process?.iterations) continue;
+      for (const iter of msg.process.iterations as any[]) {
+        if (!iter.steps) continue;
+        const askStep = [...iter.steps].reverse().find(
+          (s: any) => s.type === 'tool_call' && s.metadata?.isAskUser && s.status === 'waiting'
         );
-        if (step) {
-          step.status = 'success';
-          step.endTime = Date.now();
-          step.duration = step.startTime ? step.endTime - step.startTime : undefined;
-          step.metadata = { ...step.metadata, toolResult: answer };
+        if (askStep) {
+          askStep.status = 'success';
+          askStep.endTime = Date.now();
+          askStep.duration = askStep.startTime ? askStep.endTime - askStep.startTime : 0;
+          askStep.metadata = { ...askStep.metadata, toolResult: answer };
+          break;
         }
       }
     }
