@@ -22,25 +22,11 @@
         </span>
       </a-select-option>
     </a-select>
-
-    <a-tooltip title="管理 Agent">
-      <a-button
-        type="text"
-        size="small"
-        class="manage-btn"
-        @click="emit('manage')"
-      >
-        <template #icon>
-          <Icon icon="ant-design:setting-outlined" />
-        </template>
-      </a-button>
-    </a-tooltip>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
-import { Icon } from '@/components/Icon';
 import { getAgentDefinitions } from '../agent.api';
 import type { AgentDefinition } from '../agent.types';
 
@@ -54,7 +40,6 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string | undefined): void;
   (e: 'change', value: string | undefined, agent: AgentDefinition | null): void;
-  (e: 'manage'): void;
 }>();
 
 const selectedAgentId = ref<string | undefined>(props.modelValue);
@@ -136,16 +121,6 @@ onMounted(() => {
 
   :deep(.ant-select-arrow) {
     color: rgba(96, 165, 250, 0.6);
-  }
-}
-
-.manage-btn {
-  color: rgba(148, 163, 184, 0.6);
-  padding: 0 4px;
-
-  &:hover {
-    color: #60a5fa;
-    background: transparent;
   }
 }
 

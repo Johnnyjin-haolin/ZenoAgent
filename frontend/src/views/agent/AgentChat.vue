@@ -38,7 +38,6 @@
         <AgentSelector
           v-model="selectedAgentId"
           @change="handleAgentChange"
-          @manage="showAgentConfigModal = true"
         />
       </div>
 
@@ -71,12 +70,6 @@
       />
 
     </div>
-
-    <!-- Agent 管理弹窗 -->
-    <AgentConfigModal
-      v-model:open="showAgentConfigModal"
-      @change="handleAgentDefinitionChange"
-    />
 
     <ChatConfigDrawer
       v-model:open="showConfigDrawer"
@@ -111,7 +104,6 @@ import ChatMessages from './components/ChatMessages.vue';
 import AgentSlide from './components/AgentSlide.vue';
 import AgentUserQuestion from './components/AgentUserQuestion.vue';
 import AgentSelector from './components/AgentSelector.vue';
-import AgentConfigModal from './components/AgentConfigModal.vue';
 import { AGENT_CONFIG_STORAGE_KEY } from './agent.constants';
 import type { ModelInfo, KnowledgeInfo } from './agent.types';
 import { ModelType } from '@/types/model.types';
@@ -138,7 +130,6 @@ const showConfigDrawer = ref(false);
 
 // Agent 选择器
 const selectedAgentId = ref<string | undefined>(undefined);
-const showAgentConfigModal = ref(false);
 
 // 会话 ID（由会话列表与SSE更新）
 const currentConversationId = ref('');
@@ -400,12 +391,6 @@ const handleAgentChange = (agentId: string | undefined) => {
     });
   }
 };
-
-// Agent 配置变更后（如新建/删除），刷新列表但不影响当前选中
-function handleAgentDefinitionChange() {
-  // 选择器内部会自动 loadAgents，这里只打日志
-  logger.debug('Agent 定义发生变更');
-}
 
 // 切换会话时同步 selectedAgentId（从会话列表中读取绑定信息）
 watch(currentConversationId, (newId) => {
