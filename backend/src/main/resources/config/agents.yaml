@@ -4,7 +4,7 @@ agents:
     description: "通用智能助手"
     systemPrompt: "你是 Zeno Assistant，一个通用智能助手。"
     tools:
-      mcpGroups: [saas]
+      serverMcpIds: []
       systemTools:
         - RAG_QUERY
         - ASK_USER_QUESTION
@@ -15,8 +15,7 @@ agents:
     description: "专注云资源管理"
     systemPrompt: "你是云资源助手，专注于云资源管理。执行操作前先确认关键参数。"
     tools:
-      mcpGroups:
-        - aliyun
+      serverMcpIds: []
       systemTools:
         - RAG_QUERY
         - ASK_USER_QUESTION

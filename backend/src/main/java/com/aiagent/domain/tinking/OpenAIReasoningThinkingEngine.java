@@ -196,7 +196,7 @@ public class OpenAIReasoningThinkingEngine implements ThinkingEngine {
         StringBuilder userPrompt = new StringBuilder();
 
         // 工具列表
-        List<McpToolInfo> tools = toolSelector.selectTools(goal, context.getEnabledMcpGroups(), context.getEnabledTools());
+        List<McpToolInfo> tools = toolSelector.selectTools(goal, context.getServerMcpIds(), context.getEnabledTools());
         if (!tools.isEmpty()) {
             userPrompt.append("## 可用工具\n");
             for (McpToolInfo tool : tools) {

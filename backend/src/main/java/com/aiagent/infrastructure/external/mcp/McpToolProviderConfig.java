@@ -19,7 +19,7 @@ import javax.annotation.PostConstruct;
  */
 @Slf4j
 @Configuration
-@DependsOn({"mcpGroupManager", "mcpClientFactory", "mcpToolProviderFactory"})
+@DependsOn({"mcpManager", "mcpClientFactory", "mcpToolProviderFactory"})
 public class McpToolProviderConfig {
     
     @Autowired

@@ -388,7 +388,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
         
         // ========== 可用工具 ==========
         List<McpToolInfo> availableTools = toolSelector.selectTools(goal,
-                context.getEnabledMcpGroups(),
+                context.getServerMcpIds(),
                 context.getEnabledTools());
         if (!availableTools.isEmpty()) {
             prompt.append("## 可用工具\n\n");

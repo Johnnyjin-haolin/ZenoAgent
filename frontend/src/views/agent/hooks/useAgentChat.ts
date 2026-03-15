@@ -7,7 +7,20 @@ import { ref, Ref, computed, reactive, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { message } from 'ant-design-vue';
 import logger from '@/utils/logger';
-import { executeAgent, getConversationMessages, confirmToolExecution, stopAgent, submitAnswer } from '../agent.api';
+import {
+  executeAgent,
+  getConversationMessages,
+  confirmToolExecution,
+  stopAgent,
+  submitAnswer,
+  submitClientToolResult,
+  prefetchPersonalMcpTools,
+} from '../agent.api';
+import {
+  canExecutePersonalMcp,
+  buildPersonalMcpHeaders,
+  getMissingSecretHeaders,
+} from '@/utils/mcpSecretStore';
 import type {
   AgentMessage,
   AgentRequest,
@@ -22,6 +35,8 @@ import type {
   UserQuestion,
   ExecutionProcess,
   ReActIteration,
+  PersonalToolCallData,
+  McpServerInfo,
 } from '../agent.types';
 
 export interface UseAgentChatOptions {
@@ -33,8 +48,80 @@ export interface UseAgentChatOptions {
   defaultKnowledgeIds?: string[];
   /** 默认启用的工具 */
   defaultEnabledTools?: string[];
+  /** GLOBAL MCP 服务器 IDs */
+  serverMcpIds?: string[];
+  /**
+   * 返回本次对话需要参与 prefetch 的 PERSONAL MCP 服务器列表
+   * 在 sendMessage 前会并发调用各服务器 tools/list，获取真实工具 schema
+   */
+  getPersonalMcpServers?: () => McpServerInfo[];
   /** 根据 agentId 查询 Agent 名称（运行时填充 agentName 用） */
   getAgentName?: (agentId: string) => string | undefined;
+  /** 获取 PERSONAL MCP 服务器信息（用于客户端执行，SSE 下发时路由） */
+  getPersonalMcpServer?: (serverId: string) => McpServerInfo | undefined;
+}
+
+/**
+ * PERSONAL MCP 密钥补充请求（行内提示用）
+ */
+export interface PendingSecretRequest {
+  /** 唯一 ID（同 callId，方便配对） */
+  callId: string;
+  /** MCP 服务器 ID */
+  serverId: string;
+  /** MCP 服务器名称（展示用） */
+  serverName: string;
+  /** 缺少密钥的 Header 名列表 */
+  missingHeaders: string[];
+  /** 工具名称 */
+  toolName: string;
+  /** 待执行的工具参数（密钥补充后继续使用） */
+  params: Record<string, unknown>;
+}
+
+/**
+ * 调用 PERSONAL MCP endpoint（浏览器端直接 fetch）
+ */
+async function callPersonalMcpEndpoint(
+  server: McpServerInfo,
+  toolName: string,
+  params: Record<string, unknown>,
+  extraHeaders: Record<string, string> = {}
+): Promise<string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...buildPersonalMcpHeaders(server.id, server.authHeaders),
+    ...extraHeaders,
+  };
+
+  const body = JSON.stringify({
+    method: 'tools/call',
+    params: {
+      name: toolName,
+      arguments: params,
+    },
+  });
+
+  const resp = await fetch(server.endpointUrl, {
+    method: 'POST',
+    headers,
+    body,
+  });
+
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+  }
+
+  const data = await resp.json();
+  // MCP 标准结果在 result.content[0].text 或 result.content
+  if (data?.result?.content) {
+    const content = data.result.content;
+    if (Array.isArray(content)) {
+      return content.map((c: any) => c.text || JSON.stringify(c)).join('\n');
+    }
+    return String(content);
+  }
+  return JSON.stringify(data);
 }
 
 /**
@@ -47,7 +134,10 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     defaultModelId,
     defaultKnowledgeIds = [],
     defaultEnabledTools = [],
+    serverMcpIds,
+    getPersonalMcpServers,
     getAgentName,
+    getPersonalMcpServer,
   } = options;
 
   // 消息列表
@@ -82,6 +172,12 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
   const pendingQuestion = ref<UserQuestion | null>(null);
 
   /**
+   * 当前待补充密钥的 PERSONAL MCP 请求
+   * null 表示无需补充密钥
+   */
+  const pendingSecretRequest = ref<PendingSecretRequest | null>(null);
+
+  /**
    * 创建执行步骤
    */
   const createStep = (
@@ -106,12 +202,10 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
    */
   const findStep = (steps: ProcessStep[], type: ProcessStepType, toolName?: string): ProcessStep | undefined => {
     if (type === 'tool_call' && toolName) {
-      // 查找特定工具的调用步骤（允许waiting/running）
       return [...steps].reverse().find((s) =>
         s.type === type && s.metadata?.toolName === toolName && ['waiting', 'running'].includes(s.status)
       );
     }
-    // 查找最后一个该类型的步骤
     return [...steps].reverse().find((s) => s.type === type);
   };
 
@@ -161,10 +255,9 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
    * 解析 thinking 消息
    */
   const parseThinkingMessage = (event: AgentEvent) => {
-    const message = event.message || '';
+    const msg = event.message || '';
     const data = event.data || {};
 
-    // 1. 检查是否包含规划信息
     if (data.steps && Array.isArray(data.steps)) {
       return {
         type: 'plan' as const,
@@ -174,12 +267,11 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           steps: data.steps,
           variables: data.variables,
         },
-        message: message,
+        message: msg,
       };
     }
 
-    // 2. 检查是否是步骤描述（如"步骤 1/3: 检索相关知识"）
-    const stepMatch = message.match(/步骤\s*(\d+)\/(\d+):\s*(.+)/);
+    const stepMatch = msg.match(/步骤\s*(\d+)\/(\d+):\s*(.+)/);
     if (stepMatch) {
       return {
         type: 'step' as const,
@@ -188,15 +280,101 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           total: parseInt(stepMatch[2]),
           description: stepMatch[3],
         },
-        message: message,
+        message: msg,
       };
     }
 
-    // 3. 普通思考消息
     return {
       type: 'thinking' as const,
-      message: message,
+      message: msg,
     };
+  };
+
+  /**
+   * 执行 PERSONAL MCP 工具调用（浏览器端）
+   * 如果密钥缺失，将设置 pendingSecretRequest 触发行内密钥补充卡片
+   */
+  const executePersonalToolCall = async (data: PersonalToolCallData) => {
+    const server = getPersonalMcpServer?.(data.serverId);
+    if (!server) {
+      logger.error('[PERSONAL MCP] 找不到服务器信息，serverId:', data.serverId);
+      await submitClientToolResult(data.callId, undefined, `找不到 PERSONAL MCP 服务器: ${data.serverId}`);
+      return;
+    }
+
+    // 检查是否需要密钥且已全部配置
+    if (!canExecutePersonalMcp(server.id, server.authHeaders)) {
+      const missingHeaders = getMissingSecretHeaders(server.id, server.authHeaders);
+      logger.debug('[PERSONAL MCP] 密钥缺失，等待用户补充:', server.name, '缺少:', missingHeaders);
+      pendingSecretRequest.value = {
+        callId: data.callId,
+        serverId: server.id,
+        serverName: server.name,
+        missingHeaders,
+        toolName: data.toolName,
+        params: data.params,
+      };
+      return; // 等待用户通过行内卡片补充密钥后调用 resolveSecretRequest
+    }
+
+    await doCallPersonalMcp(server, data);
+  };
+
+  /**
+   * 实际执行 PERSONAL MCP fetch，并回传结果
+   */
+  const doCallPersonalMcp = async (server: McpServerInfo, data: PersonalToolCallData) => {
+    try {
+      logger.debug('[PERSONAL MCP] 执行工具调用:', data.toolName, data.params);
+      const result = await callPersonalMcpEndpoint(server, data.toolName, data.params);
+      logger.debug('[PERSONAL MCP] 工具调用成功:', result.substring(0, 100));
+      await submitClientToolResult(data.callId, result, undefined);
+    } catch (err: any) {
+      const errMsg = err?.message || String(err);
+      logger.error('[PERSONAL MCP] 工具调用失败:', errMsg);
+      await submitClientToolResult(data.callId, undefined, errMsg);
+    }
+  };
+
+  /**
+   * 用户补充密钥后继续执行（由 McpSecretInlineCard 组件触发）
+   */
+  const resolveSecretRequest = async (secret: string) => {
+    const req = pendingSecretRequest.value;
+    if (!req) return;
+
+    const server = getPersonalMcpServer?.(req.serverId);
+    if (!server) {
+      await submitClientToolResult(req.callId, undefined, `服务器不存在: ${req.serverId}`);
+      pendingSecretRequest.value = null;
+      return;
+    }
+
+    pendingSecretRequest.value = null;
+
+    // 用用户补充的临时密钥（不保存到 localStorage，仅本次使用）
+    // secret 为用户输入的内容，若缺少多个 header 则用同一个值临时填充
+    const extraHeaders: Record<string, string> = {};
+    for (const headerName of req.missingHeaders) {
+      extraHeaders[headerName] = secret.startsWith('Bearer ') ? secret : `Bearer ${secret}`;
+    }
+
+    try {
+      const result = await callPersonalMcpEndpoint(server, req.toolName, req.params, extraHeaders);
+      await submitClientToolResult(req.callId, result, undefined);
+    } catch (err: any) {
+      await submitClientToolResult(req.callId, undefined, err?.message || String(err));
+    }
+  };
+
+  /**
+   * 用户跳过密钥补充（拒绝执行该工具）
+   */
+  const skipSecretRequest = async () => {
+    const req = pendingSecretRequest.value;
+    if (!req) return;
+    pendingSecretRequest.value = null;
+    await submitClientToolResult(req.callId, undefined, '用户跳过了密钥配置，工具未执行');
   };
 
   /**
@@ -211,6 +389,8 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       enabledTools?: string[];
       mode?: 'AUTO' | 'MANUAL';
       images?: string[];
+      serverMcpIds?: string[];
+      personalMcpCapabilities?: string[];
     } = {}
   ) => {
     if (loading.value) {
@@ -259,7 +439,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       process: {
         iterations: [],
         completedCount: 0,
-        streamingStarted: false, // 流式输出是否已开始
+        streamingStarted: false,
       },
     });
     messages.value.push(assistantMessage);
@@ -267,7 +447,25 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     // 当前迭代对象引用
     let currentIteration: any = null;
 
-    // 构建请求
+    // Prefetch PERSONAL MCP 工具 schema（并发，失败的服务器静默跳过）
+    const resolvedServerMcpIds = options.serverMcpIds ?? serverMcpIds;
+    let personalMcpTools: import('../agent.types').PersonalMcpToolSchema[] = [];
+    const personalServers = getPersonalMcpServers?.() ?? [];
+    if (personalServers.length > 0) {
+      const results = await Promise.allSettled(
+        personalServers.map((srv) =>
+          prefetchPersonalMcpTools(srv, buildPersonalMcpHeaders(srv.id, srv.authHeaders))
+        )
+      );
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          personalMcpTools = personalMcpTools.concat(r.value);
+        }
+      }
+      logger.debug(`[useAgentChat] prefetch PERSONAL MCP 工具完成，共 ${personalMcpTools.length} 个`);
+    }
+
+    // 构建请求（合并运行时传入的 MCP 配置）
     const request: AgentRequest = {
       content: content.trim(),
       conversationId: conversationId?.value,
@@ -276,16 +474,16 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       knowledgeIds: options.knowledgeIds || defaultKnowledgeIds,
       enabledTools: options.enabledTools || defaultEnabledTools,
       mode: options.mode || 'AUTO',
+      serverMcpIds: resolvedServerMcpIds,
+      personalMcpTools: personalMcpTools.length > 0 ? personalMcpTools : undefined,
     };
 
     try {
-      // 执行 Agent 任务
       currentController = await executeAgent(request, {
         onAskUserQuestion: (question) => {
           logger.debug('[useAgentChat] 收到用户提问:', question);
           pendingQuestion.value = question;
 
-          // 找到 assistantMessage 迭代中最近一个 isAskUser+waiting 步骤，更新为真实 questionId
           if (assistantMessage.process?.iterations) {
             const allIterations = assistantMessage.process.iterations as any[];
             for (let i = allIterations.length - 1; i >= 0; i--) {
@@ -302,10 +500,14 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           }
         },
 
+        onPersonalToolCall: async (data) => {
+          logger.debug('[useAgentChat] 收到 PERSONAL MCP 工具调用:', data);
+          await executePersonalToolCall(data);
+        },
+
         onStart: (event) => {
           logger.debug('任务开始:', event);
           updateConversationId(event);
-          // 【新增】保存 requestId 用于停止功能
           currentRequestId = event.requestId || null;
           assistantMessage.status = 'thinking';
           assistantMessage.statusText = t('agent.chat.processing');
@@ -336,11 +538,8 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           updateConversationId(event);
           assistantMessage.status = event.event;
           assistantMessage.data = event.data;
-          
-          // 清空 statusText，让 AgentMessage 组件根据 status 使用国际化文案
           assistantMessage.statusText = undefined;
           
-          // 更新全局状态文本（手动处理国际化）
           let statusText = '';
           if (event.event === 'agent:status:analyzing') {
             statusText = t('agent.status.analyzing');
@@ -383,7 +582,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
           if (!currentIteration) return;
 
-          // 在当前迭代添加或更新思考步骤
           let thinkingStep = currentIteration.steps.find((s: any) => s.type === 'thinking');
           if (!thinkingStep) {
             thinkingStep = createStep('thinking', t('agent.chat.thinkingProcess'), 'running');
@@ -391,7 +589,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             currentIteration.steps.push(thinkingStep);
           }
 
-          // 思考完成后收起思考步骤
           if (event.message && event.message.includes('思考完成')) {
             thinkingStep.expanded = false;
           }
@@ -404,7 +601,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
           if (!currentIteration) return;
 
-          // 中间推理 token：追加到当前迭代的思考步骤
           let thinkingStep = currentIteration.steps.find((s: any) => s.type === 'thinking');
           if (!thinkingStep) {
             thinkingStep = createStep('thinking', t('agent.chat.thinkingProcess'), 'running');
@@ -445,7 +641,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
           if (!currentIteration) return;
 
-          // 完成思考步骤
           const thinkingStep = currentIteration.steps.find((s: any) => s.type === 'thinking');
           if (thinkingStep && thinkingStep.status === 'running') {
             thinkingStep.status = 'success';
@@ -453,7 +648,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             thinkingStep.duration = thinkingStep.endTime - (thinkingStep.startTime || 0);
           }
 
-          // 保存检索结果
           let ragResults: RagResult[] = [];
           let retrieveCount = 0;
           let avgScore = 0;
@@ -475,7 +669,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             assistantMessage.ragResults = ragResults;
           }
 
-          // 添加检索步骤
           const step = createStep('rag_retrieve', t('agent.chat.retrieveKbStep'), 'running', {
             retrieveCount,
             avgScore,
@@ -491,11 +684,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           const toolName: string = event.data?.toolName || '';
           const isAskUser = toolName === 'system_ask_user_question';
 
-          // ── system_ask_user_question 特殊处理 ───────────────────────────────
-          // 在迭代中渲染工具步骤（状态 waiting，等待用户回答），同时插入提问卡片占位
-          // agent:ask_user_question 事件到达后 onAskUserQuestion 会更新为真实 questionId
           if (isAskUser) {
-            // 解析工具参数（可能是 JSON 字符串或对象）
             let rawParams = event.data?.params;
             let parsedParams: Record<string, any> = {};
             if (typeof rawParams === 'string') {
@@ -507,7 +696,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             const questionText: string = parsedParams.question || '';
             const tempId = `pending-${Date.now()}`;
 
-            // 兜底：确保迭代存在
             if (!currentIteration) {
               const newIteration = reactive({
                 iterationNumber: assistantMessage.process!.iterations.length + 1,
@@ -520,7 +708,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
               currentIteration = newIteration;
             }
 
-            // 构建临时 question 对象并存入步骤 metadata，等待 onAskUserQuestion 更新真实 questionId
             const tempQuestion: UserQuestion = {
               questionId: tempId,
               question: questionText,
@@ -530,14 +717,12 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             };
             pendingQuestion.value = tempQuestion;
 
-            // 在迭代中插入"等待用户回答"的工具步骤，步骤 metadata 携带 question 信息
             const askStep = createStep(
               'tool_call',
               t('agent.chat.askingUser') || '等待用户回答',
               'waiting',
               { toolName, toolParams: parsedParams, isAskUser: true, question: tempQuestion }
             );
-            // 默认展开，便于用户立即看到提问 UI
             askStep.expanded = true;
             currentIteration.steps.push(askStep);
 
@@ -545,7 +730,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             return;
           }
 
-          // ── 普通工具调用 ─────────────────────────────────────────────────────
           const requiresConfirmation = Boolean(event.data?.requiresConfirmation);
           assistantMessage.status = 'calling_tool';
           assistantMessage.statusText = requiresConfirmation
@@ -553,7 +737,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             : t('agent.chat.callingToolStep', { tool: toolName });
           currentStatus.value = assistantMessage.statusText || '';
 
-          // 兜底：若迭代还未创建，自动创建一个（lazy create）
           if (!currentIteration) {
             const newIteration = reactive({
               iterationNumber: assistantMessage.process!.iterations.length + 1,
@@ -567,7 +750,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             logger.debug(`🔁 [onToolCall] 自动创建迭代 #${newIteration.iterationNumber}`);
           }
 
-          // 完成思考步骤
           const thinkingStep = currentIteration.steps.find((s: any) => s.type === 'thinking');
           if (thinkingStep && thinkingStep.status === 'running') {
             thinkingStep.status = 'success';
@@ -583,7 +765,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             };
             assistantMessage.toolCalls?.push(toolCall);
 
-            // 添加工具调用步骤
             const stepStatus: ProcessStepStatus = requiresConfirmation ? 'waiting' : 'running';
             const step = createStep('tool_call', t('agent.chat.callingToolStep', { tool: toolName }), stepStatus, {
               toolName,
@@ -612,7 +793,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
           const { toolName, result, error, duration } = event.data;
 
-          // 更新 toolCalls 记录（用于消息气泡内的工具列表）
           if (assistantMessage.toolCalls && assistantMessage.toolCalls.length > 0) {
             const lastTool = assistantMessage.toolCalls[assistantMessage.toolCalls.length - 1];
             if (lastTool && lastTool.name === toolName) {
@@ -627,7 +807,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
           if (!currentIteration) return;
 
-          // 倒序遍历查找对应工具步骤（避免 reverse() 原地修改响应式数组）
           const steps: any[] = currentIteration.steps;
           let toolStep: any = null;
           for (let i = steps.length - 1; i >= 0; i--) {
@@ -640,7 +819,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           if (toolStep) {
             toolStep.status = error ? 'error' : 'success';
             toolStep.endTime = Date.now();
-            // 优先使用后端传回的精准耗时，兜底用前端计时
             toolStep.duration = duration ?? (toolStep.startTime ? toolStep.endTime - toolStep.startTime : undefined);
             if (toolStep.metadata) {
               toolStep.metadata.toolResult = result;
@@ -651,7 +829,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         },
 
         onMessage: (event) => {
-          // 最终回复 token：直接追加到 content
           logger.debug('[useAgentChat] 收到消息片段:', event.content);
           updateConversationId(event);
 
@@ -668,7 +845,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
           if (!currentIteration) return;
 
-          // 完成当前迭代的所有运行中的步骤
           currentIteration.steps.forEach((step: any) => {
             if (step.status === 'running') {
               step.status = 'success';
@@ -677,7 +853,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             }
           });
 
-          // 更新迭代状态并折叠
           currentIteration.status = 'completed';
           currentIteration.endTime = Date.now();
           currentIteration.totalDuration = currentIteration.endTime - currentIteration.startTime;
@@ -688,11 +863,9 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         },
 
         onStreamComplete: (event) => {
-          // 流式输出完成（所有 token 已发送）
           logger.debug('[useAgentChat] 流式输出完成');
           updateConversationId(event);
           
-          // 更新状态：流式输出完成，但任务还未完全结束
           assistantMessage.status = 'done';
           assistantMessage.loading = false;
           currentStatus.value = '';
@@ -702,13 +875,11 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           logger.debug('任务完成:', event);
           updateConversationId(event);
           
-          // 【新增】兜底：强制完成所有running状态的迭代和步骤
           if (assistantMessage.process && assistantMessage.process.iterations) {
             assistantMessage.process.iterations.forEach((iter: any) => {
               if (iter.status === 'running') {
                 logger.warn(`⚠️ 发现未完成的迭代 ${iter.iterationNumber}，强制标记为completed`);
                 
-                // 完成所有运行中的步骤
                 iter.steps?.forEach((step: any) => {
                   if (step.status === 'running') {
                     step.status = 'success';
@@ -717,7 +888,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
                   }
                 });
                 
-                // 标记迭代完成
                 iter.status = 'completed';
                 iter.endTime = Date.now();
                 iter.totalDuration = iter.endTime - iter.startTime;
@@ -732,7 +902,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           assistantMessage.tokens = event.totalTokens;
           assistantMessage.duration = event.duration;
 
-          // 更新执行过程统计
           assistantMessage.process!.totalDuration = event.duration;
           assistantMessage.process!.completedCount = assistantMessage.process!.iterations.filter(
             (iter: any) => iter.status === 'completed'
@@ -742,7 +911,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           currentStatus.value = t('agent.chat.finish');
           currentController = null;
 
-          // 更新会话ID（如果返回了新的会话ID）
           if (event.data?.conversationId && conversationId) {
             conversationId.value = event.data.conversationId;
           }
@@ -777,7 +945,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           assistantMessage.error = true;
           assistantMessage.content = event.message || t('agent.chat.processFailed');
           
-          // 将当前迭代的所有运行中的步骤标记为错误
           if (currentIteration && currentIteration.steps.length > 0) {
             currentIteration.steps.forEach((step: any) => {
               if (step.status === 'running') {
@@ -788,7 +955,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
               }
             });
             
-            // 标记迭代完成
             currentIteration.status = 'error';
             currentIteration.endTime = Date.now();
             currentIteration.totalDuration = currentIteration.endTime - currentIteration.startTime;
@@ -825,17 +991,14 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
   const stopGeneration = async () => {
     if (currentController) {
       try {
-        // 1. 先调用后端停止接口（重要：先告诉后端停止）
         if (currentRequestId) {
           logger.debug('调用后端停止接口:', currentRequestId);
           const success = await stopAgent(currentRequestId);
           logger.debug('后端停止结果:', success);
         }
         
-        // 2. 等待一小段时间让后端处理
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        // 3. 再中止前端 SSE 连接
         currentController.abort();
       } catch (error) {
         logger.error('停止失败:', error);
@@ -845,7 +1008,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         loading.value = false;
         currentStatus.value = t('agent.chat.stopGen');
         
-        // 更新最后一条助手消息状态
         const lastMessage = messages.value[messages.value.length - 1];
         if (lastMessage && lastMessage.role === 'assistant') {
           lastMessage.status = 'done';
@@ -860,10 +1022,8 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
   /**
    * 提交用户对 Agent 提问的回答
-   * 由对话流中的提问卡片触发（role === 'question' 消息内嵌交互）
    */
   const resolveQuestion = async (questionId: string, answer: string) => {
-    // 1. 标记提问卡片为已回答
     const questionMsg = messages.value.find(
       (m) => m.role === 'question' && m.question?.questionId === questionId
     ) as any;
@@ -872,7 +1032,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       questionMsg.questionAnswer = answer;
     }
 
-    // 2. 将迭代中对应的 waiting 步骤（isAskUser）更新为 success，并记录用户答案
     for (const msg of messages.value) {
       if (msg.role !== 'assistant' || !msg.process?.iterations) continue;
       for (const iter of msg.process.iterations as any[]) {
@@ -913,7 +1072,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
     const lastMessage = messages.value[messages.value.length - 1];
     if (lastMessage && lastMessage.role === 'assistant' && lastMessage.process) {
-      // 获取当前正在进行的迭代（最后一个迭代）
       const iterations = lastMessage.process.iterations;
       if (iterations && iterations.length > 0) {
         const currentIter = iterations[iterations.length - 1];
@@ -951,12 +1109,8 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
     loading.value = true;
     try {
-      // 调用API获取消息
       const rawMessages = await getConversationMessages(conversationId);
-      
-      // 转换为前端格式
       messages.value = rawMessages.map(convertToAgentMessage);
-      
       logger.debug(`已加载 ${messages.value.length} 条历史消息`);
     } catch (error) {
       logger.error('加载历史消息失败:', error);
@@ -977,23 +1131,20 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       role: mapRole(raw.role),
       content: raw.content || '',
       datetime: raw.createTime || new Date().toISOString(),
-      status: 'done', // 历史消息都是已完成状态
+      status: 'done',
       model: raw.modelId,
       agentId,
       agentName: agentId ? getAgentName?.(agentId) : undefined,
       tokens: raw.tokens,
       duration: raw.duration,
-      // 从 metadata 中提取工具调用和RAG结果
       toolCalls: extractToolCalls(raw.metadata),
       ragResults: extractRagResults(raw.metadata),
-      // 从 metadata.executionProcess 还原 ReAct 迭代执行过程
       process: extractExecutionProcess(raw.metadata),
     };
   };
 
   /**
-   * 从 metadata.executionProcess 还原执行过程（iterations / steps）
-   * 将后端 ExecutionProcessRecord 的扁平结构映射为前端 ExecutionProcess
+   * 从 metadata.executionProcess 还原执行过程
    */
   const extractExecutionProcess = (metadata: any): ExecutionProcess | undefined => {
     if (!metadata || typeof metadata !== 'object') return undefined;
@@ -1003,11 +1154,8 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
     const iterations = ep.iterations.map((iter: any, idx: number) => {
       const steps: ProcessStep[] = [];
-
-      // 将 thinking / tool_call / tool_result 三种 Step 按顺序映射到前端 ProcessStep
       const rawSteps: any[] = Array.isArray(iter.steps) ? iter.steps : [];
 
-      // 聚合连续 thinking step 内容
       let thinkingContent = '';
       for (const s of rawSteps) {
         if (s.type === 'thinking') {
@@ -1015,7 +1163,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         }
       }
 
-      // 先插入 thinking step（如有）
       if (thinkingContent) {
         const thinkingStep = createStep('thinking', t('agent.chat.thinkingProcess'), 'success');
         thinkingStep.subSteps = [{
@@ -1027,7 +1174,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         steps.push(thinkingStep);
       }
 
-      // 按序插入 tool_call / tool_result 配对
       for (const s of rawSteps) {
         if (s.type === 'tool_call') {
           const toolStep = createStep(
@@ -1044,7 +1190,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           toolStep.status = 'success';
           steps.push(toolStep);
         } else if (s.type === 'tool_result') {
-          // 找到刚才插入的同名 tool_call step，补充结果信息
           const paired = [...steps].reverse().find(
             (st: any) => st.type === 'tool_call' && st.metadata?.toolName === s.toolName
           );
@@ -1067,7 +1212,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         startTime: 0,
         endTime: iter.durationMs ?? 0,
         totalDuration: iter.durationMs ?? 0,
-        collapsed: true, // 历史消息默认折叠
+        collapsed: true,
       };
     });
 
@@ -1083,14 +1228,9 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
    */
   const mapRole = (role: string): 'user' | 'assistant' | 'system' => {
     const roleLower = (role || '').toLowerCase();
-    if (roleLower === 'user' || roleLower === 'USER') {
-      return 'user';
-    } else if (roleLower === 'assistant' || roleLower === 'ai' || roleLower === 'ASSISTANT' || roleLower === 'AI') {
-      return 'assistant';
-    } else if (roleLower === 'system' || roleLower === 'SYSTEM') {
-      return 'system';
-    }
-    // 默认返回 assistant
+    if (roleLower === 'user') return 'user';
+    if (['assistant', 'ai'].includes(roleLower)) return 'assistant';
+    if (roleLower === 'system') return 'system';
     return 'assistant';
   };
 
@@ -1098,16 +1238,8 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
    * 从 metadata 中提取工具调用
    */
   const extractToolCalls = (metadata: any): ToolCall[] | undefined => {
-    if (!metadata || typeof metadata !== 'object') {
-      return undefined;
-    }
-
-    // 如果 metadata 中有 toolCalls 字段
-    if (Array.isArray(metadata.toolCalls)) {
-      return metadata.toolCalls;
-    }
-
-    // 如果 metadata 中有 toolName 和 toolParams，构造一个 ToolCall
+    if (!metadata || typeof metadata !== 'object') return undefined;
+    if (Array.isArray(metadata.toolCalls)) return metadata.toolCalls;
     if (metadata.toolName) {
       return [{
         id: metadata.toolExecutionId || `tool-${Date.now()}`,
@@ -1118,7 +1250,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         duration: metadata.toolDuration || metadata.duration,
       }];
     }
-
     return undefined;
   };
 
@@ -1126,16 +1257,8 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
    * 从 metadata 中提取 RAG 结果
    */
   const extractRagResults = (metadata: any): RagResult[] | undefined => {
-    if (!metadata || typeof metadata !== 'object') {
-      return undefined;
-    }
-
-    // 如果 metadata 中有 ragResults 字段
-    if (Array.isArray(metadata.ragResults)) {
-      return metadata.ragResults;
-    }
-
-    // 如果 metadata 中有 knowledgeResult，构造 RAG 结果
+    if (!metadata || typeof metadata !== 'object') return undefined;
+    if (Array.isArray(metadata.ragResults)) return metadata.ragResults;
     if (metadata.knowledgeResult || metadata.ragRetrieve) {
       const result = metadata.knowledgeResult || metadata.ragRetrieve;
       if (Array.isArray(result.documents) && result.documents.length > 0) {
@@ -1148,7 +1271,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         }));
       }
     }
-
     return undefined;
   };
 
@@ -1166,7 +1288,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
    * 重新生成
    */
   const regenerate = async () => {
-    // 找到最后一条用户消息
     const userMessages = messages.value.filter((msg) => msg.role === 'user');
     if (userMessages.length === 0) {
       message.warning(t('agent.chat.noRegenMsg'));
@@ -1175,7 +1296,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
     const lastUserMessage = userMessages[userMessages.length - 1];
     
-    // 删除最后一条助手消息
     const lastAssistantIndex = messages.value.findIndex(
       (msg, index) =>
         msg.role === 'assistant' &&
@@ -1186,14 +1306,11 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       messages.value.splice(lastAssistantIndex, 1);
     }
 
-    // 重新发送
     await sendMessage(lastUserMessage.content);
   };
 
-  // 是否有消息
   const hasMessages = computed(() => messages.value.length > 0);
 
-  // 最后一条消息
   const lastMessage = computed(() => {
     return messages.value.length > 0
       ? messages.value[messages.value.length - 1]
@@ -1216,5 +1333,9 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     resolvePendingTool,
     pendingQuestion,
     resolveQuestion,
+    // PERSONAL MCP 相关
+    pendingSecretRequest,
+    resolveSecretRequest,
+    skipSecretRequest,
   };
 }

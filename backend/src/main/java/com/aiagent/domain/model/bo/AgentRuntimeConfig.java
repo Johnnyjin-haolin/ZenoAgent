@@ -1,5 +1,6 @@
 package com.aiagent.domain.model.bo;
 
+import com.aiagent.api.dto.PersonalMcpToolSchema;
 import com.aiagent.api.dto.RAGConfig;
 import com.aiagent.common.enums.AgentMode;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -44,8 +45,17 @@ public class AgentRuntimeConfig implements Serializable {
 
     // ── 工具 & 知识库 ─────────────────────────────────────────────────────────
 
-    /** 启用的 MCP 服务分组 ID 列表（空表示允许全部） */
-    private List<String> enabledMcpGroups;
+    /**
+     * 绑定的 GLOBAL MCP 服务器 ID 列表（服务端执行）
+     * 空表示允许全部可用的 GLOBAL MCP
+     */
+    private List<String> serverMcpIds;
+
+    /**
+     * 绑定的 PERSONAL MCP 能力标签列表（客户端执行）
+     * 如 ["github", "notion"]
+     */
+    private List<String> personalMcpCapabilities;
 
     /** 启用的工具名称列表（空表示允许全部） */
     private List<String> enabledTools;
@@ -78,4 +88,12 @@ public class AgentRuntimeConfig implements Serializable {
      */
     @JsonIgnore
     private transient RAGConfig ragConfig;
+
+    /**
+     * PERSONAL MCP 工具 Schema 列表（前端 prefetch 后随请求上传，运行时使用）
+     * <p>
+     * 不序列化进 Redis：每次请求由前端重新上传。
+     */
+    @JsonIgnore
+    private transient List<PersonalMcpToolSchema> personalMcpTools;
 }

@@ -73,6 +73,14 @@ const routes: RouteRecordRaw[] = [
           title: 'Skill 管理',
         },
       },
+      {
+        path: 'mcp',
+        name: 'McpServerList',
+        component: () => import('@/views/mcp/McpServerList.vue'),
+        meta: {
+          title: 'MCP 服务器管理',
+        },
+      },
     ],
   },
 ];

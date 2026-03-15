@@ -2,7 +2,6 @@ package com.aiagent.api.controller;
 
 import com.aiagent.api.dto.AgentDefinitionRequest;
 import com.aiagent.api.dto.AgentDefinitionVO;
-import com.aiagent.api.dto.McpGroupInfo;
 import com.aiagent.api.dto.Page;
 import com.aiagent.api.dto.PageResult;
 import com.aiagent.common.response.Result;
@@ -10,7 +9,7 @@ import com.aiagent.domain.agent.AgentDefinitionLoader;
 import com.aiagent.domain.model.entity.AgentEntity;
 import com.aiagent.domain.skill.SkillTreeNode;
 import com.aiagent.domain.tool.SystemTool;
-import com.aiagent.infrastructure.external.mcp.McpGroupManager;
+import com.aiagent.infrastructure.external.mcp.McpManager;
 import com.aiagent.infrastructure.mapper.AgentMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,7 +38,7 @@ public class AgentDefinitionController {
 
     private final AgentMapper agentMapper;
     private final AgentDefinitionLoader agentDefinitionLoader;
-    private final McpGroupManager mcpGroupManager;
+    private final McpManager mcpManager;
     private final List<SystemTool> systemTools;
     private final ObjectMapper objectMapper;
 
@@ -183,12 +182,12 @@ public class AgentDefinitionController {
     // ----------------------------------------------------------------- 辅助
 
     /**
-     * 获取可用的 MCP 工具分组列表（用于配置页工具选择器）
+     * 获取可用的 GLOBAL MCP 服务器列表（用于配置页工具选择器）
+     * 已迁移到 /api/mcp/servers?scope=0，此接口保留作向后兼容
      */
-    @GetMapping("/available-mcp-groups")
-    public Result<List<McpGroupInfo>> getAvailableMcpGroups() {
-        List<McpGroupInfo> groups = mcpGroupManager.getEnabledGroups();
-        return Result.success(groups);
+    @GetMapping("/available-mcp-servers")
+    public Result<List<com.aiagent.infrastructure.config.McpServerConfig.McpServerDefinition>> getAvailableMcpServers() {
+        return Result.success(mcpManager.getAllServers());
     }
 
     /**
@@ -272,7 +271,8 @@ public class AgentDefinitionController {
         }
         try {
             Map<String, Object> map = new HashMap<>();
-            map.put("mcpGroups", tools.getMcpGroups() != null ? tools.getMcpGroups() : new ArrayList<>());
+            map.put("serverMcpIds", tools.getServerMcpIds() != null ? tools.getServerMcpIds() : new ArrayList<>());
+            map.put("personalMcpCapabilities", tools.getPersonalMcpCapabilities() != null ? tools.getPersonalMcpCapabilities() : new ArrayList<>());
             map.put("systemTools", tools.getSystemTools() != null ? tools.getSystemTools() : new ArrayList<>());
             map.put("knowledgeIds", tools.getKnowledgeIds() != null ? tools.getKnowledgeIds() : new ArrayList<>());
             return objectMapper.writeValueAsString(map);

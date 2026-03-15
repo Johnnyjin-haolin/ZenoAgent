@@ -2,6 +2,7 @@ package com.aiagent.domain.agent;
 
 import com.aiagent.api.dto.RAGConfig;
 import com.aiagent.domain.skill.SkillTreeNode;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -12,7 +13,7 @@ import java.util.List;
  * <p>
  * 配置分四块：
  * <ul>
- *   <li>{@link ToolsConfig}   - 工具选择（MCP 分组、系统工具、知识库）</li>
+ *   <li>{@link ToolsConfig}   - 工具选择（服务端 MCP 服务器、个人 MCP 能力、系统工具、知识库）</li>
  *   <li>{@link ContextConfig} - 上下文行为（历史消息加载数、最大工具轮数）</li>
  *   <li>{@link RAGConfig}     - RAG 检索参数，直接复用 {@code api.dto.RAGConfig}</li>
  *   <li>skillTree             - Agent 私有 Skill 目录树</li>
@@ -42,11 +43,25 @@ public class AgentDefinition {
 
     /** 工具选择：Agent 可调用哪些工具 */
     @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ToolsConfig {
-        /** MCP 服务器分组 ID 列表 */
-        private List<String> mcpGroups = new ArrayList<>();
+
+        /**
+         * 绑定的 GLOBAL MCP 服务器 ID 列表（服务端执行，scope=0）
+         * 对应 mcp_server 表中 scope=0 的记录
+         */
+        private List<String> serverMcpIds = new ArrayList<>();
+
+        /**
+         * 绑定的 PERSONAL MCP 能力标签列表（客户端执行，scope=1）
+         * 如 ["github", "notion", "gmail"]
+         * Agent 声明能力需求，具体 MCP 由当前用户的本地配置提供
+         */
+        private List<String> personalMcpCapabilities = new ArrayList<>();
+
         /** 系统内置工具名称列表 */
         private List<String> systemTools = new ArrayList<>();
+
         /** 绑定的知识库 ID 列表 */
         private List<String> knowledgeIds = new ArrayList<>();
     }

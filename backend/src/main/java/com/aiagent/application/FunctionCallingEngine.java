@@ -17,6 +17,9 @@ import com.aiagent.domain.skill.AgentSkillService;
 import com.aiagent.domain.skill.SkillTreeNode;
 import com.aiagent.domain.tool.ToolRegistry;
 import com.aiagent.domain.tool.todo.TodoItem;
+import com.aiagent.api.dto.McpToolInfo;
+import com.aiagent.domain.mcp.McpServerService;
+import com.aiagent.infrastructure.external.mcp.ClientToolCallManager;
 import com.aiagent.infrastructure.external.mcp.ToolConfirmationDecision;
 import com.aiagent.infrastructure.external.mcp.ToolConfirmationManager;
 import com.alibaba.fastjson2.JSON;
@@ -32,10 +35,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * 基于 LangChain4j 原生 Function Calling 的标准 Agent 推理引擎（默认引擎）
@@ -76,6 +76,9 @@ public class FunctionCallingEngine implements AgentEngine {
     @Autowired
     private AgentSkillService agentSkillService;
 
+    @Autowired
+    private ClientToolCallManager clientToolCallManager;
+
     @Override
     public AgentExecutionResult execute(AgentContext context) {
         long startNs = System.nanoTime();
@@ -103,8 +106,17 @@ public class FunctionCallingEngine implements AgentEngine {
         // 初始化 messages
         List<ChatMessage> messages = buildMessages(agentDef, context, progressiveMode);
 
-        // 初始化 toolSpecs
+        // 初始化 toolSpecs（GLOBAL 工具）
         List<ToolSpecification> toolSpecs = resolveInitialToolSpecs(agentDef, progressiveMode);
+
+        // PERSONAL MCP 工具：由前端 prefetch 后随 AgentRequest 上传真实 schema，
+        // 后端直接构造真实 ToolSpecification，不再注入占位假工具
+        List<com.aiagent.api.dto.PersonalMcpToolSchema> personalSchemas = context.getPersonalMcpTools();
+        java.util.Map<String, String> personalToolServerId = toolRegistry.buildPersonalToolMapFromSchemas(personalSchemas);
+        if (personalSchemas != null && !personalSchemas.isEmpty()) {
+            toolSpecs = toolRegistry.appendPersonalToolSpecs(toolSpecs, personalSchemas);
+            log.info("注入 PERSONAL MCP 真实工具 schema: {} 个", personalSchemas.size());
+        }
 
         int toolRound = 0;
 
@@ -242,35 +254,96 @@ public class FunctionCallingEngine implements AgentEngine {
                             }
 
                         } else {
-                            // ── AUTO 模式：直接执行工具 ──────────────────────────────────
-                            if (publisher != null) {
-                                publisher.onToolCall(toolRequest.name(), parseArguments(toolRequest.arguments()));
-                            }
+                            // ── AUTO 模式：判断是否为 PERSONAL 工具 ──────────────────────
 
-                            long toolStart = System.nanoTime();
-                            resultMsg = toolRegistry.execute(toolRequest, context);
-                            long toolDurationMs = (System.nanoTime() - toolStart) / 1_000_000;
+                            String personalServerId = toolRegistry.getPersonalServerId(
+                                toolRequest.name(), personalToolServerId);
 
-                            messages.add(resultMsg);
-                            context.addMessage(resultMsg);
+                            if (personalServerId != null && publisher != null) {
+                                // ── PERSONAL MCP：通过 SSE 下发给浏览器执行 ──────────────
+                                java.util.concurrent.CompletableFuture<String> future =
+                                    new java.util.concurrent.CompletableFuture<>();
+                                String callId = clientToolCallManager.newCall(future);
 
-                            boolean isError = resultMsg.text() != null && resultMsg.text().startsWith("[ERROR]");
-                            iteration.getSteps().add(Step.builder()
-                                .type("tool_result")
-                                .toolName(toolRequest.name())
-                                .toolResult(resultMsg.text())
-                                .toolDurationMs(toolDurationMs)
-                                .error(isError)
-                                .errorMessage(isError ? resultMsg.text() : null)
-                                .build());
-
-                            if (publisher != null) {
-                                publisher.onToolResult(
+                                publisher.onPersonalToolCall(
+                                    callId,
                                     toolRequest.name(),
-                                    resultMsg.text(),
-                                    toolDurationMs,
-                                    isError ? resultMsg.text() : null
+                                    personalServerId,
+                                    parseArguments(toolRequest.arguments())
                                 );
+
+                                log.info("[PERSONAL] SSE 下发工具调用: toolName={}, callId={}",
+                                    toolRequest.name(), callId);
+
+                                long toolStart = System.nanoTime();
+                                String resultText;
+                                boolean isError = false;
+                                try {
+                                    resultText = clientToolCallManager.waitForResult(callId);
+                                } catch (Exception ex) {
+                                    resultText = "[ERROR] 客户端工具执行失败: " + ex.getMessage();
+                                    isError = true;
+                                }
+                                long toolDurationMs = (System.nanoTime() - toolStart) / 1_000_000;
+
+                                resultMsg = ToolExecutionResultMessage.builder()
+                                    .id(toolRequest.id())
+                                    .toolName(toolRequest.name())
+                                    .text(resultText)
+                                    .isError(isError)
+                                    .build();
+
+                                messages.add(resultMsg);
+                                context.addMessage(resultMsg);
+
+                                iteration.getSteps().add(Step.builder()
+                                    .type("tool_result")
+                                    .toolName(toolRequest.name())
+                                    .toolResult(resultText)
+                                    .toolDurationMs(toolDurationMs)
+                                    .error(isError)
+                                    .errorMessage(isError ? resultText : null)
+                                    .build());
+
+                                if (publisher != null) {
+                                    publisher.onToolResult(
+                                        toolRequest.name(), resultText, toolDurationMs,
+                                        isError ? resultText : null);
+                                }
+
+                            } else {
+                                // ── GLOBAL MCP / 系统工具：直接在服务端执行 ──────────────
+                                if (publisher != null) {
+                                    publisher.onToolCall(toolRequest.name(),
+                                        parseArguments(toolRequest.arguments()));
+                                }
+
+                                long toolStart = System.nanoTime();
+                                resultMsg = toolRegistry.execute(toolRequest, context);
+                                long toolDurationMs = (System.nanoTime() - toolStart) / 1_000_000;
+
+                                messages.add(resultMsg);
+                                context.addMessage(resultMsg);
+
+                                boolean isError = resultMsg.text() != null
+                                    && resultMsg.text().startsWith("[ERROR]");
+                                iteration.getSteps().add(Step.builder()
+                                    .type("tool_result")
+                                    .toolName(toolRequest.name())
+                                    .toolResult(resultMsg.text())
+                                    .toolDurationMs(toolDurationMs)
+                                    .error(isError)
+                                    .errorMessage(isError ? resultMsg.text() : null)
+                                    .build());
+
+                                if (publisher != null) {
+                                    publisher.onToolResult(
+                                        toolRequest.name(),
+                                        resultMsg.text(),
+                                        toolDurationMs,
+                                        isError ? resultMsg.text() : null
+                                    );
+                                }
                             }
                         }
                         log.info("迭代执行结果：{}", resultMsg);
@@ -371,14 +444,31 @@ public class FunctionCallingEngine implements AgentEngine {
             return "";
         }
 
+        // 收集所有 skillId，一次批量查询，避免 N 次单查
+        List<String> skillIds = enabledLeaves.stream()
+            .map(SkillTreeNode::getSkillId)
+            .filter(Objects::nonNull)
+            .distinct()
+            .collect(java.util.stream.Collectors.toList());
+
+        if (skillIds.isEmpty()) {
+            return "";
+        }
+
+        Map<String, AgentSkill> skillMap = agentSkillService.getByIdMap(skillIds);
+
         StringBuilder sb = new StringBuilder();
-        sb.append("\n\n## Available Skills\n");
-        sb.append("Use `system_load_skill` tool with the skill ID to load full content when needed.\n\n");
+        sb.append("\n\n## 可用技能列表\n");
+        sb.append("如需查看某条技能的完整内容，请调用 `system_load_skill` 工具并传入技能 ID。\n\n");
 
         for (SkillTreeNode node : enabledLeaves) {
-            if (node.getSkillId() == null) continue;
-            AgentSkill skill = agentSkillService.getById(node.getSkillId());
-            if (skill == null) continue;
+            if (node.getSkillId() == null) {
+                continue;
+            }
+            AgentSkill skill = skillMap.get(node.getSkillId());
+            if (skill == null) {
+                continue;
+            }
             sb.append("- [").append(skill.getId()).append("] **").append(skill.getName()).append("**: ");
             sb.append(skill.getSummary()).append("\n");
         }
@@ -390,9 +480,13 @@ public class FunctionCallingEngine implements AgentEngine {
      * 递归收集 enabled=true 的叶节点（有 skillId 的节点）
      */
     private void collectEnabledLeafNodes(List<SkillTreeNode> nodes, List<SkillTreeNode> result) {
-        if (nodes == null) return;
+        if (nodes == null) {
+            return;
+        }
         for (SkillTreeNode node : nodes) {
-            if (!node.isEnabled()) continue;
+            if (!node.isEnabled()) {
+                continue;
+            }
             if (node.getSkillId() != null) {
                 result.add(node);
             } else {
@@ -420,8 +514,12 @@ public class FunctionCallingEngine implements AgentEngine {
         todos.stream()
             .sorted((a, b) -> {
                 if (a.getStatus() != b.getStatus()) {
-                    if (a.getStatus() == TodoItem.TodoStatus.pending) return -1;
-                    if (b.getStatus() == TodoItem.TodoStatus.pending) return 1;
+                    if (a.getStatus() == TodoItem.TodoStatus.pending) {
+                        return -1;
+                    }
+                    if (b.getStatus() == TodoItem.TodoStatus.pending) {
+                        return 1;
+                    }
                 }
                 return Integer.compare(a.getPriority(), b.getPriority());
             })
@@ -451,6 +549,10 @@ public class FunctionCallingEngine implements AgentEngine {
 
         allSpecs.stream()
             .filter(spec -> spec.name().startsWith("system_"))
+            .filter(spec -> {
+                // 非渐进式模式下，system_resolve_tools 无意义，不注入，避免 LLM 误调用
+                return progressiveMode || !"system_resolve_tools".equals(spec.name());
+            })
             .forEach(result::add);
 
         if (!progressiveMode) {

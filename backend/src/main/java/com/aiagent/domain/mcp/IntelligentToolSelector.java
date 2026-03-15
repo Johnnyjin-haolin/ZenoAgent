@@ -1,6 +1,6 @@
 package com.aiagent.domain.mcp;
 
-import com.aiagent.infrastructure.external.mcp.McpGroupManager;
+import com.aiagent.infrastructure.external.mcp.McpManager;
 import com.aiagent.api.dto.McpToolInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,24 +21,23 @@ import java.util.stream.Collectors;
 public class IntelligentToolSelector {
     
     @Autowired
-    private McpGroupManager mcpGroupManager;
+    private McpManager mcpManager;
 
     /**
      * 根据任务需求选择工具
-     * 
+     *
      * @param taskRequirement 任务需求描述
-     * @param enabledGroups 启用的工具分组
-     * @param enabledTools 启用的工具名称列表（为空则允许所有工具）
+     * @param serverIds       启用的 GLOBAL MCP 服务器 ID 列表（空表示全部）
+     * @param enabledTools    启用的工具名称列表（为空则允许所有工具）
      * @return 选中的工具列表
      */
-    public List<McpToolInfo> selectTools(String taskRequirement, List<String> enabledGroups, List<String> enabledTools) {
+    public List<McpToolInfo> selectTools(String taskRequirement, List<String> serverIds, List<String> enabledTools) {
         log.info("开始智能选择工具，任务需求: {}", taskRequirement);
-        //如果没有启用的分组且没有指定启用的工具，则返回空列表
-        if (CollectionUtils.isEmpty(enabledGroups)&&CollectionUtils.isEmpty(enabledTools)) {
+        if (CollectionUtils.isEmpty(serverIds) && CollectionUtils.isEmpty(enabledTools)) {
             return java.util.Collections.emptyList();
         }
-        // 1. 先按分组获取工具
-        List<McpToolInfo> availableTools = mcpGroupManager.getToolsByGroups(enabledGroups);
+        // 1. 先按服务器 ID 获取工具
+        List<McpToolInfo> availableTools = mcpManager.getToolsByServerIds(serverIds);
         
         if (availableTools.isEmpty()) {
             log.warn("未找到可用工具");
@@ -64,7 +63,7 @@ public class IntelligentToolSelector {
      * 根据工具名称获取工具信息
      */
     public McpToolInfo getToolByName(String toolName) {
-        List<McpToolInfo> allTools = mcpGroupManager.getAllTools();
+        List<McpToolInfo> allTools = mcpManager.getAllTools();
         return allTools.stream()
             .filter(tool -> toolName.equals(tool.getName()))
             .findFirst()

@@ -13,45 +13,33 @@
 
     <div v-else class="welcome-container">
       <div class="welcome-content">
-        <div class="holographic-core">
-          <div class="core-inner"></div>
-          <div class="core-outer"></div>
-        </div>
-        <h3 class="welcome-title">{{ t('home.title') }} <span class="version">{{ t('home.version') }}</span></h3>
-        <p class="welcome-subtitle">{{ t('home.subtitle') }}</p>
-        
-        <div class="capabilities-grid">
-          <div v-for="item in capabilityItems" :key="item.title" class="tech-card">
-            <div class="card-glow"></div>
-            <div class="card-icon">{{ item.icon }}</div>
-            <div class="card-title">{{ item.title }}</div>
-            <div class="card-desc">{{ item.desc }}</div>
-          </div>
+        <div class="welcome-avatar">
+          <div class="avatar-ring"></div>
+          <span class="avatar-icon">✦</span>
         </div>
 
-        <div class="scenarios-section">
-          <div class="section-header">
-            <span class="header-line"></span>
-            <span class="header-text">{{ t('home.initiate') }}</span>
-            <span class="header-line"></span>
-          </div>
-          <div class="scenario-chips">
-            <div
-              v-for="prompt in scenarioPrompts"
-              :key="prompt"
-              class="tech-chip"
-              @click="emit('apply-prompt', prompt)"
-            >
-              <span class="chip-bracket">[</span>
-              {{ prompt }}
-              <span class="chip-bracket">]</span>
+        <h3 class="welcome-greeting">{{ t('agent.greeting') }}</h3>
+        <p v-if="agentDescription" class="welcome-agent-desc">{{ agentDescription }}</p>
+
+        <div class="categories-wrap">
+          <div v-for="cat in welcomeCategories" :key="cat.label" class="category-col">
+            <div class="category-label">{{ cat.label }}</div>
+            <div class="category-items">
+              <div
+                v-for="item in cat.items"
+                :key="item"
+                class="prompt-chip"
+                @click="emit('apply-prompt', item)"
+              >
+                {{ item }}
+              </div>
             </div>
           </div>
         </div>
-        
-        <div class="system-status">
-          <span class="status-dot"></span>
-          {{ t('home.systemReady') }}
+
+        <div class="welcome-hint">
+          <span class="hint-dot"></span>
+          {{ t('agent.greetingHint') }}
         </div>
       </div>
     </div>
@@ -64,16 +52,15 @@ import { useI18n } from 'vue-i18n';
 import AgentMessage from './AgentMessage.vue';
 import type { AgentMessage as AgentMessageType } from '../agent.types';
 
-type CapabilityItem = {
-  icon: string;
-  title: string;
-  desc: string;
+type WelcomeCategory = {
+  label: string;
+  items: string[];
 };
 
 defineProps<{
   messages: AgentMessageType[];
-  capabilityItems: CapabilityItem[];
-  scenarioPrompts: string[];
+  welcomeCategories: WelcomeCategory[];
+  agentDescription?: string;
 }>();
 
 const emit = defineEmits<{
@@ -106,19 +93,18 @@ defineExpose({ scrollToBottom });
   min-height: 0;
   scroll-behavior: smooth;
 
-  /* Custom Scrollbar */
   &::-webkit-scrollbar {
     width: 6px;
   }
-  
+
   &::-webkit-scrollbar-track {
     background: rgba(255, 255, 255, 0.02);
   }
-  
+
   &::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.1);
     border-radius: 3px;
-    
+
     &:hover {
       background: rgba(255, 255, 255, 0.2);
     }
@@ -130,238 +116,146 @@ defineExpose({ scrollToBottom });
   justify-content: center;
   align-items: center;
   min-height: 100%;
-  padding: 40px 0;
+  padding: 48px 0 32px;
 }
 
 .welcome-content {
-  max-width: 700px;
+  max-width: 720px;
   width: 100%;
   text-align: center;
+}
+
+/* Avatar */
+.welcome-avatar {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 20px;
   position: relative;
-  z-index: 1;
-}
-
-/* Holographic Core Effect */
-.holographic-core {
-  width: 60px;
-  height: 60px;
-  margin: 0 auto 24px;
-  position: relative;
-  
-  .core-inner {
-    position: absolute;
-    inset: 10px;
-    background: #3B82F6;
-    border-radius: 50%;
-    filter: blur(8px);
-    opacity: 0.8;
-    animation: pulse 2s infinite;
-  }
-  
-  .core-outer {
-    position: absolute;
-    inset: 0;
-    border: 2px solid rgba(59, 130, 246, 0.5);
-    border-radius: 50%;
-    animation: spin 10s linear infinite;
-    
-    &::before, &::after {
-      content: '';
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 120%;
-      height: 120%;
-      border: 1px dashed rgba(59, 130, 246, 0.3);
-      border-radius: 50%;
-      transform: translate(-50%, -50%);
-    }
-  }
-}
-
-.welcome-title {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 24px;
-  font-weight: 700;
-  color: #fff;
-  margin-bottom: 8px;
-  letter-spacing: -0.5px;
-  text-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
-  
-  .version {
-    font-size: 12px;
-    color: #60A5FA;
-    background: rgba(59, 130, 246, 0.1);
-    padding: 2px 6px;
-    border-radius: 4px;
-    vertical-align: middle;
-    border: 1px solid rgba(59, 130, 246, 0.3);
-  }
-}
-
-.welcome-subtitle {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.6);
-  margin-bottom: 32px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
-
-.capabilities-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-  margin-bottom: 40px;
-}
-
-.tech-card {
-  position: relative;
-  background: rgba(2, 4, 8, 0.6);
-  border: 1px solid rgba(59, 130, 246, 0.15);
-  border-radius: 12px;
-  padding: 16px;
-  text-align: left;
-  transition: all 0.3s ease;
-  overflow: hidden;
-  backdrop-filter: blur(10px);
-  
-  .card-glow {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: radial-gradient(circle at top right, rgba(59, 130, 246, 0.1), transparent 60%);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-  }
-  
-  &:hover {
-    border-color: rgba(59, 130, 246, 0.4);
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-    
-    .card-glow {
-      opacity: 1;
-    }
-    
-    .card-title {
-      color: #60A5FA;
-    }
-  }
-  
-  .card-icon {
-    font-size: 20px;
-    margin-bottom: 12px;
-    color: #3B82F6;
-  }
-  
-  .card-title {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 14px;
-    font-weight: 600;
-    color: #e2e8f0;
-    margin-bottom: 6px;
-    transition: color 0.3s ease;
-  }
-  
-  .card-desc {
-    font-size: 12px;
-    color: #94a3b8;
-    line-height: 1.5;
-  }
-}
-
-.scenarios-section {
-  margin-bottom: 32px;
-  
-  .section-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 16px;
-    
-    .header-line {
-      flex: 1;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-    }
-    
-    .header-text {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      color: rgba(59, 130, 246, 0.6);
-      letter-spacing: 2px;
-    }
-  }
-}
-
-.scenario-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  justify-content: center;
-}
-
-.tech-chip {
-  cursor: pointer;
-  padding: 6px 16px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  transition: all 0.2s ease;
-  
-  .chip-bracket {
-    color: rgba(59, 130, 246, 0.4);
-    transition: color 0.2s ease;
-  }
-  
-  &:hover {
-    background: rgba(59, 130, 246, 0.1);
-    border-color: rgba(59, 130, 246, 0.3);
-    color: #fff;
-    
-    .chip-bracket {
-      color: #60A5FA;
-    }
-  }
-}
-
-.system-status {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  color: rgba(59, 130, 246, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  
-  .status-dot {
-    width: 6px;
-    height: 6px;
-    background: #10B981;
+
+  .avatar-ring {
+    position: absolute;
+    inset: 0;
     border-radius: 50%;
-    box-shadow: 0 0 8px #10B981;
-    animation: blink 2s infinite;
+    border: 1.5px solid rgba(59, 130, 246, 0.45);
+    animation: ring-pulse 3s ease-in-out infinite;
+  }
+
+  .avatar-icon {
+    font-size: 22px;
+    color: #60a5fa;
+    line-height: 1;
+    text-shadow: 0 0 16px rgba(59, 130, 246, 0.6);
+    animation: icon-glow 3s ease-in-out infinite;
   }
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 0.8; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.9); }
+.welcome-greeting {
+  font-size: 22px;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-bottom: 8px;
+  letter-spacing: -0.3px;
 }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+.welcome-agent-desc {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.45);
+  margin-bottom: 36px;
+  line-height: 1.6;
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Categories */
+.categories-wrap {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 36px;
+  text-align: left;
+}
+
+.category-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.category-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(148, 163, 184, 0.7);
+  letter-spacing: 0.5px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 2px;
+}
+
+.category-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.prompt-chip {
+  cursor: pointer;
+  padding: 9px 12px;
+  font-size: 12.5px;
+  color: rgba(226, 232, 240, 0.75);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  line-height: 1.45;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.3);
+    color: #93c5fd;
+    transform: translateX(3px);
+  }
+
+  &:active {
+    transform: translateX(2px) scale(0.99);
+  }
+}
+
+/* Hint */
+.welcome-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: rgba(100, 116, 139, 0.8);
+  letter-spacing: 0.2px;
+
+  .hint-dot {
+    width: 6px;
+    height: 6px;
+    background: #10b981;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #10b981;
+    flex-shrink: 0;
+    animation: blink 2.5s ease-in-out infinite;
+  }
+}
+
+@keyframes ring-pulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+@keyframes icon-glow {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
 }
 
 @keyframes blink {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  50% { opacity: 0.25; }
 }
 </style>
-

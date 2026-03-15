@@ -111,12 +111,15 @@ public class AgentContextService {
                 ? context.getConfig().getMode()
                 : com.aiagent.common.enums.AgentMode.AUTO));
 
-        // 工具 & 知识库（请求覆盖）
-        if (request.getEnabledMcpGroups() != null) {
-            cfgBuilder.enabledMcpGroups(request.getEnabledMcpGroups());
-        } else if (context.getConfig() != null) {
-            cfgBuilder.enabledMcpGroups(context.getConfig().getEnabledMcpGroups());
+        // 工具 & 知识库（请求覆盖，降级到 AgentDefinition 配置）
+        if (request.getServerMcpIds() != null) {
+            cfgBuilder.serverMcpIds(request.getServerMcpIds());
+        } else if (context.getConfig() != null && context.getConfig().getServerMcpIds() != null) {
+            cfgBuilder.serverMcpIds(context.getConfig().getServerMcpIds());
+        } else if (agentDef != null && agentDef.getTools() != null) {
+            cfgBuilder.serverMcpIds(agentDef.getTools().getServerMcpIds());
         }
+
         if (request.getEnabledTools() != null) {
             cfgBuilder.enabledTools(request.getEnabledTools());
         } else if (context.getConfig() != null) {
@@ -145,6 +148,12 @@ public class AgentContextService {
         log.debug("RAG 配置: maxResults={}, minScore={}", ragConfig.getMaxResults(), ragConfig.getMinScore());
 
         context.setConfig(cfgBuilder.build());
+
+        // personalMcpTools 是 transient 字段，每次请求直接从前端上传的 schema 写入，不经 Redis
+        if (request.getPersonalMcpTools() != null && !request.getPersonalMcpTools().isEmpty()) {
+            context.setPersonalMcpTools(request.getPersonalMcpTools());
+            log.debug("写入 PERSONAL MCP 工具 schema: {} 个", request.getPersonalMcpTools().size());
+        }
 
         int historyLoadLimit = context.getConfig().getHistoryMessageLoadLimit();
         // 强制从数据库加载最新的历史对话消息

@@ -46,37 +46,47 @@ export default {
     systemReady: 'System Ready',
     hero: {
       title: {
-        line1: 'Perceive.',
-        line2: 'Reason.',
-        line3: 'Execute.'
+        line1: 'Your Business,',
+        line2: 'Powered by AI,',
+        line3: 'Actually Delivered.'
       },
-      subtitle: 'A React-based autonomous agent. Powered by RAG & MCP. \nZeno understands your intent, orchestrates tools, and solves complex problems automatically.',
-      start: 'Start Integration',
-      docs: 'View Documentation ->'
+      subtitle: 'Stop writing one-off prompts. Zeno lets you build dedicated Agents for every workflow—\nprivate knowledge, enterprise tools, and human oversight, all in one platform.',
+      start: 'Get Started',
+      docs: 'View Docs ->'
     },
     capabilities: {
-      context: {
-        title: 'Context',
-        desc: 'Deeply understand code semantics, dependencies, and business logic flows.'
+      customAgent: {
+        title: 'Purpose-Built Agents',
+        desc: 'Build a dedicated AI for sales, ops, legal, and more—each with its own tools, knowledge, and behavior rules that never bleed into each other.'
+      },
+      dualMcp: {
+        title: 'Team & Personal Tools',
+        desc: 'Enterprise tools are managed centrally; personal APIs (GitHub, Notion, etc.) run only in the employee\'s browser—keys never touch your server.'
+      },
+      skill: {
+        title: 'Institutional Knowledge',
+        desc: 'Turn SOPs and product manuals into Skills that every Agent can recall instantly—always accurate, always up to date.'
+      },
+      progressiveTools: {
+        title: 'Unlimited Tool Roster',
+        desc: 'Agents can recognize hundreds of tools and load only what they need—no more context overflow or tool conflicts to worry about.'
+      },
+      humanInLoop: {
+        title: 'Human Oversight',
+        desc: 'High-risk actions like DB writes? Let AI pause, get human sign-off, then proceed. Switch between autonomous and supervised modes anytime.'
       },
       rag: {
-        title: 'RAG',
-        desc: 'Real-time retrieval from private knowledge bases with precise recall.'
-      },
-      mcp: {
-        title: 'MCP',
-        desc: 'Expand agent capabilities, seamlessly integrating databases, terminals, and cloud services.'
-      },
-      agent: {
-        title: 'Agent',
-        desc: 'Autonomously plan tasks and call tools to solve complex problems.'
+        title: 'Answers With Evidence',
+        desc: 'Feed Agents your PDFs, Word docs, and wikis. Every response cites real passages pulled from your knowledge base—not guesswork.'
       }
     },
-    footer: '© 2026 Zeno Agent. Lightweight Agent.'
+    footer: '© 2026 Zeno Agent. Server-Side B2B AI Agent Platform.'
   },
   agent: {
     welcome: 'Zeno Cognitive Core',
     subtitle: 'Advanced Autonomous Agent System',
+    greeting: 'Hi, how can I help you?',
+    greetingHint: '↑  Type your question, or pick an example below to get started',
     inputPlaceholder: 'Enter command or query...',
     send: 'Send',
     history: 'History',
@@ -170,6 +180,20 @@ export default {
       compliance: 'Check compliance based on knowledge base',
       assetQuery: 'Query asset info using tools',
       riskCheck: 'Check contract risks',
+    },
+    welcomeCategories: {
+      knowledge: {
+        label: '💡 Knowledge Q&A',
+        items: ['Help me find product docs', 'Explain how this feature works', 'Answer my how-to question'],
+      },
+      tool: {
+        label: '🛠️ Tool Tasks',
+        items: ['Search and summarize recent info', 'Query data and organize results', 'Call an API to complete a task'],
+      },
+      analysis: {
+        label: '📋 Analysis & Writing',
+        items: ['Summarize the key points of this content', 'Analyze data and give recommendations', 'Draft a work report for me'],
+      },
     },
     selectModel: 'Select Model',
     stopGeneration: 'Stop Generation',

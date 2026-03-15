@@ -102,6 +102,20 @@ public class SseAgentEventPublisher implements AgentEventPublisher {
     }
 
     /**
+     * 向浏览器下发 PERSONAL MCP 工具调用请求
+     * 浏览器收到后调用本地 MCP，执行完成后回传 /api/mcp/client-tool-result
+     */
+    @Override
+    public void onPersonalToolCall(String callId, String toolName, String serverId, Object params) {
+        java.util.Map<String, Object> data = new java.util.HashMap<>();
+        data.put("callId", callId);
+        data.put("toolName", toolName);
+        data.put("serverId", serverId);
+        data.put("params", params);
+        send(AgentConstants.EVENT_PERSONAL_TOOL_CALL, "客户端工具调用: " + toolName, null, data);
+    }
+
+    /**
      * Override accept() 以透传 AgentEventPublisher 默认实现不处理的自定义事件
      * （如 agent:ask_user_question），避免被 default 分支静默丢弃
      */

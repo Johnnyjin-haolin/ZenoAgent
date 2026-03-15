@@ -108,3 +108,27 @@ CREATE TABLE IF NOT EXISTS `document` (
   CONSTRAINT `fk_document_knowledge_base` FOREIGN KEY (`knowledge_base_id`) 
     REFERENCES `knowledge_base`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文档表';
+
+-- MCP 服务器配置表（scope: 0=GLOBAL 服务端执行, 1=PERSONAL 客户端执行）
+CREATE TABLE IF NOT EXISTS `mcp_server` (
+  `id`              VARCHAR(64)   NOT NULL PRIMARY KEY                              COMMENT 'MCP 服务器ID（UUID）',
+  `name`            VARCHAR(128)  NOT NULL                                          COMMENT '服务器名称',
+  `description`     VARCHAR(512)  DEFAULT NULL                                      COMMENT '服务器描述',
+  `scope`           TINYINT       NOT NULL DEFAULT 0                                COMMENT '作用域：0=GLOBAL（服务端执行），1=PERSONAL（客户端执行）',
+  `owner_user_id`   VARCHAR(64)   DEFAULT NULL                                      COMMENT '所属用户ID（PERSONAL 时有效）',
+  `capability`      VARCHAR(64)   DEFAULT NULL                                      COMMENT '能力标签',
+  `connection_type` VARCHAR(32)   NOT NULL DEFAULT 'streamable-http'               COMMENT '连接类型',
+  `endpoint_url`    VARCHAR(512)  NOT NULL                                          COMMENT '服务端点 URL',
+  `auth_header`     TEXT          DEFAULT NULL                                      COMMENT '认证请求头（JSON）',
+  `extra_headers`   TEXT          DEFAULT NULL                                      COMMENT '额外请求头（JSON）',
+  `timeout_ms`      INT           NOT NULL DEFAULT 10000                            COMMENT '连接超时（毫秒）',
+  `read_timeout_ms` INT           NOT NULL DEFAULT 30000                            COMMENT '读取超时（毫秒）',
+  `retry_count`     INT           NOT NULL DEFAULT 3                                COMMENT '失败重试次数',
+  `enabled`         TINYINT(1)    NOT NULL DEFAULT 1                                COMMENT '是否启用：1=启用，0=禁用',
+  `created_by`      VARCHAR(64)   DEFAULT NULL                                      COMMENT '创建人用户ID',
+  `create_time`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP               COMMENT '创建时间',
+  `update_time`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  INDEX `idx_scope`         (`scope`),
+  INDEX `idx_owner_user_id` (`owner_user_id`),
+  INDEX `idx_capability`    (`capability`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='MCP 服务器配置表';

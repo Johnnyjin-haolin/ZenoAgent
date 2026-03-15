@@ -59,6 +59,21 @@ public interface AgentEventPublisher {
     void onThinkingToken(String token);
 
     /**
+     * 向浏览器下发 PERSONAL MCP 工具调用请求（客户端执行）
+     * <p>
+     * 浏览器收到此事件后，使用 localStorage 中存储的密钥调用本地 MCP，
+     * 执行完成后通过 POST /api/mcp/client-tool-result 将结果回传。
+     *
+     * @param callId   唯一调用 ID（与 ClientToolCallManager 中的 Future 关联）
+     * @param toolName MCP 工具名称
+     * @param serverId 对应的 PERSONAL MCP 服务器 ID
+     * @param params   工具参数（已解析为 Map 或原始字符串）
+     */
+    default void onPersonalToolCall(String callId, String toolName, String serverId, Object params) {
+        // 默认空实现，SseAgentEventPublisher 覆盖此方法
+    }
+
+    /**
      * 所有流式 token 发送完毕（最终回复已完整输出）
      */
     void onStreamComplete();

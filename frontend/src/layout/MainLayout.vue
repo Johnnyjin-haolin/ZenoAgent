@@ -60,6 +60,15 @@
             <span>Skill 管理</span>
           </router-link>
         </a-menu-item>
+
+        <a-menu-item key="mcp">
+          <template #icon>
+            <api-outlined />
+          </template>
+          <router-link to="/mcp">
+            <span>MCP 服务器</span>
+          </router-link>
+        </a-menu-item>
       </a-menu>
       
       <div class="sidebar-footer" @click="toggleCollapse">
@@ -119,7 +128,8 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   TranslationOutlined,
-  UserOutlined
+  UserOutlined,
+  ApiOutlined,
 } from '@ant-design/icons-vue';
 import TechBackground from '@/components/TechBackground.vue';
 import TechBorder from '@/components/TechBorder.vue';
@@ -143,6 +153,8 @@ const goHome = () => {
         selectedKeys.value = ['agents'];
       } else if (path.startsWith('/skills')) {
         selectedKeys.value = ['skills'];
+      } else if (path.startsWith('/mcp')) {
+        selectedKeys.value = ['mcp'];
       } else if (path.startsWith('/agent')) {
         selectedKeys.value = ['agent'];
       } else if (path.startsWith('/knowledge-bases')) {
@@ -257,22 +269,44 @@ const toggleLanguage = () => {
     margin: 4px 12px;
     width: auto;
     border-radius: 8px;
-    color: var(--color-text-secondary);
+    color: #94a3b8 !important;
     transition: all 0.2s;
-    
-    &:hover {
-      color: var(--color-text-primary);
-      background: rgba(255, 255, 255, 0.05);
+
+    a, a:hover, a:focus, a:active {
+      color: inherit !important;
+      text-decoration: none;
+    }
+
+    span {
+      color: inherit !important;
+    }
+
+    &:hover,
+    &.ant-menu-item-active {
+      color: #e2e8f0 !important;
+      background: rgba(255, 255, 255, 0.05) !important;
+
+      a, a:hover {
+        color: #e2e8f0 !important;
+      }
+
+      .anticon {
+        color: #e2e8f0 !important;
+      }
     }
     
     &.ant-menu-item-selected {
-      background: rgba(59, 130, 246, 0.15);
-      color: var(--google-blue);
+      background: rgba(59, 130, 246, 0.15) !important;
+      color: var(--google-blue) !important;
       font-weight: 500;
       box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.2);
+
+      a, a:hover {
+        color: var(--google-blue) !important;
+      }
       
       .anticon {
-        color: var(--google-blue);
+        color: var(--google-blue) !important;
       }
     }
     
@@ -294,7 +328,7 @@ const toggleLanguage = () => {
   transition: all 0.2s;
   
   &:hover {
-    color: var(--color-text-primary);
+    color: #e2e8f0;
     background: rgba(255, 255, 255, 0.05);
   }
 }

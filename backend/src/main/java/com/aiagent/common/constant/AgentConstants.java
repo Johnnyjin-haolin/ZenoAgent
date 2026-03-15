@@ -116,5 +116,11 @@ public class AgentConstants {
      * 用户交互事件（系统工具 ASK_USER_QUESTION 使用）
      */
     public static final String EVENT_AGENT_ASK_USER_QUESTION = "agent:ask_user_question";
+
+    /**
+     * PERSONAL MCP 客户端工具调用事件
+     * 服务端通过 SSE 下发此事件，浏览器在本地执行 MCP 工具，完成后回传结果
+     */
+    public static final String EVENT_PERSONAL_TOOL_CALL = "agent:personal_tool_call";
 }
 

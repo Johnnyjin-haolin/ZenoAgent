@@ -40,10 +40,11 @@ public class McpToolInfo {
     private  Map<String, Object> metadata;
     
     /**
-     * 工具分组
+     * 是否是 PERSONAL MCP 工具（客户端执行）
+     * true = 由浏览器在本地执行，服务端通过 SSE 下发调用请求
      */
-    private String groupId;
-    
+    private boolean personal;
+
     /**
      * 是否启用
      */

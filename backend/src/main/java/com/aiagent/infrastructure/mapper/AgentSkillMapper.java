@@ -16,6 +16,11 @@ public interface AgentSkillMapper {
 
     AgentSkillEntity selectById(@Param("id") String id);
 
+    /**
+     * 批量按 ID 查询（供 Skill 渐进式加载批量构建摘要使用）
+     */
+    List<AgentSkillEntity> selectByIds(@Param("ids") List<String> ids);
+
     List<AgentSkillEntity> selectAll();
 
     /**

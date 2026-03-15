@@ -60,13 +60,22 @@
       <ChatMessages
         ref="chatMessagesRef"
         :messages="messages"
-        :capability-items="capabilityItems"
-        :scenario-prompts="scenarioPrompts"
+        :welcome-categories="welcomeCategories"
+        :agent-description="currentAgent?.description"
         @apply-prompt="applyScenarioPrompt"
         @confirm-tool="handleConfirmTool"
         @reject-tool="handleRejectTool"
         @answer-question="resolveQuestion"
       />
+
+      <!-- PERSONAL MCP 行内密钥补充卡片 -->
+      <div v-if="pendingSecretRequest" class="secret-card-wrap">
+        <McpSecretInlineCard
+          :request="pendingSecretRequest"
+          @execute="resolveSecretRequest"
+          @skip="skipSecretRequest"
+        />
+      </div>
 
       <ChatInput
         ref="chatInputRef"
@@ -106,14 +115,16 @@ import logger from '@/utils/logger';
 import { useAgentChat } from './hooks/useAgentChat';
 import { useBrandConfig } from './hooks/useBrandConfig';
 import { useConversationList } from './hooks/useConversationList';
-import { getAvailableModels, getKnowledgeList, updateConversationAgent } from './agent.api';
+import { getAvailableModels, getKnowledgeList, updateConversationAgent, getMcpServers } from './agent.api';
 import { getMcpTools } from './agent.api.adapted';
+import type { McpServerInfo } from './agent.types';
 import ChatConfigDrawer from './components/ChatConfigDrawer.vue';
 import ChatHeader from './components/ChatHeader.vue';
 import ChatInput from './components/ChatInput.vue';
 import ChatMessages from './components/ChatMessages.vue';
 import AgentSlide from './components/AgentSlide.vue';
 import AgentSelector from './components/AgentSelector.vue';
+import McpSecretInlineCard from './components/McpSecretInlineCard.vue';
 import { AGENT_CONFIG_STORAGE_KEY } from './agent.constants';
 import type { ModelInfo, KnowledgeInfo, AgentDefinition } from './agent.types';
 import { ModelType } from '@/types/model.types';
@@ -170,6 +181,24 @@ const selectedTools = ref<string[]>([]);
 const executionMode = ref<'AUTO' | 'MANUAL'>('AUTO');
 const isConfigInitialized = ref(false);
 
+// PERSONAL MCP 服务器缓存（serverId → McpServerInfo）
+const personalMcpServerMap = ref<Map<string, McpServerInfo>>(new Map());
+
+/** 加载所有 PERSONAL MCP 服务器，并建立 id → info 缓存 */
+const loadPersonalMcpServers = async () => {
+  try {
+    const servers = await getMcpServers(1); // scope=1 表示 PERSONAL
+    const map = new Map<string, McpServerInfo>();
+    for (const s of servers) {
+      map.set(s.id, s);
+    }
+    personalMcpServerMap.value = map;
+    logger.debug('[AgentChat] 已加载 PERSONAL MCP 服务器:', map.size);
+  } catch (err) {
+    logger.warn('[AgentChat] 加载 PERSONAL MCP 服务器失败:', err);
+  }
+};
+
 type AgentConfigCache = {
   modelId: string;
   knowledgeIds: string[];
@@ -189,12 +218,16 @@ const {
   loadMessages,
   resolvePendingTool,
   resolveQuestion,
+  pendingSecretRequest,
+  resolveSecretRequest,
+  skipSecretRequest,
 } = useAgentChat({
-  conversationId: currentConversationId,  // Ref 会自动响应
-  defaultModelId: selectedModelId.value,  // 初始值
-  defaultKnowledgeIds: selectedKnowledgeIds.value,  // 初始值
-  defaultEnabledTools: selectedTools.value,  // 初始值
+  conversationId: currentConversationId,
+  defaultModelId: selectedModelId.value,
+  defaultKnowledgeIds: selectedKnowledgeIds.value,
+  defaultEnabledTools: selectedTools.value,
   getAgentName: (agentId: string) => agentSelectorRef.value?.getAgentById(agentId)?.name,
+  getPersonalMcpServer: (serverId: string) => personalMcpServerMap.value.get(serverId),
 });
 
 // 用户输入
@@ -210,34 +243,19 @@ const inputPlaceholder = computed(() => {
   return t('agent.inputPlaceholder');
 });
 
-const capabilityItems = computed(() => [
+const welcomeCategories = computed(() => [
   {
-    icon: '📚',
-    title: t('home.capabilities.rag.title'),
-    desc: t('home.capabilities.rag.desc'),
+    label: t('agent.welcomeCategories.knowledge.label'),
+    items: (t('agent.welcomeCategories.knowledge.items') as unknown as string[]),
   },
   {
-    icon: '🧰',
-    title: t('home.capabilities.mcp.title'),
-    desc: t('home.capabilities.mcp.desc'),
+    label: t('agent.welcomeCategories.tool.label'),
+    items: (t('agent.welcomeCategories.tool.items') as unknown as string[]),
   },
   {
-    icon: '⚡',
-    title: t('home.capabilities.context.title'),
-    desc: t('home.capabilities.context.desc'),
+    label: t('agent.welcomeCategories.analysis.label'),
+    items: (t('agent.welcomeCategories.analysis.items') as unknown as string[]),
   },
-  {
-    icon: '🧠',
-    title: t('home.capabilities.agent.title'),
-    desc: t('home.capabilities.agent.desc'),
-  },
-]);
-
-const scenarioPrompts = computed(() => [
-  t('agent.scenarios.deviceCheck'),
-  t('agent.scenarios.compliance'),
-  t('agent.scenarios.assetQuery'),
-  t('agent.scenarios.riskCheck'),
 ]);
 
 const applyScenarioPrompt = (prompt: string) => {
@@ -442,6 +460,7 @@ onMounted(() => {
   loadBrandConfig();
   initAgentConfig();
   loadConversations();
+  loadPersonalMcpServers();
 });
 
 // AgentSelector 完成 agents 加载后的回调
@@ -530,6 +549,11 @@ watch(
   &.expanded {
     margin-left: 0;
   }
+}
+
+.secret-card-wrap {
+  padding: 0 16px 8px;
+  flex-shrink: 0;
 }
 
 .agent-banner {

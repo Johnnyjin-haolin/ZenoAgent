@@ -31,7 +31,10 @@ public class AgentDefinitionVO {
 
     @Data
     public static class ToolsConfigVO {
-        private List<String> mcpGroups;
+        /** GLOBAL MCP 服务器 ID 列表（服务端执行） */
+        private List<String> serverMcpIds;
+        /** PERSONAL MCP 能力标签列表（客户端执行） */
+        private List<String> personalMcpCapabilities;
         private List<String> systemTools;
         /** 绑定的知识库 ID 列表 */
         private List<String> knowledgeIds;

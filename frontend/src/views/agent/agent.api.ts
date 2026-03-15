@@ -18,8 +18,11 @@ import type {
   UserQuestion,
   AgentDefinition,
   AgentDefinitionRequest,
-  McpGroupInfo,
+  McpServerInfo,
+  McpToolInfo,
+  McpServerRequest,
   SystemToolInfo,
+  PersonalMcpToolSchema,
 } from './agent.types';
 import { ModelType } from '@/types/model.types';
 
@@ -51,10 +54,12 @@ export enum AgentApi {
   conversationAgent = '/aiagent/conversation/agent',
   /** Agent 定义列表/创建 */
   agentDefinitions = '/aiagent/agent-definitions',
-  /** 可用 MCP 分组 */
-  availableMcpGroups = '/aiagent/agent-definitions/available-mcp-groups',
   /** 可用系统工具 */
   availableSystemTools = '/aiagent/agent-definitions/available-system-tools',
+  /** MCP 服务器列表 */
+  mcpServers = '/api/mcp/servers',
+  /** 客户端工具执行结果回传 */
+  mcpClientToolResult = '/api/mcp/client-tool-result',
 }
 
 /**
@@ -420,6 +425,19 @@ function dispatchEvent(event: AgentEvent, callbacks: AgentEventCallbacks) {
       break;
     }
 
+    case 'agent:personal_tool_call': {
+      logger.debug('[Agent] PERSONAL MCP 工具调用:', event.data);
+      if (callbacks.onPersonalToolCall && event.data) {
+        callbacks.onPersonalToolCall({
+          callId: event.data.callId,
+          toolName: event.data.toolName,
+          serverId: event.data.serverId,
+          params: event.data.params || {},
+        });
+      }
+      break;
+    }
+
     case 'agent:tool_call':
       logger.debug('[Agent] 工具调用:', event.data);
       callbacks.onToolCall?.(event);
@@ -711,18 +729,146 @@ export async function deleteAgentDefinition(id: string): Promise<boolean> {
 }
 
 /**
- * 获取可用的 MCP 分组列表（用于配置页工具选择器）
+ * 获取 MCP 服务器列表（用于配置页工具选择器和管理页面）
+ * @param scope 可选过滤：0=GLOBAL, 1=PERSONAL
  */
-export async function getAvailableMcpGroupsForAgent(): Promise<McpGroupInfo[]> {
+export async function getMcpServers(scope?: 0 | 1): Promise<McpServerInfo[]> {
   try {
     const response = await http.get(
-      { url: AgentApi.availableMcpGroups },
+      { url: AgentApi.mcpServers, params: scope != null ? { scope } : undefined },
       { isTransformResponse: false }
     );
     return response.data || [];
   } catch (error) {
-    logger.error('获取可用 MCP 分组失败:', error);
+    logger.error('获取 MCP 服务器列表失败:', error);
     return [];
+  }
+}
+
+/**
+ * 获取单个 MCP 服务器
+ */
+export async function getMcpServer(id: string): Promise<McpServerInfo | null> {
+  try {
+    const response = await http.get(
+      { url: `${AgentApi.mcpServers}/${id}` },
+      { isTransformResponse: false }
+    );
+    return response.success ? response.data : null;
+  } catch (error) {
+    logger.error('获取 MCP 服务器失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 创建 MCP 服务器
+ */
+export async function createMcpServer(request: McpServerRequest): Promise<McpServerInfo | null> {
+  try {
+    const response = await http.post(
+      { url: AgentApi.mcpServers, params: request },
+      { isTransformResponse: false }
+    );
+    return response.success ? response.data : null;
+  } catch (error) {
+    logger.error('创建 MCP 服务器失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 更新 MCP 服务器
+ */
+export async function updateMcpServer(id: string, request: McpServerRequest): Promise<McpServerInfo | null> {
+  try {
+    const response = await http.put(
+      { url: `${AgentApi.mcpServers}/${id}`, params: request },
+      { isTransformResponse: false }
+    );
+    return response.success ? response.data : null;
+  } catch (error) {
+    logger.error('更新 MCP 服务器失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 删除 MCP 服务器
+ */
+export async function deleteMcpServer(id: string): Promise<boolean> {
+  try {
+    const response = await http.delete({ url: `${AgentApi.mcpServers}/${id}` });
+    return response.success === true;
+  } catch (error) {
+    logger.error('删除 MCP 服务器失败:', error);
+    return false;
+  }
+}
+
+/**
+ * 启用/禁用 MCP 服务器
+ */
+export async function toggleMcpServer(id: string, enabled: boolean): Promise<boolean> {
+  try {
+    const response = await http.put(
+      { url: `${AgentApi.mcpServers}/${id}/toggle`, params: { enabled } },
+      { isTransformResponse: false }
+    );
+    return response.success === true;
+  } catch (error) {
+    logger.error('切换 MCP 服务器状态失败:', error);
+    return false;
+  }
+}
+
+/**
+ * 获取 MCP 服务器工具列表（GLOBAL 类型）
+ */
+export async function getMcpServerTools(serverId: string): Promise<McpToolInfo[]> {
+  try {
+    const response = await http.get(
+      { url: `${AgentApi.mcpServers}/${serverId}/tools` },
+      { isTransformResponse: false }
+    );
+    return response.data || [];
+  } catch (error) {
+    logger.error('获取 MCP 工具列表失败:', error);
+    return [];
+  }
+}
+
+/**
+ * 测试 MCP 服务器连通性（GLOBAL 类型）
+ */
+export async function testMcpServer(serverId: string): Promise<string> {
+  try {
+    const response = await http.post(
+      { url: `${AgentApi.mcpServers}/${serverId}/test` },
+      { isTransformResponse: false }
+    );
+    return response.success ? response.data : 'FAIL';
+  } catch (error) {
+    logger.error('测试 MCP 服务器连通性失败:', error);
+    return 'FAIL';
+  }
+}
+
+/**
+ * 回传 PERSONAL MCP 工具执行结果
+ */
+export async function submitClientToolResult(
+  callId: string,
+  result?: string,
+  error?: string
+): Promise<void> {
+  try {
+    await http.post(
+      { url: AgentApi.mcpClientToolResult, params: { callId, result, error } },
+      { isTransformResponse: false }
+    );
+  } catch (err) {
+    logger.error('回传客户端工具结果失败:', err);
   }
 }
 
@@ -739,5 +885,153 @@ export async function getAvailableSystemToolsForAgent(): Promise<SystemToolInfo[
   } catch (error) {
     logger.error('获取可用系统工具失败:', error);
     return [];
+  }
+}
+
+/**
+ * 从 PERSONAL MCP 服务器直接 prefetch 工具列表（浏览器端调用，不经过后端）
+ *
+ * 流程：
+ * 1. 构建携带认证 Header 的 fetch 请求
+ * 2. 调用 MCP SSE endpoint，发送 tools/list JSON-RPC 请求
+ * 3. 解析响应，返回 PersonalMcpToolSchema[]
+ *
+ * @param server       MCP 服务器信息（包含 endpointUrl、authHeaders）
+ * @param authHeaders  运行时补充的认证 Header（来自 localStorage）
+ * @returns 工具 schema 列表，失败返回空数组
+ */
+export async function prefetchPersonalMcpTools(
+  server: McpServerInfo,
+  authHeaders: Record<string, string>
+): Promise<PersonalMcpToolSchema[]> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      ...authHeaders,
+    };
+
+    const body = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/list',
+      params: {},
+    });
+
+    const response = await fetch(server.endpointUrl, {
+      method: 'POST',
+      headers,
+      body,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      logger.warn(`[MCP prefetch] HTTP ${response.status} from ${server.endpointUrl}`);
+      return [];
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+
+    if (contentType.includes('text/event-stream')) {
+      return await parseToolsFromSSE(response, server.id);
+    }
+
+    const json = await response.json();
+    return parseToolsFromJsonRpc(json, server.id);
+  } catch (error) {
+    logger.warn(`[MCP prefetch] 预取工具列表失败: serverId=${server.id}, error=`, error);
+    return [];
+  }
+}
+
+/**
+ * 从 SSE 响应中解析 tools/list 结果
+ */
+async function parseToolsFromSSE(
+  response: Response,
+  serverId: string
+): Promise<PersonalMcpToolSchema[]> {
+  const reader = response.body?.getReader();
+  if (!reader) return [];
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const dataStr = line.slice(5).trim();
+        if (!dataStr || dataStr === '[DONE]') continue;
+        try {
+          const json = JSON.parse(dataStr);
+          const tools = parseToolsFromJsonRpc(json, serverId);
+          if (tools.length > 0) {
+            reader.cancel();
+            return tools;
+          }
+        } catch {
+          // ignore parse errors
+        }
+      }
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+  return [];
+}
+
+/**
+ * 从 JSON-RPC 响应中解析 tools/list 工具列表
+ */
+function parseToolsFromJsonRpc(json: unknown, serverId: string): PersonalMcpToolSchema[] {
+  if (!json || typeof json !== 'object') return [];
+  const rpc = json as Record<string, unknown>;
+
+  const result = rpc['result'] as Record<string, unknown> | undefined;
+  if (!result) return [];
+
+  const toolList = (result['tools'] as unknown[]) || [];
+
+  return toolList
+    .filter((t): t is Record<string, unknown> => typeof t === 'object' && t !== null)
+    .map((t) => ({
+      serverId,
+      toolName: (t['name'] as string) || '',
+      description: (t['description'] as string) || '',
+      inputSchema: (t['inputSchema'] as Record<string, unknown>) || undefined,
+    }))
+    .filter((s) => s.toolName.length > 0);
+}
+
+/**
+ * 本地连通性测试（PERSONAL MCP，浏览器直连）
+ *
+ * 调用 tools/list，成功返回 "OK:<工具数量>"，失败返回 "FAIL:<原因>"
+ */
+export async function testPersonalMcpServer(
+  server: McpServerInfo,
+  authHeaders: Record<string, string>
+): Promise<string> {
+  try {
+    const tools = await prefetchPersonalMcpTools(server, authHeaders);
+    if (tools.length >= 0) {
+      return `OK:${tools.length}`;
+    }
+    return 'FAIL:无工具';
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return `FAIL:${msg}`;
   }
 }

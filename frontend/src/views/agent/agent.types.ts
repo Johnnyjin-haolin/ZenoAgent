@@ -68,8 +68,10 @@ export interface SkillTreeNode {
  * Agent 工具选择配置（对应后端 AgentDefinition.ToolsConfig）
  */
 export interface AgentToolsConfig {
-  /** MCP 服务器分组 ID 列表 */
-  mcpGroups?: string[];
+  /** GLOBAL MCP 服务器 ID 列表（服务端执行，scope=0） */
+  serverMcpIds?: string[];
+  /** PERSONAL MCP 能力标签列表（客户端执行，scope=1），如 ['github', 'notion'] */
+  personalMcpCapabilities?: string[];
   /** 系统内置工具名称列表 */
   systemTools?: string[];
   /** 绑定的知识库 ID 列表 */
@@ -129,27 +131,52 @@ export interface SystemToolInfo {
 }
 
 /**
- * Agent 请求参数
+ * PERSONAL MCP 工具 Schema
+ * 由前端在发送消息前 prefetch 各 PERSONAL MCP 服务器的工具列表，
+ * 将真实工具 schema 随 AgentRequest 上传到后端。
  */
+export interface PersonalMcpToolSchema {
+  /** 对应的 PERSONAL MCP 服务器 ID（SSE 下发时用于前端路由） */
+  serverId: string;
+  /** 真实工具名（如 search_bailian、list_files） */
+  toolName: string;
+  /** 工具描述（来自 MCP tools/list 响应） */
+  description: string;
+  /**
+   * JSON Schema 参数定义（兼容 OpenAI function calling 格式）
+   * 来自 MCP tools/list 响应中的 inputSchema 字段
+   */
+  inputSchema?: Record<string, unknown>;
+}
+
+/**
+* Agent 请求参数
+*/
 export interface AgentRequest {
-  /** 用户输入内容 */
-  content: string;
-  /** 会话ID（可选，用于上下文关联） */
-  conversationId?: string;
-  /** 指定使用的 Agent ID（可选） */
-  agentId?: string;
-  /** 指定使用的模型ID（可选） */
-  modelId?: string;
-  /** 关联的知识库ID列表 */
-  knowledgeIds?: string[];
-  /** 启用的工具名称（支持通配符） */
-  enabledTools?: string[];
-  /** 启用的MCP分组列表（可选，为空则使用所有启用分组） */
-  enabledMcpGroups?: string[];
-  /** 执行模式：AUTO-自动 / MANUAL-手动 */
-  mode?: 'AUTO' | 'MANUAL';
-  /** 自定义上下文参数 */
-  context?: Record<string, any>;
+/** 用户输入内容 */
+content: string;
+/** 会话ID（可选，用于上下文关联） */
+conversationId?: string;
+/** 指定使用的 Agent ID（可选） */
+agentId?: string;
+/** 指定使用的模型ID（可选） */
+modelId?: string;
+/** 关联的知识库ID列表 */
+knowledgeIds?: string[];
+/** 启用的工具名称（支持通配符） */
+enabledTools?: string[];
+/** GLOBAL MCP 服务器 ID 列表（为空则使用 Agent 默认配置） */
+serverMcpIds?: string[];
+/**
+ * PERSONAL MCP 工具 Schema 列表（前端 prefetch 后随请求上传）
+ * 后端直接用这些 schema 构造真实 ToolSpecification 交给 LLM。
+ * prefetch 失败的服务器工具不会出现在此列表，该服务器的工具本次对话不可用。
+ */
+personalMcpTools?: PersonalMcpToolSchema[];
+/** 执行模式：AUTO-自动 / MANUAL-手动 */
+mode?: 'AUTO' | 'MANUAL';
+/** 自定义上下文参数 */
+context?: Record<string, any>;
 }
 
 /**
@@ -200,10 +227,11 @@ export type AgentEventType =
   | 'agent:status:tool_executing_single' // 单个工具执行
   | 'agent:status:tool_executing_batch'  // 批量工具执行
   | 'agent:status:retrying'              // 格式重试中
-  | 'agent:ask_user_question' // Agent 向用户提问（AskUserQuestion 工具触发）
-  | 'agent:stream_complete' // 流式输出完成
-  | 'agent:complete'        // 任务完成
-  | 'agent:error';          // 错误发生
+  | 'agent:ask_user_question'    // Agent 向用户提问（AskUserQuestion 工具触发）
+  | 'agent:personal_tool_call'   // PERSONAL MCP 工具调用（客户端执行）
+  | 'agent:stream_complete'      // 流式输出完成
+  | 'agent:complete'             // 任务完成
+  | 'agent:error';               // 错误发生
 
 /**
  * Agent 事件数据
@@ -656,43 +684,99 @@ export interface ConversationInfo {
 }
 
 /**
- * MCP分组信息
+ * MCP 服务器信息（对应后端 McpServerVO）
  */
-export interface McpGroupInfo {
-  /** 分组ID */
+export interface McpServerInfo {
+  /** 服务器 ID */
   id: string;
-  /** 分组名称 */
+  /** 显示名称 */
   name: string;
-  /** 分组描述 */
+  /** 描述 */
   description?: string;
+  /**
+   * 作用域：0=GLOBAL（服务端执行），1=PERSONAL（客户端执行）
+   */
+  scope: 0 | 1;
+  /** 能力标签（PERSONAL 类型使用，如 'github'、'notion'） */
+  capability?: string;
+  /** 连接类型 */
+  connectionType: string;
+  /** 端点 URL */
+  endpointUrl: string;
+  /**
+   * 认证请求头（键值对）
+   * GLOBAL 类型：值脱敏为 "***"；PERSONAL 类型：值为 ""（运行时由浏览器 localStorage 补充）
+   */
+  authHeaders?: Record<string, string>;
+  /** 超时（毫秒） */
+  timeoutMs?: number;
   /** 是否启用 */
   enabled: boolean;
+  /** 创建人 */
+  createdBy?: string;
+  /** 创建时间 */
+  createdAt?: string;
+  /** 工具列表（按需加载） */
+  tools?: McpToolInfo[];
   /** 工具数量 */
-  toolCount: number;
+  toolCount?: number;
+}
+
+/**
+ * MCP 工具信息
+ */
+export interface McpToolInfo {
+  /** 工具 ID（格式：serverId:toolName） */
+  id?: string;
+  /** 工具名称 */
+  name: string;
+  /** 工具描述 */
+  description: string;
+  /** 是否启用 */
+  enabled: boolean;
   /** 所属服务器ID */
   serverId?: string;
+  /** 是否是 PERSONAL 工具（客户端执行） */
+  personal?: boolean;
   /** 连接类型 */
   connectionType?: string;
 }
 
 /**
- * MCP工具信息
+ * PERSONAL MCP 工具调用事件数据（agent:personal_tool_call）
  */
-export interface McpToolInfo {
-  /** 工具名称 */
+export interface PersonalToolCallData {
+  /** 唯一调用 ID，执行完成后回传给 /api/mcp/client-tool-result */
+  callId: string;
+  /** MCP 工具名称 */
+  toolName: string;
+  /** 对应的 PERSONAL MCP 服务器 ID */
+  serverId: string;
+  /** 工具参数 */
+  params: Record<string, unknown>;
+}
+
+/**
+ * 创建 / 更新 MCP 服务器请求
+ */
+export interface McpServerRequest {
   name: string;
-  /** 工具描述 */
-  description: string;
-  /** 工具分组 */
-  group: string;
-  /** 是否启用 */
-  enabled: boolean;
-  /** 工具版本 */
-  version?: string;
-  /** 所属服务器ID */
-  serverId?: string;
-  /** 连接类型 */
-  connectionType?: string;
+  description?: string;
+  scope: 0 | 1;
+  capability?: string;
+  connectionType: string;
+  endpointUrl: string;
+  /**
+   * 认证请求头（键值对）
+   * GLOBAL 类型：{"Authorization":"Bearer sk-xxx"}
+   * PERSONAL 类型：{"Authorization":""} （值留空，运行时由浏览器补充）
+   */
+  authHeaders?: Record<string, string>;
+  extraHeaders?: string;
+  timeoutMs?: number;
+  readTimeoutMs?: number;
+  retryCount?: number;
+  enabled?: boolean;
 }
 
 /**
@@ -702,6 +786,7 @@ export interface AgentEventCallbacks {
   onStart?: (event: AgentEvent) => void;
   onIterationStart?: (event: AgentEvent) => void;
   onAskUserQuestion?: (question: UserQuestion) => void;
+  onPersonalToolCall?: (data: PersonalToolCallData) => void;
   onThinking?: (event: AgentEvent) => void;
   onThinkingDelta?: (event: AgentEvent) => void;
   onModelSelected?: (event: AgentEvent) => void;

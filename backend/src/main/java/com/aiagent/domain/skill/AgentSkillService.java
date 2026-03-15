@@ -10,7 +10,9 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Skill 管理服务
@@ -71,6 +73,24 @@ public class AgentSkillService {
     public AgentSkill getById(String id) {
         AgentSkillEntity entity = agentSkillMapper.selectById(id);
         return entity == null ? null : toDomain(entity);
+    }
+
+    /**
+     * 批量查询并返回 id → AgentSkill 的映射（供 Skill 渐进式加载批量构建摘要使用）
+     *
+     * @param ids Skill ID 列表
+     * @return id 为 key 的 Map，不存在或已删除的 id 不会出现在结果中
+     */
+    public Map<String, AgentSkill> getByIdMap(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        List<AgentSkillEntity> entities = agentSkillMapper.selectByIds(ids);
+        return entities.stream()
+            .collect(Collectors.toMap(
+                AgentSkillEntity::getId,
+                this::toDomain
+            ));
     }
 
     /**

@@ -46,37 +46,47 @@ export default {
     systemReady: '系统就绪',
     hero: {
       title: {
-        line1: '感知.',
-        line2: '推理.',
-        line3: '执行.'
+        line1: '你的业务，',
+        line2: '由 AI 驱动，',
+        line3: '真正落地。'
       },
-      subtitle: '基于 React 的自主智能体。由 RAG & MCP 驱动。\nZeno 理解您的意图，编排工具，并自动解决复杂问题。',
-      start: '开始集成',
+      subtitle: '告别一次性 Prompt 工程。Zeno 让你为每个业务场景定制专属 Agent——\n私有知识库、企业工具、安全审批，一套平台全搞定。',
+      start: '立即体验',
       docs: '查看文档 ->'
     },
     capabilities: {
-      context: {
-        title: '上下文',
-        desc: '深度理解代码语义、依赖关系及业务逻辑流。'
+      customAgent: {
+        title: '专属 Agent',
+        desc: '为销售、运维、法务等场景各打造一个专属 AI——独立工具集、独立知识库、独立行为规则，互不干扰。'
+      },
+      dualMcp: {
+        title: '企业工具 & 个人工具',
+        desc: '企业工具由平台统一管理；员工的私人 API（GitHub、Notion 等）只跑在自己浏览器里，密钥绝不上传服务器。'
+      },
+      skill: {
+        title: '业务知识沉淀',
+        desc: '把公司的操作规范、产品手册沉淀为 Skill，让每个 Agent 都能随时调取，永不遗忘，永不过时。'
+      },
+      progressiveTools: {
+        title: '百工具无限制',
+        desc: 'Agent 可以同时认识上百个工具，用哪个才加载哪个——再也不用担心 AI 上下文超限或工具冲突。'
+      },
+      humanInLoop: {
+        title: '关键操作人工把关',
+        desc: '涉及生产库、文件写入等高风险操作？让 AI 先暂停、人工过目后再执行，自主与管控随时切换。'
       },
       rag: {
-        title: 'RAG',
-        desc: '从私有化知识库中实时检索，精准召回。'
-      },
-      mcp: {
-        title: 'MCP',
-        desc: '拓展智能体能力，无缝集成数据库、终端和云服务。'
-      },
-      agent: {
-        title: '智能体',
-        desc: '自主规划任务，调用工具解决复杂问题。'
+        title: '回答有据可查',
+        desc: '把 PDF、Word、内部文档喂给 Agent，每次回答都从知识库实时调取相关段落，不靠猜测靠证据。'
       }
     },
-    footer: '© 2026 Zeno Agent. 轻量化智能体。'
+    footer: '© 2026 Zeno Agent. 企业级服务端 AI Agent 平台。'
   },
   agent: {
     welcome: 'Zeno 认知核心',
     subtitle: '先进自主智能体系统',
+    greeting: '你好，有什么可以帮你？',
+    greetingHint: '↑  输入你的问题，或从下方选择一个示例开始',
     inputPlaceholder: '输入指令或查询...',
     send: '发送',
     history: '历史记录',
@@ -170,6 +180,20 @@ export default {
       compliance: '根据知识库输出规范合规检查项',
       assetQuery: '调用工具查询资产信息并总结',
       riskCheck: '检索合同条款并输出风险点',
+    },
+    welcomeCategories: {
+      knowledge: {
+        label: '💡 知识问答',
+        items: ['帮我查询相关产品文档', '介绍一下这个功能的使用方式', '解答我的操作疑问'],
+      },
+      tool: {
+        label: '🛠️ 工具任务',
+        items: ['搜索并总结最新相关信息', '帮我查询数据并整理结果', '调用接口完成这个操作'],
+      },
+      analysis: {
+        label: '📋 分析总结',
+        items: ['总结这段内容的关键点', '分析数据并给出建议', '帮我起草一份工作报告'],
+      },
     },
     selectModel: '选择模型',
     stopGeneration: '停止生成',
