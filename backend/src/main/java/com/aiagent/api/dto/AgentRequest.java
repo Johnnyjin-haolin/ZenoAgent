@@ -1,6 +1,7 @@
 package com.aiagent.api.dto;
 
 import com.aiagent.common.enums.AgentMode;
+import com.aiagent.domain.agent.AgentDefinition;
 import lombok.Data;
 
 import java.util.List;
@@ -24,11 +25,15 @@ public class AgentRequest {
     /** 关联知识库 ID 列表 */
     private List<String> knowledgeIds;
 
-    /** 启用的工具名称列表（为空则使用所有可用工具） */
-    private List<String> enabledTools;
+    /**
+     * 本次会话 MCP 服务器工具细粒度选择（为空则使用 Agent 默认配置）
+     */
+    private List<AgentDefinition.McpServerSelection> mcpServers;
 
-    /** 本次会话使用的 GLOBAL MCP 服务器 ID 列表（为空则使用 Agent 默认配置） */
-    private List<String> serverMcpIds;
+    /**
+     * 本次会话启用的系统内置工具名称列表（为空则使用 Agent 默认配置）
+     */
+    private List<String> systemTools;
 
     /**
      * PERSONAL MCP 工具 Schema 列表（由前端 prefetch 后随请求上传）

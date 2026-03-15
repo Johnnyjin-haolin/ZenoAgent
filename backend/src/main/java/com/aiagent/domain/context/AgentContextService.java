@@ -111,19 +111,22 @@ public class AgentContextService {
                 ? context.getConfig().getMode()
                 : com.aiagent.common.enums.AgentMode.AUTO));
 
-        // 工具 & 知识库（请求覆盖，降级到 AgentDefinition 配置）
-        if (request.getServerMcpIds() != null) {
-            cfgBuilder.serverMcpIds(request.getServerMcpIds());
-        } else if (context.getConfig() != null && context.getConfig().getServerMcpIds() != null) {
-            cfgBuilder.serverMcpIds(context.getConfig().getServerMcpIds());
+        // MCP 服务器工具选择（请求覆盖，降级到 AgentDefinition 配置）
+        if (request.getMcpServers() != null) {
+            cfgBuilder.mcpServers(request.getMcpServers());
+        } else if (context.getConfig() != null && context.getConfig().getMcpServers() != null) {
+            cfgBuilder.mcpServers(context.getConfig().getMcpServers());
         } else if (agentDef != null && agentDef.getTools() != null) {
-            cfgBuilder.serverMcpIds(agentDef.getTools().getServerMcpIds());
+            cfgBuilder.mcpServers(agentDef.getTools().getMcpServers());
         }
 
-        if (request.getEnabledTools() != null) {
-            cfgBuilder.enabledTools(request.getEnabledTools());
-        } else if (context.getConfig() != null) {
-            cfgBuilder.enabledTools(context.getConfig().getEnabledTools());
+        // 系统内置工具选择（请求覆盖，降级到 AgentDefinition 配置）
+        if (request.getSystemTools() != null) {
+            cfgBuilder.systemTools(request.getSystemTools());
+        } else if (context.getConfig() != null && context.getConfig().getSystemTools() != null) {
+            cfgBuilder.systemTools(context.getConfig().getSystemTools());
+        } else if (agentDef != null && agentDef.getTools() != null) {
+            cfgBuilder.systemTools(agentDef.getTools().getSystemTools());
         }
 
         List<String> knowledgeIds = request.getKnowledgeIds() != null

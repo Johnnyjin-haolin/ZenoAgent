@@ -106,8 +106,8 @@ public class FunctionCallingEngine implements AgentEngine {
         // 初始化 messages
         List<ChatMessage> messages = buildMessages(agentDef, context, progressiveMode);
 
-        // 初始化 toolSpecs（GLOBAL 工具）
-        List<ToolSpecification> toolSpecs = resolveInitialToolSpecs(agentDef, progressiveMode);
+        // 初始化 toolSpecs（GLOBAL 工具），运行时 systemTools 优先覆盖 AgentDef
+        List<ToolSpecification> toolSpecs = resolveInitialToolSpecs(agentDef, context, progressiveMode);
 
         // PERSONAL MCP 工具：由前端 prefetch 后随 AgentRequest 上传真实 schema，
         // 后端直接构造真实 ToolSpecification，不再注入占位假工具
@@ -538,14 +538,35 @@ public class FunctionCallingEngine implements AgentEngine {
         return sb.toString();
     }
 
-    private List<ToolSpecification> resolveInitialToolSpecs(AgentDefinition agentDef, boolean progressiveMode) {
+    private List<ToolSpecification> resolveInitialToolSpecs(
+            AgentDefinition agentDef, AgentContext context, boolean progressiveMode) {
         List<ToolSpecification> result = new ArrayList<>();
 
         if (agentDef == null || agentDef.getTools() == null) {
             return result;
         }
 
-        List<ToolSpecification> allSpecs = toolRegistry.resolveToolSpecifications(agentDef);
+        // 若 context 中有运行时 systemTools（前端对话级覆盖），临时构造一个覆盖后的 AgentDef 副本
+        AgentDefinition effectiveDef = agentDef;
+        List<String> runtimeSystemTools = context != null ? context.getSystemTools() : null;
+        if (runtimeSystemTools != null) {
+            AgentDefinition override = new AgentDefinition();
+            override.setId(agentDef.getId());
+            override.setName(agentDef.getName());
+            override.setSystemPrompt(agentDef.getSystemPrompt());
+            override.setContextConfig(agentDef.getContextConfig());
+            override.setRagConfig(agentDef.getRagConfig());
+            override.setSkillTree(agentDef.getSkillTree());
+            AgentDefinition.ToolsConfig toolsCopy = new AgentDefinition.ToolsConfig();
+            toolsCopy.setMcpServers(agentDef.getTools().getMcpServers());
+            toolsCopy.setSystemTools(runtimeSystemTools);
+            toolsCopy.setKnowledgeIds(agentDef.getTools().getKnowledgeIds());
+            override.setTools(toolsCopy);
+            effectiveDef = override;
+            log.debug("运行时 systemTools 覆盖 AgentDef: {}", runtimeSystemTools);
+        }
+
+        List<ToolSpecification> allSpecs = toolRegistry.resolveToolSpecifications(effectiveDef);
 
         allSpecs.stream()
             .filter(spec -> spec.name().startsWith("system_"))

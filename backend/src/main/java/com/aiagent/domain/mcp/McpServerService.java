@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 /**
  * MCP 服务器管理 Service
  * <p>
- * 负责 CRUD、工具列表拉取、连通性测试，以及运行时按 capability 匹配个人 MCP。
+ * 负责 CRUD、工具列表拉取、连通性测试。
  * <p>
  * authHeader 字段现在存储 JSON 格式的键值对：
  *   GLOBAL  示例：{"Authorization":"Bearer sk-xxx","X-Tenant-Id":"t001"}
@@ -60,13 +60,6 @@ public class McpServerService {
     public McpServerVO getById(String id) {
         McpServerEntity entity = repository.findById(id);
         return entity == null ? null : toVO(entity);
-    }
-
-    /**
-     * 按 capability 列表查询 PERSONAL MCP（Agent 运行时使用）
-     */
-    public List<McpServerEntity> findPersonalByCapabilities(List<String> capabilities) {
-        return repository.findByCapabilities(capabilities);
     }
 
     /**
@@ -216,12 +209,128 @@ public class McpServerService {
                         tool.setServerId(entity.getId());
                         tool.setEnabled(true);
                         tool.setParameters(spec.parameters());
+                        Map<String, Object> inputSchema = schemaToMap(spec.parameters());
+                        log.debug("工具 [{}] parameters={}, inputSchema={}", spec.name(), spec.parameters(), inputSchema);
+                        tool.setInputSchema(inputSchema);
                         return tool;
                     })
                     .collect(Collectors.toList());
         } catch (Exception e) {
             log.error("拉取 MCP 工具列表失败: id={}", entity.getId(), e);
             return new ArrayList<>();
+        }
+    }
+
+    /**
+     * 将 LangChain4j JsonObjectSchema 转换为标准 JSON Schema Map（手动递归，不依赖 Jackson）
+     * 供前端展示工具参数使用
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> schemaToMap(dev.langchain4j.model.chat.request.json.JsonObjectSchema schema) {
+        if (schema == null) {
+            return null;
+        }
+        return (Map<String, Object>) schemaElementToObject(schema);
+    }
+
+    private static Object schemaElementToObject(dev.langchain4j.model.chat.request.json.JsonSchemaElement element) {
+        if (element == null) {
+            return null;
+        }
+        if (element instanceof dev.langchain4j.model.chat.request.json.JsonObjectSchema) {
+            dev.langchain4j.model.chat.request.json.JsonObjectSchema obj =
+                    (dev.langchain4j.model.chat.request.json.JsonObjectSchema) element;
+            Map<String, Object> map = new java.util.LinkedHashMap<>();
+            map.put("type", "object");
+            if (obj.description() != null) map.put("description", obj.description());
+            if (obj.properties() != null && !obj.properties().isEmpty()) {
+                Map<String, Object> props = new java.util.LinkedHashMap<>();
+                obj.properties().forEach((k, v) -> props.put(k, schemaElementToObject(v)));
+                map.put("properties", props);
+            }
+            if (obj.required() != null && !obj.required().isEmpty()) {
+                map.put("required", obj.required());
+            }
+            if (obj.additionalProperties() != null) {
+                map.put("additionalProperties", obj.additionalProperties());
+            }
+            if (obj.definitions() != null && !obj.definitions().isEmpty()) {
+                Map<String, Object> defs = new java.util.LinkedHashMap<>();
+                obj.definitions().forEach((k, v) -> defs.put(k, schemaElementToObject(v)));
+                map.put("$defs", defs);
+            }
+            return map;
+        } else if (element instanceof dev.langchain4j.model.chat.request.json.JsonStringSchema) {
+            dev.langchain4j.model.chat.request.json.JsonStringSchema s =
+                    (dev.langchain4j.model.chat.request.json.JsonStringSchema) element;
+            Map<String, Object> map = new java.util.LinkedHashMap<>();
+            map.put("type", "string");
+            if (s.description() != null) map.put("description", s.description());
+            return map;
+        } else if (element instanceof dev.langchain4j.model.chat.request.json.JsonIntegerSchema) {
+            dev.langchain4j.model.chat.request.json.JsonIntegerSchema s =
+                    (dev.langchain4j.model.chat.request.json.JsonIntegerSchema) element;
+            Map<String, Object> map = new java.util.LinkedHashMap<>();
+            map.put("type", "integer");
+            if (s.description() != null) map.put("description", s.description());
+            return map;
+        } else if (element instanceof dev.langchain4j.model.chat.request.json.JsonNumberSchema) {
+            dev.langchain4j.model.chat.request.json.JsonNumberSchema s =
+                    (dev.langchain4j.model.chat.request.json.JsonNumberSchema) element;
+            Map<String, Object> map = new java.util.LinkedHashMap<>();
+            map.put("type", "number");
+            if (s.description() != null) map.put("description", s.description());
+            return map;
+        } else if (element instanceof dev.langchain4j.model.chat.request.json.JsonBooleanSchema) {
+            dev.langchain4j.model.chat.request.json.JsonBooleanSchema s =
+                    (dev.langchain4j.model.chat.request.json.JsonBooleanSchema) element;
+            Map<String, Object> map = new java.util.LinkedHashMap<>();
+            map.put("type", "boolean");
+            if (s.description() != null) map.put("description", s.description());
+            return map;
+        } else if (element instanceof dev.langchain4j.model.chat.request.json.JsonArraySchema) {
+            dev.langchain4j.model.chat.request.json.JsonArraySchema s =
+                    (dev.langchain4j.model.chat.request.json.JsonArraySchema) element;
+            Map<String, Object> map = new java.util.LinkedHashMap<>();
+            map.put("type", "array");
+            if (s.description() != null) map.put("description", s.description());
+            if (s.items() != null) map.put("items", schemaElementToObject(s.items()));
+            return map;
+        } else if (element instanceof dev.langchain4j.model.chat.request.json.JsonEnumSchema) {
+            dev.langchain4j.model.chat.request.json.JsonEnumSchema s =
+                    (dev.langchain4j.model.chat.request.json.JsonEnumSchema) element;
+            Map<String, Object> map = new java.util.LinkedHashMap<>();
+            map.put("type", "string");
+            if (s.description() != null) map.put("description", s.description());
+            if (s.enumValues() != null) map.put("enum", s.enumValues());
+            return map;
+        } else if (element instanceof dev.langchain4j.model.chat.request.json.JsonAnyOfSchema) {
+            dev.langchain4j.model.chat.request.json.JsonAnyOfSchema s =
+                    (dev.langchain4j.model.chat.request.json.JsonAnyOfSchema) element;
+            Map<String, Object> map = new java.util.LinkedHashMap<>();
+            if (s.description() != null) map.put("description", s.description());
+            if (s.anyOf() != null) {
+                java.util.List<Object> anyOf = new java.util.ArrayList<>();
+                s.anyOf().forEach(e -> anyOf.add(schemaElementToObject(e)));
+                map.put("anyOf", anyOf);
+            }
+            return map;
+        } else if (element instanceof dev.langchain4j.model.chat.request.json.JsonReferenceSchema) {
+            dev.langchain4j.model.chat.request.json.JsonReferenceSchema s =
+                    (dev.langchain4j.model.chat.request.json.JsonReferenceSchema) element;
+            Map<String, Object> map = new java.util.LinkedHashMap<>();
+            if (s.reference() != null) map.put("$ref", s.reference());
+            return map;
+        } else if (element instanceof dev.langchain4j.model.chat.request.json.JsonNullSchema) {
+            Map<String, Object> map = new java.util.LinkedHashMap<>();
+            map.put("type", "null");
+            return map;
+        } else {
+            // fallback
+            Map<String, Object> map = new java.util.LinkedHashMap<>();
+            map.put("type", element.getClass().getSimpleName()
+                    .replace("Json", "").replace("Schema", "").toLowerCase());
+            return map;
         }
     }
 
@@ -232,7 +341,6 @@ public class McpServerService {
         vo.setDescription(entity.getDescription());
         vo.setScope(entity.getScope());
         vo.setOwnerUserId(entity.getOwnerUserId());
-        vo.setCapability(entity.getCapability());
         vo.setConnectionType(entity.getConnectionType());
         vo.setEndpointUrl(entity.getEndpointUrl());
 
@@ -267,7 +375,6 @@ public class McpServerService {
         if (req.getDescription() != null) entity.setDescription(req.getDescription());
         if (req.getScope() != null) entity.setScope(req.getScope());
         if (req.getOwnerUserId() != null) entity.setOwnerUserId(req.getOwnerUserId());
-        if (req.getCapability() != null) entity.setCapability(req.getCapability());
         if (req.getConnectionType() != null) entity.setConnectionType(req.getConnectionType());
         if (req.getEndpointUrl() != null) entity.setEndpointUrl(req.getEndpointUrl());
         if (req.getAuthHeaders() != null) {

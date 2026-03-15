@@ -69,11 +69,6 @@ public class McpJsonConfig {
         private Integer scope;
 
         /**
-         * 能力标签，scope=1 时使用（如 github / notion / gmail）
-         */
-        private String capability;
-        
-        /**
          * 是否启用（默认true）
          */
         private Boolean enabled;

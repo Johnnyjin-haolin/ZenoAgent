@@ -270,12 +270,7 @@ public class AgentDefinitionController {
             return "{}";
         }
         try {
-            Map<String, Object> map = new HashMap<>();
-            map.put("serverMcpIds", tools.getServerMcpIds() != null ? tools.getServerMcpIds() : new ArrayList<>());
-            map.put("personalMcpCapabilities", tools.getPersonalMcpCapabilities() != null ? tools.getPersonalMcpCapabilities() : new ArrayList<>());
-            map.put("systemTools", tools.getSystemTools() != null ? tools.getSystemTools() : new ArrayList<>());
-            map.put("knowledgeIds", tools.getKnowledgeIds() != null ? tools.getKnowledgeIds() : new ArrayList<>());
-            return objectMapper.writeValueAsString(map);
+            return objectMapper.writeValueAsString(tools);
         } catch (Exception e) {
             log.warn("序列化 tools 配置失败", e);
             return "{}";

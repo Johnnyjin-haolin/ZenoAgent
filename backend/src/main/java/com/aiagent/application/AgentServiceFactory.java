@@ -1,5 +1,6 @@
 package com.aiagent.application;
 
+import com.aiagent.domain.agent.AgentDefinition;
 import com.aiagent.infrastructure.config.AgentConfig;
 import com.aiagent.infrastructure.external.llm.ModelManager;
 import com.aiagent.infrastructure.external.mcp.McpToolProviderFactory;
@@ -46,19 +47,19 @@ public class AgentServiceFactory {
     
     /**
      * 创建Agent服务（带工具支持）
-     * 
-     * @param modelId 模型ID
-     * @param enabledGroups 启用的MCP分组列表（为空则使用所有工具）
+     *
+     * @param modelId    模型ID
+     * @param selections MCP 服务器工具细粒度选择列表（为空则使用所有工具）
      * @return Agent服务实例
      */
-    public AgentService createAgentService(String modelId, List<String> enabledGroups) {
-        log.info("创建Agent服务: modelId={}, enabledGroups={}", modelId, enabledGroups);
-        
+    public AgentService createAgentService(String modelId, List<AgentDefinition.McpServerSelection> selections) {
+        log.info("创建Agent服务: modelId={}, mcpSelections={}", modelId, selections != null ? selections.size() : 0);
+
         // 1. 获取或创建模型实例
         StreamingChatModel chatModel = getOrCreateModel(modelId);
-        
+
         // 2. 创建过滤后的工具提供者
-        ToolProvider toolProvider = mcpToolProviderFactory.createFilteredToolProvider(enabledGroups);
+        ToolProvider toolProvider = mcpToolProviderFactory.createFilteredToolProvider(selections);
         
         // 3. 创建Agent服务
         AiServices<AgentService> builder =

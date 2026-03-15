@@ -65,13 +65,24 @@ export interface SkillTreeNode {
 }
 
 /**
+ * MCP 服务器工具细粒度选择
+ */
+export interface McpServerSelection {
+  /** MCP 服务器 ID */
+  serverId: string;
+  /**
+   * 允许的工具名称列表。
+   * null 或空数组 = 该服务器所有工具均可用；非空 = 仅允许列表中的工具。
+   */
+  toolNames: string[] | null;
+}
+
+/**
  * Agent 工具选择配置（对应后端 AgentDefinition.ToolsConfig）
  */
 export interface AgentToolsConfig {
-  /** GLOBAL MCP 服务器 ID 列表（服务端执行，scope=0） */
-  serverMcpIds?: string[];
-  /** PERSONAL MCP 能力标签列表（客户端执行，scope=1），如 ['github', 'notion'] */
-  personalMcpCapabilities?: string[];
+  /** MCP 服务器工具选择列表（服务端执行） */
+  mcpServers?: McpServerSelection[];
   /** 系统内置工具名称列表 */
   systemTools?: string[];
   /** 绑定的知识库 ID 列表 */
@@ -163,10 +174,10 @@ agentId?: string;
 modelId?: string;
 /** 关联的知识库ID列表 */
 knowledgeIds?: string[];
-/** 启用的工具名称（支持通配符） */
-enabledTools?: string[];
-/** GLOBAL MCP 服务器 ID 列表（为空则使用 Agent 默认配置） */
-serverMcpIds?: string[];
+/** MCP 服务器工具细粒度选择（为空则使用 Agent 默认配置） */
+mcpServers?: McpServerSelection[];
+/** 系统内置工具名称列表（为空则使用 Agent 默认配置） */
+systemTools?: string[];
 /**
  * PERSONAL MCP 工具 Schema 列表（前端 prefetch 后随请求上传）
  * 后端直接用这些 schema 构造真实 ToolSpecification 交给 LLM。
@@ -697,8 +708,6 @@ export interface McpServerInfo {
    * 作用域：0=GLOBAL（服务端执行），1=PERSONAL（客户端执行）
    */
   scope: 0 | 1;
-  /** 能力标签（PERSONAL 类型使用，如 'github'、'notion'） */
-  capability?: string;
   /** 连接类型 */
   connectionType: string;
   /** 端点 URL */
@@ -720,6 +729,11 @@ export interface McpServerInfo {
   tools?: McpToolInfo[];
   /** 工具数量 */
   toolCount?: number;
+  /**
+   * 运行时连接状态（前端本地，不上传后端）
+   * undefined = 未检测；true = 已连接；false = 连接失败
+   */
+  _connected?: boolean;
 }
 
 /**
@@ -740,6 +754,8 @@ export interface McpToolInfo {
   personal?: boolean;
   /** 连接类型 */
   connectionType?: string;
+  /** 工具参数 JSON Schema（GLOBAL 类型由后端提供） */
+  inputSchema?: Record<string, unknown>;
 }
 
 /**
@@ -763,7 +779,6 @@ export interface McpServerRequest {
   name: string;
   description?: string;
   scope: 0 | 1;
-  capability?: string;
   connectionType: string;
   endpointUrl: string;
   /**

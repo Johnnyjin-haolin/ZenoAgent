@@ -3,6 +3,7 @@ package com.aiagent.domain.model.bo;
 import com.aiagent.api.dto.PersonalMcpToolSchema;
 import com.aiagent.api.dto.RAGConfig;
 import com.aiagent.common.enums.AgentMode;
+import com.aiagent.domain.agent.AgentDefinition;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -46,19 +47,16 @@ public class AgentRuntimeConfig implements Serializable {
     // ── 工具 & 知识库 ─────────────────────────────────────────────────────────
 
     /**
-     * 绑定的 GLOBAL MCP 服务器 ID 列表（服务端执行）
-     * 空表示允许全部可用的 GLOBAL MCP
+     * MCP 服务器工具细粒度选择列表（服务端执行）。
+     * 空/null 表示允许全部可用的 GLOBAL MCP 服务器及其所有工具。
      */
-    private List<String> serverMcpIds;
+    private List<AgentDefinition.McpServerSelection> mcpServers;
 
     /**
-     * 绑定的 PERSONAL MCP 能力标签列表（客户端执行）
-     * 如 ["github", "notion"]
+     * 系统内置工具名称列表（运行时覆盖 AgentDefinition 配置）。
+     * 空/null 表示使用 AgentDefinition 中配置的系统工具。
      */
-    private List<String> personalMcpCapabilities;
-
-    /** 启用的工具名称列表（空表示允许全部） */
-    private List<String> enabledTools;
+    private List<String> systemTools;
 
     /** 关联知识库 ID 列表 */
     private List<String> knowledgeIds;

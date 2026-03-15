@@ -50,20 +50,6 @@
         />
       </a-form-item>
 
-      <!-- PERSONAL 能力标签 -->
-      <a-form-item v-if="form.scope === 1" label="能力标签（Capability）">
-        <a-input
-          v-model:value="form.capability"
-          placeholder="如：github、notion、jira（小写英文）"
-          :maxlength="64"
-          class="tech-input"
-        />
-        <div class="form-hint">
-          能力标签用于 Agent 声明所需的 PERSONAL MCP 类型（如 Agent 声明需要 github 能力，
-          用户本地的 GitHub MCP 就会被自动匹配使用）
-        </div>
-      </a-form-item>
-
       <!-- 连接类型 -->
       <a-form-item label="连接类型" required>
         <a-select
@@ -254,7 +240,6 @@ interface FormState {
   name: string;
   description: string;
   scope: 0 | 1;
-  capability: string;
   connectionType: string;
   endpointUrl: string;
   authHeaders: HeaderRow[];
@@ -269,7 +254,6 @@ const defaultForm = (): FormState => ({
   name: '',
   description: '',
   scope: 0,
-  capability: '',
   connectionType: 'streamable-http',
   endpointUrl: '',
   authHeaders: [],
@@ -306,7 +290,6 @@ watch(
         name: props.server.name,
         description: props.server.description || '',
         scope: props.server.scope,
-        capability: props.server.capability || '',
         connectionType: props.server.connectionType,
         endpointUrl: props.server.endpointUrl,
         // 编辑时：cloud 类型 value="***" 清空让用户重新输入；local 类型从 localStorage 回填
@@ -363,7 +346,6 @@ async function handleSave() {
     name: form.value.name.trim(),
     description: form.value.description?.trim() || undefined,
     scope: form.value.scope,
-    capability: form.value.capability?.trim() || undefined,
     connectionType: form.value.connectionType,
     endpointUrl: form.value.endpointUrl.trim(),
     authHeaders: Object.keys(authHeadersMap).length > 0 ? authHeadersMap : undefined,

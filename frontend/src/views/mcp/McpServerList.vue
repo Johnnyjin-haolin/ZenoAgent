@@ -47,10 +47,20 @@
         @edit="handleEdit(server)"
         @delete="handleDelete(server)"
         @toggle="handleToggle(server, $event)"
+        @view-tools="handleViewTools(server)"
         @test="handleTest(server)"
+        @local-test-result="(ok: boolean, count: number | null) => handleLocalTestResult(server, ok, count)"
         @configure-secret="handleConfigureSecret(server)"
       />
     </div>
+
+    <!-- 工具查看 Modal -->
+    <McpToolsModal
+      v-model:open="toolsModalOpen"
+      :server="viewingServer"
+      @connected="handleToolsConnected"
+      @disconnected="handleToolsDisconnected"
+    />
 
     <!-- 新增/编辑 抽屉 -->
     <McpServerDrawer
@@ -75,6 +85,7 @@ import { getMcpServers, deleteMcpServer, toggleMcpServer, testMcpServer } from '
 import type { McpServerInfo } from '../agent/agent.types';
 import McpServerCard from './components/McpServerCard.vue';
 import McpServerDrawer from './components/McpServerDrawer.vue';
+import McpToolsModal from './components/McpToolsModal.vue';
 import McpSecretModal from './components/McpSecretModal.vue';
 
 // ─── 状态 ──────────────────────────────────────────────────────────────────
@@ -86,6 +97,9 @@ const searchText = ref('');
 
 const drawerOpen = ref(false);
 const editingServer = ref<McpServerInfo | null>(null);
+
+const toolsModalOpen = ref(false);
+const viewingServer = ref<McpServerInfo | null>(null);
 
 const secretModalOpen = ref(false);
 const secretServer = ref<McpServerInfo | null>(null);
@@ -184,9 +198,43 @@ async function handleTest(server: McpServerInfo) {
     const toolCount = result.startsWith('OK:') ? parseInt(result.slice(3), 10) : null;
     const hint = toolCount != null ? `，已发现 ${toolCount} 个工具` : '';
     message.success({ content: `连通性测试通过 ✓${hint}`, key: 'test' });
+    server._connected = true;
+    if (toolCount != null) server.toolCount = toolCount;
   } else {
     message.error({ content: `连通性测试失败: ${result}`, key: 'test', duration: 5 });
+    server._connected = false;
   }
+}
+
+function handleViewTools(server: McpServerInfo) {
+  viewingServer.value = server;
+  toolsModalOpen.value = true;
+}
+
+function handleToolsConnected(toolCount: number) {
+  if (!viewingServer.value) return;
+  const srv = servers.value.find((s) => s.id === viewingServer.value!.id);
+  if (srv) {
+    srv._connected = true;
+    srv.toolCount = toolCount;
+  }
+}
+
+function handleToolsDisconnected() {
+  if (!viewingServer.value) return;
+  const srv = servers.value.find((s) => s.id === viewingServer.value!.id);
+  if (srv) {
+    srv._connected = false;
+  }
+}
+
+function handleLocalTestResult(
+  server: McpServerInfo,
+  connected: boolean,
+  toolCount: number | null
+) {
+  server._connected = connected;
+  if (connected && toolCount != null) server.toolCount = toolCount;
 }
 
 function handleConfigureSecret(server: McpServerInfo) {

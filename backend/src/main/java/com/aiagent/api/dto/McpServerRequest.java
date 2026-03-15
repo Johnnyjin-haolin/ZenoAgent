@@ -19,7 +19,6 @@ public class McpServerRequest {
     private Integer scope;
 
     private String ownerUserId;
-    private String capability;
 
     private String connectionType;
     private String endpointUrl;

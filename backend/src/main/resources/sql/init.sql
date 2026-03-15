@@ -116,7 +116,6 @@ CREATE TABLE IF NOT EXISTS `mcp_server` (
   `description`     VARCHAR(512)  DEFAULT NULL                                      COMMENT '服务器描述',
   `scope`           TINYINT       NOT NULL DEFAULT 0                                COMMENT '作用域：0=GLOBAL（服务端执行），1=PERSONAL（客户端执行）',
   `owner_user_id`   VARCHAR(64)   DEFAULT NULL                                      COMMENT '所属用户ID（PERSONAL 时有效）',
-  `capability`      VARCHAR(64)   DEFAULT NULL                                      COMMENT '能力标签',
   `connection_type` VARCHAR(32)   NOT NULL DEFAULT 'streamable-http'               COMMENT '连接类型',
   `endpoint_url`    VARCHAR(512)  NOT NULL                                          COMMENT '服务端点 URL',
   `auth_header`     TEXT          DEFAULT NULL                                      COMMENT '认证请求头（JSON）',
@@ -129,6 +128,5 @@ CREATE TABLE IF NOT EXISTS `mcp_server` (
   `create_time`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP               COMMENT '创建时间',
   `update_time`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   INDEX `idx_scope`         (`scope`),
-  INDEX `idx_owner_user_id` (`owner_user_id`),
-  INDEX `idx_capability`    (`capability`)
+  INDEX `idx_owner_user_id` (`owner_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='MCP 服务器配置表';

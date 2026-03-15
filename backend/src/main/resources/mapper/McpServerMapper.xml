@@ -9,7 +9,6 @@
         <result column="description"     property="description"/>
         <result column="scope"           property="scope"/>
         <result column="owner_user_id"   property="ownerUserId"/>
-        <result column="capability"      property="capability"/>
         <result column="connection_type" property="connectionType"/>
         <result column="endpoint_url"    property="endpointUrl"/>
         <result column="auth_header"     property="authHeader"/>
@@ -24,11 +23,11 @@
     </resultMap>
 
     <insert id="insert">
-        INSERT INTO mcp_server (id, name, description, scope, owner_user_id, capability,
+        INSERT INTO mcp_server (id, name, description, scope, owner_user_id,
                                 connection_type, endpoint_url, auth_header,
                                 extra_headers, timeout_ms, read_timeout_ms, retry_count,
                                 enabled, created_by)
-        VALUES (#{id}, #{name}, #{description}, #{scope}, #{ownerUserId}, #{capability},
+        VALUES (#{id}, #{name}, #{description}, #{scope}, #{ownerUserId},
                 #{connectionType}, #{endpointUrl}, #{authHeader},
                 #{extraHeaders}, #{timeoutMs}, #{readTimeoutMs}, #{retryCount},
                 #{enabled}, #{createdBy})
@@ -46,15 +45,6 @@
         SELECT * FROM mcp_server WHERE scope = #{scope} ORDER BY name ASC
     </select>
 
-    <select id="selectByCapabilities" resultMap="BaseResultMap">
-        SELECT * FROM mcp_server
-        WHERE scope = 1 AND capability IN
-        <foreach collection="capabilities" item="cap" open="(" separator="," close=")">
-            #{cap}
-        </foreach>
-        AND enabled = 1
-    </select>
-
     <select id="selectByIds" resultMap="BaseResultMap">
         SELECT * FROM mcp_server
         WHERE id IN
@@ -68,7 +58,6 @@
         <set>
             <if test="name != null">name = #{name},</if>
             <if test="description != null">description = #{description},</if>
-            <if test="capability != null">capability = #{capability},</if>
             <if test="connectionType != null">connection_type = #{connectionType},</if>
             <if test="endpointUrl != null">endpoint_url = #{endpointUrl},</if>
             <if test="authHeader != null">auth_header = #{authHeader},</if>

@@ -31,12 +31,6 @@ public class McpServerEntity {
      */
     private String ownerUserId;
 
-    /**
-     * 能力标签，PERSONAL 类型使用（如 github / notion / gmail）
-     * Agent 绑定个人 MCP 时通过此字段匹配
-     */
-    private String capability;
-
     /** 连接类型：streamable-http / sse / stdio / websocket */
     private String connectionType;
 

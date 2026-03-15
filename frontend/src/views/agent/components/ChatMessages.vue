@@ -1,6 +1,6 @@
 <template>
   <div ref="scrollRef" class="chat-messages">
-    <template v-if="messages.length > 0">
+    <div v-if="messages.length > 0" class="messages-inner">
       <AgentMessage
         v-for="msg in messages"
         :key="msg.id"
@@ -9,7 +9,7 @@
         @reject-tool="emit('reject-tool')"
         @answer-question="(qId, ans) => emit('answer-question', qId, ans)"
       />
-    </template>
+    </div>
 
     <div v-else class="welcome-container">
       <div class="welcome-content">
@@ -88,7 +88,8 @@ defineExpose({ scrollToBottom });
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 20px 24px;
+  // 使用父容器的 CSS 变量，提供自适应水平 padding
+  padding: 20px var(--content-padding-x, 24px);
   background: transparent;
   min-height: 0;
   scroll-behavior: smooth;
@@ -111,6 +112,14 @@ defineExpose({ scrollToBottom });
   }
 }
 
+// 消息列表内容列宽限制容器（包裹所有消息条目）
+.messages-inner {
+  max-width: var(--content-max-width, 900px);
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+
 .welcome-container {
   display: flex;
   justify-content: center;
@@ -120,7 +129,8 @@ defineExpose({ scrollToBottom });
 }
 
 .welcome-content {
-  max-width: 720px;
+  // 欢迎页宽度跟随内容列宽，手机端全宽
+  max-width: min(var(--content-max-width, 900px), 100%);
   width: 100%;
   text-align: center;
 }
@@ -158,6 +168,11 @@ defineExpose({ scrollToBottom });
   color: #f1f5f9;
   margin-bottom: 8px;
   letter-spacing: -0.3px;
+
+  // 宽屏下字体可以稍大
+  @media (min-width: 1600px) {
+    font-size: 26px;
+  }
 }
 
 .welcome-agent-desc {
@@ -165,7 +180,7 @@ defineExpose({ scrollToBottom });
   color: rgba(255, 255, 255, 0.45);
   margin-bottom: 36px;
   line-height: 1.6;
-  max-width: 480px;
+  max-width: 540px;
   margin-left: auto;
   margin-right: auto;
 }
@@ -173,10 +188,21 @@ defineExpose({ scrollToBottom });
 /* Categories */
 .categories-wrap {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  // 手机端单列，平板双列，桌面三列，自动适应
+  grid-template-columns: 1fr;
+  gap: 12px;
   margin-bottom: 36px;
   text-align: left;
+
+  @media (min-width: 640px) {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+
+  @media (min-width: 960px) {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
 }
 
 .category-col {

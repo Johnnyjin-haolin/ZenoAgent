@@ -49,10 +49,6 @@ export interface UseAgentChatOptions {
   defaultModelId?: string;
   /** 默认知识库IDs */
   defaultKnowledgeIds?: string[];
-  /** 默认启用的工具 */
-  defaultEnabledTools?: string[];
-  /** GLOBAL MCP 服务器 IDs */
-  serverMcpIds?: string[];
   /**
    * 返回本次对话需要参与 prefetch 的 PERSONAL MCP 服务器列表
    * 在 sendMessage 前会并发调用各服务器 tools/list，获取真实工具 schema
@@ -138,8 +134,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     conversationId,
     defaultModelId,
     defaultKnowledgeIds = [],
-    defaultEnabledTools = [],
-    serverMcpIds,
     getPersonalMcpServers,
     getAgentName,
     getPersonalMcpServer,
@@ -391,11 +385,9 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       agentId?: string;
       modelId?: string;
       knowledgeIds?: string[];
-      enabledTools?: string[];
+      mcpServers?: import('../agent.types').McpServerSelection[];
       mode?: 'AUTO' | 'MANUAL';
       images?: string[];
-      serverMcpIds?: string[];
-      personalMcpCapabilities?: string[];
     } = {}
   ) => {
     if (loading.value) {
@@ -453,7 +445,6 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     let currentIteration: any = null;
 
     // Prefetch PERSONAL MCP 工具 schema（并发，失败的服务器静默跳过）
-    const resolvedServerMcpIds = options.serverMcpIds ?? serverMcpIds;
     let personalMcpTools: import('../agent.types').PersonalMcpToolSchema[] = [];
     const personalServers = getPersonalMcpServers?.() ?? [];
     if (personalServers.length > 0) {
@@ -477,9 +468,8 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       agentId: options.agentId,
       modelId: options.modelId || defaultModelId,
       knowledgeIds: options.knowledgeIds || defaultKnowledgeIds,
-      enabledTools: options.enabledTools || defaultEnabledTools,
+      mcpServers: options.mcpServers,
       mode: options.mode || 'AUTO',
-      serverMcpIds: resolvedServerMcpIds,
       personalMcpTools: personalMcpTools.length > 0 ? personalMcpTools : undefined,
     };
 

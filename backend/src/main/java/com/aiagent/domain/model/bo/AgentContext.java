@@ -3,6 +3,7 @@ package com.aiagent.domain.model.bo;
 import com.aiagent.api.dto.PersonalMcpToolSchema;
 import com.aiagent.api.dto.RAGConfig;
 import com.aiagent.application.AgentEventPublisher;
+import com.aiagent.domain.agent.AgentDefinition;
 import com.aiagent.domain.action.ActionResult;
 import com.aiagent.common.enums.AgentMode;
 import com.aiagent.application.StreamingCallback;
@@ -179,33 +180,23 @@ public class AgentContext implements Serializable {
         ensureConfig().setMode(mode);
     }
     @JsonIgnore
-    public List<String> getEnabledTools() {
-        return config != null ? config.getEnabledTools() : null;
+    public List<AgentDefinition.McpServerSelection> getMcpServers() {
+        return config != null ? config.getMcpServers() : null;
     }
 
     @JsonIgnore
-    public void setEnabledTools(List<String> tools) {
-        ensureConfig().setEnabledTools(tools);
+    public void setMcpServers(List<AgentDefinition.McpServerSelection> selections) {
+        ensureConfig().setMcpServers(selections);
     }
 
     @JsonIgnore
-    public List<String> getServerMcpIds() {
-        return config != null ? config.getServerMcpIds() : null;
+    public List<String> getSystemTools() {
+        return config != null ? config.getSystemTools() : null;
     }
 
     @JsonIgnore
-    public void setServerMcpIds(List<String> ids) {
-        ensureConfig().setServerMcpIds(ids);
-    }
-
-    @JsonIgnore
-    public List<String> getPersonalMcpCapabilities() {
-        return config != null ? config.getPersonalMcpCapabilities() : null;
-    }
-
-    @JsonIgnore
-    public void setPersonalMcpCapabilities(List<String> capabilities) {
-        ensureConfig().setPersonalMcpCapabilities(capabilities);
+    public void setSystemTools(List<String> tools) {
+        ensureConfig().setSystemTools(tools);
     }
 
     @JsonIgnore

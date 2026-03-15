@@ -176,6 +176,8 @@ export default {
       toolListTitle: 'Tool List',
       selectedCount: 'Selected {count} tools',
       loadingError: 'Failed to load data',
+      systemToolsTab: 'System Tools',
+      mcpToolsTab: 'MCP Tools',
     },
     scenarios: {
       deviceCheck: 'Check device anomalies in last 7 days',

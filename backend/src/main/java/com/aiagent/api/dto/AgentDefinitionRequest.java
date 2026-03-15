@@ -1,6 +1,8 @@
 package com.aiagent.api.dto;
 
+import com.aiagent.domain.agent.AgentDefinition;
 import com.aiagent.domain.skill.SkillTreeNode;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -36,11 +38,11 @@ public class AgentDefinitionRequest {
     // ─────────────────────────────────────────────────────────────────────────
 
     @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ToolsConfigRequest {
-        /** GLOBAL MCP 服务器 ID 列表（服务端执行） */
-        private List<String> serverMcpIds;
-        /** PERSONAL MCP 能力标签列表（客户端执行） */
-        private List<String> personalMcpCapabilities;
+        /** MCP 服务器工具细粒度选择列表 */
+        private List<AgentDefinition.McpServerSelection> mcpServers;
+        /** 系统内置工具名称列表 */
         private List<String> systemTools;
         /** 绑定的知识库 ID 列表 */
         private List<String> knowledgeIds;

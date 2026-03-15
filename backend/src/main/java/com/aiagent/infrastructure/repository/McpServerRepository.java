@@ -32,17 +32,6 @@ public class McpServerRepository {
         return mapper.selectByScope(scope);
     }
 
-    /**
-     * 按 capability 列表查询 PERSONAL MCP（用于 Agent 运行时匹配）
-     * 暂不过滤 ownerUserId，默认全部用户可见
-     */
-    public List<McpServerEntity> findByCapabilities(List<String> capabilities) {
-        if (capabilities == null || capabilities.isEmpty()) {
-            return Collections.emptyList();
-        }
-        return mapper.selectByCapabilities(capabilities);
-    }
-
     public List<McpServerEntity> findByIds(List<String> ids) {
         if (ids == null || ids.isEmpty()) {
             return Collections.emptyList();

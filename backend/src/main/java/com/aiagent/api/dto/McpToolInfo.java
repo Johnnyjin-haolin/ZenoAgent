@@ -37,7 +37,13 @@ public class McpToolInfo {
     @JsonIgnore
     private JsonObjectSchema parameters;
 
-    private  Map<String, Object> metadata;
+    /**
+     * 工具参数的 JSON Schema（标准格式，供前端展示参数信息）
+     * 格式：{"type":"object","properties":{"param1":{"type":"string","description":"..."},...},"required":["param1"]}
+     */
+    private Map<String, Object> inputSchema;
+
+    private Map<String, Object> metadata;
     
     /**
      * 是否是 PERSONAL MCP 工具（客户端执行）

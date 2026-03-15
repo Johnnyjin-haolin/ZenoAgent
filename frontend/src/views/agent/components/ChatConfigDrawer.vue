@@ -20,7 +20,7 @@
       </div>
 
       <div class="config-item">
-        <AgentToolConfig v-model="tools" @change="handleToolsChange" />
+        <AgentToolConfig v-model="tools" @change="handleToolsChange" @tools-meta-change="handleToolsMetaChange" />
       </div>
 
       <div class="config-item">
@@ -52,6 +52,7 @@ import { Icon } from '@/components/Icon';
 import AgentKnowledgeSelector from './AgentKnowledgeSelector.vue';
 import AgentModelSelector from './AgentModelSelector.vue';
 import AgentToolConfig from './AgentToolConfig.vue';
+import type { ToolsMetaMap } from './AgentToolConfig.vue';
 import type { KnowledgeInfo, ModelInfo } from '../agent.types';
 
 const { t } = useI18n();
@@ -73,6 +74,7 @@ const emit = defineEmits<{
   (e: 'model-change', modelId: string, model: ModelInfo | null): void;
   (e: 'knowledge-change', knowledgeIds: string[], list: KnowledgeInfo[]): void;
   (e: 'tools-change', tools: string[]): void;
+  (e: 'tools-meta-change', meta: ToolsMetaMap): void;
 }>();
 
 const drawerOpen = computed({
@@ -110,6 +112,10 @@ function handleKnowledgeChange(ids: string[], list: KnowledgeInfo[]) {
 
 function handleToolsChange(toolNames: string[]) {
   emit('tools-change', toolNames);
+}
+
+function handleToolsMetaChange(meta: ToolsMetaMap) {
+  emit('tools-meta-change', meta);
 }
 </script>
 

@@ -22,9 +22,6 @@ public interface McpServerMapper {
     /** 按 scope 查询 */
     List<McpServerEntity> selectByScope(@Param("scope") int scope);
 
-    /** 按 capability 查询（PERSONAL MCP 能力匹配） */
-    List<McpServerEntity> selectByCapabilities(@Param("capabilities") List<String> capabilities);
-
     /** 按 ID 列表批量查询 */
     List<McpServerEntity> selectByIds(@Param("ids") List<String> ids);
 

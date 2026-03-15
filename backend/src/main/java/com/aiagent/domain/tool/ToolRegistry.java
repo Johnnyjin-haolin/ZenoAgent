@@ -29,9 +29,9 @@ import java.util.Map;
  * 合并系统内置工具（SystemTool）和 MCP 工具（GLOBAL / PERSONAL），
  * 对外提供统一的 resolveToolSpecifications 和 execute 接口。
  * <p>
- * PERSONAL 工具识别：通过 toolName 前缀 "personal:" 标记，
- * 对应 McpToolInfo.isPersonal()==true 或 serverId 在 personalMcpCapabilities 中
- */
+* PERSONAL 工具识别：通过 toolName 前缀 "personal:" 标记，
+* 对应 McpToolInfo.isPersonal()==true
+*/
 @Slf4j
 @Component
 public class ToolRegistry {
@@ -74,9 +74,8 @@ public class ToolRegistry {
             }
         }
 
-        // 2. GLOBAL MCP 工具（按 serverMcpIds 过滤）
-        List<String> serverMcpIds = agentDef.getTools().getServerMcpIds();
-        List<McpToolInfo> mcpTools = mcpManager.getToolsByServerIds(serverMcpIds);
+        // 2. GLOBAL MCP 工具（按 mcpServers 细粒度过滤）
+        List<McpToolInfo> mcpTools = mcpManager.getToolsBySelections(agentDef.getTools().getMcpServers());
         for (McpToolInfo mcp : mcpTools) {
             ToolSpecification spec = ToolSpecification.builder()
                 .name(mcp.getName())
@@ -223,8 +222,7 @@ public class ToolRegistry {
             return false;
         }
 
-        List<String> serverMcpIds = agentDef.getTools().getServerMcpIds();
-        List<McpToolInfo> mcpTools = mcpManager.getToolsByServerIds(serverMcpIds);
+        List<McpToolInfo> mcpTools = mcpManager.getToolsBySelections(agentDef.getTools().getMcpServers());
         int threshold = agentConfig.getTools().getProgressiveThreshold();
         return mcpTools.size() > threshold;
     }
@@ -236,8 +234,7 @@ public class ToolRegistry {
         if (agentDef == null || agentDef.getTools() == null) {
             return "";
         }
-        List<String> serverMcpIds = agentDef.getTools().getServerMcpIds();
-        List<McpToolInfo> mcpTools = mcpManager.getToolsByServerIds(serverMcpIds);
+        List<McpToolInfo> mcpTools = mcpManager.getToolsBySelections(agentDef.getTools().getMcpServers());
         if (mcpTools.isEmpty()) {
             return "";
         }

@@ -23,11 +23,6 @@ public class McpServerVO {
 
     private String ownerUserId;
 
-    /**
-     * 能力标签（PERSONAL 类型使用）
-     */
-    private String capability;
-
     private String connectionType;
     private String endpointUrl;
 

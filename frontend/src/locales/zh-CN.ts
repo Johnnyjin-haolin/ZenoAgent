@@ -176,6 +176,8 @@ export default {
       toolListTitle: '工具列表',
       selectedCount: '已选择 {count} 个工具',
       loadingError: '加载数据失败',
+      systemToolsTab: '系统工具',
+      mcpToolsTab: 'MCP 工具',
     },
     scenarios: {
       deviceCheck: '查询设备近7天异常并分析原因',

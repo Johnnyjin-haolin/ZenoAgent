@@ -419,9 +419,8 @@ function handleAnswerQuestion(questionId: string, answer: string) {
   gap: 16px;
   margin-bottom: 24px;
   animation: fadeIn 0.3s ease-in;
-  max-width: 900px;
-  margin-left: auto;
-  margin-right: auto;
+  // 宽度由父容器 messages-inner 的 max-width 统一控制
+  width: 100%;
 
   &.user {
     flex-direction: row-reverse;
@@ -847,8 +846,9 @@ function handleAnswerQuestion(questionId: string, answer: string) {
 // \u2500\u2500\u2500 Agent \u63d0\u95ee\u5361\u7247\u6837\u5f0f \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
 .agent-question-message {
-  max-width: 900px;
-  margin: 0 auto 24px;
+  // 宽度由父容器 messages-inner 的 max-width 统一控制
+  width: 100%;
+  margin-bottom: 24px;
   animation: fadeIn 0.3s ease-in;
 }
 

@@ -80,71 +80,20 @@
           {{ t('agentEdit.toolConfig') }}
         </div>
 
-        <!-- GLOBAL MCP 服务器（服务端执行） -->
+        <!-- 系统工具 + MCP 工具 选择器 -->
         <div class="form-row">
           <div class="form-item">
-            <label class="form-label">
-              🌐 GLOBAL MCP 服务器
-              <a-tooltip title="由服务端直接调用，适合统一管理的工具。在 MCP 服务器管理页面中维护。">
-                <question-circle-outlined class="help-icon" />
-              </a-tooltip>
-            </label>
-            <a-select
-              v-model:value="form.serverMcpIds"
-              mode="multiple"
-              placeholder="选择要绑定的 GLOBAL MCP 服务器（可多选）"
-              :options="globalMcpOptions"
-              allow-clear
-              class="tech-select"
-              dropdown-class-name="agent-edit-select-dropdown"
-              :loading="mcpLoading"
+            <AgentToolConfig
+              v-model="form.selectedTools"
+              :inline-mode="true"
+              :show-hint="false"
+              @tools-meta-change="form.toolsMetaMap = $event"
             />
-            <span class="field-hint">
-              已绑定 {{ form.serverMcpIds.length }} 个服务端 MCP 服务器
-              <router-link to="/mcp" target="_blank" class="manage-link">管理 MCP 服务器 →</router-link>
-            </span>
           </div>
         </div>
 
-        <!-- PERSONAL MCP 能力标签（客户端执行） -->
+        <!-- 知识库 -->
         <div class="form-row">
-          <div class="form-item">
-            <label class="form-label">
-              👤 PERSONAL MCP 能力需求
-              <a-tooltip title="声明此 Agent 需要哪些个人 MCP 能力。运行时由用户浏览器本地调用，适合需要个人认证的工具（如 GitHub、Notion）。">
-                <question-circle-outlined class="help-icon" />
-              </a-tooltip>
-            </label>
-            <a-select
-              v-model:value="form.personalMcpCapabilities"
-              mode="multiple"
-              placeholder="选择所需的 PERSONAL MCP 能力标签（如 github、notion）"
-              :options="personalMcpOptions"
-              allow-clear
-              class="tech-select"
-              dropdown-class-name="agent-edit-select-dropdown"
-              :loading="mcpLoading"
-            />
-            <span class="field-hint">
-              当 Agent 执行时，具有对应能力标签的用户本地 PERSONAL MCP 将被自动匹配使用
-            </span>
-          </div>
-        </div>
-
-        <!-- 系统内置工具 -->
-        <div class="form-row two-cols">
-          <div class="form-item">
-            <label class="form-label">{{ t('agentEdit.systemTools') }}</label>
-            <a-select
-              v-model:value="form.systemTools"
-              mode="multiple"
-              :placeholder="t('agentEdit.systemToolsPlaceholder')"
-              :options="systemToolOptions"
-              allow-clear
-              class="tech-select"
-              dropdown-class-name="agent-edit-select-dropdown"
-            />
-          </div>
           <div class="form-item">
             <label class="form-label">{{ t('agentEdit.knowledgeBases') }}</label>
             <a-select
@@ -314,11 +263,15 @@ import {
   getAgentDefinition,
   createAgentDefinition,
   updateAgentDefinition,
-  getMcpServers,
-  getAvailableSystemToolsForAgent,
   getKnowledgeList,
 } from '../agent/agent.api';
-import type { AgentDefinitionRequest, SkillTreeNode } from '../agent/agent.types';
+import type {
+  AgentDefinitionRequest,
+  SkillTreeNode,
+} from '../agent/agent.types';
+import { buildAgentToolsConfig, restoreToolsFromConfig } from '../agent/agent.helpers';
+import type { ToolsMetaMap } from '../agent/agent.helpers';
+import AgentToolConfig from '../agent/components/AgentToolConfig.vue';
 import SkillTreeEditor from './components/SkillTreeEditor.vue';
 
 // ─── 路由 ────────────────────────────────────────────────────────────────────
@@ -334,21 +287,18 @@ const agentId = computed(() => route.params.id as string | undefined);
 
 const loading = ref(false);
 const saving = ref(false);
-const mcpLoading = ref(false);
 const editingBuiltin = ref(false);
 
-const globalMcpOptions = ref<{ label: string; value: string }[]>([]);
-const personalMcpOptions = ref<{ label: string; value: string }[]>([]);
-const systemToolOptions = ref<{ label: string; value: string }[]>([]);
 const knowledgeOptions = ref<{ label: string; value: string }[]>([]);
 
 const form = ref({
   name: '',
   description: '',
   systemPrompt: '',
-  serverMcpIds: [] as string[],
-  personalMcpCapabilities: [] as string[],
-  systemTools: [] as string[],
+  /** 已选工具名列表（由 AgentToolConfig 组件双向绑定） */
+  selectedTools: [] as string[],
+  /** 工具名 → serverId 映射（由 AgentToolConfig 组件 emit） */
+  toolsMetaMap: {} as ToolsMetaMap,
   knowledgeIds: [] as string[],
   historyMessageLoadLimit: null as number | null,
   maxToolRounds: null as number | null,
@@ -361,40 +311,8 @@ const form = ref({
 
 // ─── 初始化 ──────────────────────────────────────────────────────────────────
 
-async function loadMcpOptions() {
-  mcpLoading.value = true;
-  try {
-    const allServers = await getMcpServers();
-    globalMcpOptions.value = allServers
-      .filter((s) => s.scope === 0)
-      .map((s) => ({
-        label: s.enabled ? s.name : `${s.name}（已禁用）`,
-        value: s.id,
-      }));
-
-    // 对于 PERSONAL：用能力标签作为选项（去重）
-    const capSet = new Set<string>();
-    allServers
-      .filter((s) => s.scope === 1 && s.capability)
-      .forEach((s) => capSet.add(s.capability!));
-    personalMcpOptions.value = [...capSet].map((cap) => ({
-      label: cap,
-      value: cap,
-    }));
-  } finally {
-    mcpLoading.value = false;
-  }
-}
-
 async function loadOptions() {
-  const [tools, kbList] = await Promise.all([
-    getAvailableSystemToolsForAgent(),
-    getKnowledgeList(),
-  ]);
-  systemToolOptions.value = tools.map((tool) => ({
-    label: `${tool.name}${tool.description ? ' — ' + tool.description : ''}`,
-    value: tool.name,
-  }));
+  const kbList = await getKnowledgeList();
   knowledgeOptions.value = kbList.map((kb) => ({ label: kb.name, value: kb.id }));
 }
 
@@ -407,13 +325,16 @@ async function loadAgent() {
     return;
   }
   editingBuiltin.value = agent.builtin;
+
+  // 将后端存储的 mcpServers + systemTools 反向还原为工具名列表
+  const { selectedTools, toolsMetaMap } = restoreToolsFromConfig(agent.tools);
+
   form.value = {
     name: agent.name,
     description: agent.description || '',
     systemPrompt: agent.systemPrompt || '',
-    serverMcpIds: agent.tools?.serverMcpIds || [],
-    personalMcpCapabilities: agent.tools?.personalMcpCapabilities || [],
-    systemTools: agent.tools?.systemTools || [],
+    selectedTools,
+    toolsMetaMap,
     knowledgeIds: agent.tools?.knowledgeIds || [],
     historyMessageLoadLimit: agent.contextConfig?.historyMessageLoadLimit ?? null,
     maxToolRounds: agent.contextConfig?.maxToolRounds ?? null,
@@ -428,7 +349,7 @@ async function loadAgent() {
 onMounted(async () => {
   loading.value = true;
   try {
-    await Promise.all([loadOptions(), loadMcpOptions(), loadAgent()]);
+    await Promise.all([loadOptions(), loadAgent()]);
   } catch {
     message.error(t('agentEdit.loadFailed'));
   } finally {
@@ -444,14 +365,19 @@ async function handleSave() {
     return;
   }
 
+  // 将选择的工具转换为后端存储格式
+  const { mcpServers, systemTools } = buildAgentToolsConfig(
+    form.value.selectedTools,
+    form.value.toolsMetaMap
+  );
+
   const request: AgentDefinitionRequest = {
     name: form.value.name.trim(),
     description: form.value.description.trim() || undefined,
     systemPrompt: form.value.systemPrompt || undefined,
     tools: {
-      serverMcpIds: form.value.serverMcpIds,
-      personalMcpCapabilities: form.value.personalMcpCapabilities,
-      systemTools: form.value.systemTools,
+      mcpServers: mcpServers ?? [],
+      systemTools: systemTools ?? [],
       knowledgeIds: form.value.knowledgeIds,
     },
     skillTree: form.value.skillTree.length > 0 ? form.value.skillTree : undefined,
@@ -719,6 +645,7 @@ function goBack() {
 .tech-number {
   width: 100%;
 }
+
 </style>
 
 <style lang="less">
