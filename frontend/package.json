@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@ant-design/icons-vue": "^7.0.1",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "ant-design-vue": "^4.0.0",
     "axios": "^1.6.2",
     "highlight.js": "^11.9.0",

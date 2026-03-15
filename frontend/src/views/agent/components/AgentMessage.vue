@@ -1,4 +1,5 @@
 <template>
+  <!-- ── 普通消息（user / assistant / system） ───────────────────────────────── -->
   <div class="agent-message" :class="[message.role, { 'has-error': message.error }]">
     <!-- 头像 -->
     <div class="message-avatar">
@@ -8,9 +9,13 @@
 
     <!-- 消息内容区 -->
     <div class="message-content-wrapper">
-      <!-- 时间和模型信息 -->
+      <!-- 时间、Agent 名称和模型信息 -->
       <div class="message-header">
         <span class="message-time">{{ formattedTime }}</span>
+        <span v-if="message.agentName && message.role === 'assistant'" class="message-agent-tag">
+          <Icon icon="ant-design:robot-outlined" class="message-agent-icon" />
+          {{ message.agentName }}
+        </span>
         <a-tag v-if="message.model && message.role === 'assistant'" color="blue" size="small">
           {{ message.model }}
         </a-tag>
@@ -44,6 +49,7 @@
         @toggle-step-expand="handleToggleStepExpand"
         @confirm-tool="handleConfirmTool"
         @reject-tool="handleRejectTool"
+        @answer-question="handleAnswerQuestion"
       />
 
       <!-- RAG 检索结果 -->
@@ -150,6 +156,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'confirm-tool'): void;
   (e: 'reject-tool'): void;
+  (e: 'answer-question', questionId: string, answer: string): void;
 }>();
 
 const userStore = useUserStore();
@@ -389,7 +396,6 @@ function formatDuration(ms: number) {
 // 切换步骤展开状态
 function handleToggleStepExpand(stepId: string) {
   if (props.message.process && props.message.process.iterations) {
-    // 遍历所有迭代，查找对应的步骤
     for (const iteration of props.message.process.iterations) {
       if (iteration.steps) {
         const step = iteration.steps.find((s) => s.id === stepId);
@@ -401,6 +407,10 @@ function handleToggleStepExpand(stepId: string) {
     }
   }
 }
+
+function handleAnswerQuestion(questionId: string, answer: string) {
+  emit('answer-question', questionId, answer);
+}
 </script>
 
 <style scoped lang="less">
@@ -409,9 +419,8 @@ function handleToggleStepExpand(stepId: string) {
   gap: 16px;
   margin-bottom: 24px;
   animation: fadeIn 0.3s ease-in;
-  max-width: 900px;
-  margin-left: auto;
-  margin-right: auto;
+  // 宽度由父容器 messages-inner 的 max-width 统一控制
+  width: 100%;
 
   &.user {
     flex-direction: row-reverse;
@@ -491,6 +500,25 @@ function handleToggleStepExpand(stepId: string) {
   color: rgba(148, 163, 184, 0.6);
   font-family: 'JetBrains Mono', monospace;
   margin-bottom: 2px;
+}
+
+.message-agent-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+
+  .message-agent-icon {
+    font-size: 10px;
+  }
 }
 
 .status-card {
@@ -657,59 +685,127 @@ function handleToggleStepExpand(stepId: string) {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 
   .markdown-body {
-    background: transparent;
-    color: inherit;
+    background-color: transparent !important;
+    color: #cbd5e1 !important;
     font-family: 'Inter', sans-serif;
-    
+
     :deep(p) {
       margin-bottom: 1em;
       &:last-child {
         margin-bottom: 0;
       }
     }
-    
+
     :deep(code) {
-      background: rgba(255, 255, 255, 0.1);
-      padding: 2px 4px;
+      background: rgba(255, 255, 255, 0.08) !important;
+      color: #93c5fd !important;
+      padding: 2px 6px;
       border-radius: 4px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.9em;
+      font-size: 0.875em;
     }
-    
+
     :deep(pre) {
-      background: #0d1117;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: #0d1117 !important;
+      border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 8px;
-      padding: 12px;
-      margin: 16px 0;
+      padding: 0;
+      margin: 14px 0;
       overflow-x: auto;
-      
+
       code {
-        background: transparent;
+        background: transparent !important;
+        color: #e6edf3 !important;
         padding: 0;
         border-radius: 0;
-        color: #e6edf3;
+        font-size: 13px;
       }
     }
-    
+
     :deep(a) {
-      color: #60A5FA;
+      color: #60a5fa;
       text-decoration: none;
       &:hover {
+        color: #93c5fd;
         text-decoration: underline;
       }
     }
-    
+
     :deep(ul), :deep(ol) {
       padding-left: 20px;
       margin-bottom: 1em;
+      color: #cbd5e1;
     }
-    
-    :deep(h1), :deep(h2), :deep(h3), :deep(h4) {
-      color: #f1f5f9;
-      margin-top: 1.5em;
+
+    :deep(li) {
+      color: #cbd5e1;
+      margin-bottom: 4px;
+    }
+
+    :deep(h1), :deep(h2), :deep(h3), :deep(h4), :deep(h5), :deep(h6) {
+      color: #f1f5f9 !important;
+      border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+      margin-top: 1.4em;
       margin-bottom: 0.5em;
       font-weight: 600;
+    }
+
+    :deep(blockquote) {
+      background: rgba(59, 130, 246, 0.06) !important;
+      border-left: 3px solid rgba(59, 130, 246, 0.5) !important;
+      color: #94a3b8 !important;
+      padding: 8px 14px;
+      margin: 12px 0;
+      border-radius: 0 6px 6px 0;
+
+      p {
+        color: #94a3b8 !important;
+      }
+    }
+
+    :deep(hr) {
+      background-color: rgba(255, 255, 255, 0.08) !important;
+      border: none;
+      height: 1px;
+      margin: 16px 0;
+    }
+
+    :deep(table) {
+      background-color: transparent !important;
+      border-collapse: collapse;
+      width: 100%;
+      margin: 12px 0;
+    }
+
+    :deep(th) {
+      background-color: rgba(59, 130, 246, 0.08) !important;
+      color: #e2e8f0 !important;
+      border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      padding: 6px 12px;
+      font-weight: 600;
+    }
+
+    :deep(td) {
+      background-color: transparent !important;
+      color: #cbd5e1 !important;
+      border: 1px solid rgba(255, 255, 255, 0.06) !important;
+      padding: 6px 12px;
+    }
+
+    :deep(tr) {
+      background-color: transparent !important;
+      &:nth-child(even) td {
+        background-color: rgba(255, 255, 255, 0.02) !important;
+      }
+    }
+
+    :deep(strong) {
+      color: #f1f5f9;
+      font-weight: 600;
+    }
+
+    :deep(em) {
+      color: #94a3b8;
     }
   }
 
@@ -745,6 +841,257 @@ function handleToggleStepExpand(stepId: string) {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+// \u2500\u2500\u2500 Agent \u63d0\u95ee\u5361\u7247\u6837\u5f0f \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+.agent-question-message {
+  // 宽度由父容器 messages-inner 的 max-width 统一控制
+  width: 100%;
+  margin-bottom: 24px;
+  animation: fadeIn 0.3s ease-in;
+}
+
+.question-card {
+  background: rgba(10, 14, 26, 0.85);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  border-left: 3px solid #a78bfa;
+  border-radius: 10px;
+  padding: 16px 20px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(167, 139, 250, 0.08) inset;
+  transition: border-color 0.3s, opacity 0.3s;
+
+  &.answered {
+    border-left-color: rgba(167, 139, 250, 0.35);
+    border-color: rgba(167, 139, 250, 0.12);
+    opacity: 0.75;
+  }
+}
+
+.question-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.question-pulse {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #a78bfa;
+  box-shadow: 0 0 8px #a78bfa;
+  animation: qPulse 2s ease-in-out infinite;
+
+  .answered & {
+    background: #475569;
+    box-shadow: none;
+    animation: none;
+  }
+}
+
+.question-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #a78bfa;
+  text-transform: uppercase;
+
+  .answered & {
+    color: #475569;
+  }
+}
+
+.answered-badge {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #34d399;
+}
+
+.question-text {
+  font-size: 15px;
+  font-weight: 500;
+  color: #e2e8f0;
+  line-height: 1.6;
+  margin: 0 0 14px;
+  font-family: 'Inter', sans-serif;
+
+  .answered & {
+    color: #64748b;
+  }
+}
+
+.answered-answer {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(52, 211, 153, 0.06);
+  border: 1px solid rgba(52, 211, 153, 0.15);
+  border-radius: 6px;
+}
+
+.answered-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: #34d399;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.answered-content {
+  font-size: 13px;
+  color: #94a3b8;
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.q-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.q-option-btn {
+  padding: 6px 16px;
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  border-radius: 20px;
+  background: transparent;
+  font-size: 13px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  &:hover {
+    border-color: #a78bfa;
+    color: #e2e8f0;
+    background: rgba(167, 139, 250, 0.08);
+  }
+
+  &.selected {
+    border-color: #a78bfa;
+    background: rgba(167, 139, 250, 0.18);
+    color: #c4b5fd;
+    font-weight: 500;
+  }
+}
+
+.q-check {
+  font-size: 11px;
+  min-width: 11px;
+  color: #a78bfa;
+}
+
+.q-preview {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  max-height: 160px;
+  overflow-y: auto;
+
+  pre {
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #94a3b8;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin: 0;
+  }
+}
+
+.q-input-area {
+  margin-bottom: 14px;
+}
+
+.q-textarea {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #e2e8f0;
+  resize: none;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+
+  &::placeholder {
+    color: rgba(148, 163, 184, 0.3);
+  }
+
+  &:focus {
+    border-color: #a78bfa;
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
+  }
+}
+
+.q-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.q-btn {
+  padding: 6px 18px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+  border: none;
+  transition: all 0.18s ease;
+  letter-spacing: 0.5px;
+}
+
+.q-btn-skip {
+  background: transparent;
+  color: #475569;
+  border: 1px solid rgba(71, 85, 105, 0.4);
+
+  &:hover {
+    color: #94a3b8;
+    border-color: rgba(148, 163, 184, 0.3);
+  }
+}
+
+.q-btn-submit {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(124, 58, 237, 0.3);
+
+  &:hover:not(:disabled) {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    box-shadow: 0 2px 14px rgba(139, 92, 246, 0.4);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+}
+
+@keyframes qPulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px #a78bfa; }
+  50%       { opacity: 0.4; box-shadow: 0 0 3px #a78bfa; }
 }
 
 @keyframes blink {

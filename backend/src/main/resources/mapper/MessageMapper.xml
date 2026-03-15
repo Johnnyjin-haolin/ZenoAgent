@@ -10,6 +10,7 @@
         <result column="role" property="role"/>
         <result column="content" property="content"/>
         <result column="model_id" property="modelId"/>
+        <result column="agent_id" property="agentId"/>
         <result column="tokens" property="tokens"/>
         <result column="duration" property="duration"/>
         <result column="metadata" property="metadata"/>
@@ -18,9 +19,9 @@
     
     <insert id="insert">
         INSERT INTO agent_message 
-        (conversation_id, message_id, role, content, model_id, tokens, duration, metadata)
+        (conversation_id, message_id, role, content, model_id, agent_id, tokens, duration, metadata)
         VALUES 
-        (#{conversationId}, #{messageId}, #{role}, #{content}, #{modelId}, #{tokens}, #{duration}, #{metadata})
+        (#{conversationId}, #{messageId}, #{role}, #{content}, #{modelId}, #{agentId}, #{tokens}, #{duration}, #{metadata})
     </insert>
     
     <select id="selectByConversationId" resultMap="BaseResultMap">

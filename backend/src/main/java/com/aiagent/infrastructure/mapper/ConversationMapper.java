@@ -39,6 +39,11 @@ public interface ConversationMapper {
     int countByStatus(@Param("status") String status);
     
     /**
+     * 更新绑定的 Agent ID
+     */
+    void updateAgentId(@Param("id") String id, @Param("agentId") String agentId);
+
+    /**
      * 更新会话标题
      */
     void updateTitle(@Param("id") String id, @Param("title") String title);

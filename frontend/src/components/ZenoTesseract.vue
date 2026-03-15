@@ -45,6 +45,14 @@
           <span class="icon">🧠</span>
           <div class="label">Context</div>
         </div>
+        <div class="satellite sat-skill">
+          <span class="icon">✨</span>
+          <div class="label">Skill</div>
+        </div>
+        <div class="satellite sat-agent">
+          <span class="icon">🤖</span>
+          <div class="label">Agent</div>
+        </div>
       </div>
     </div>
   </div>
@@ -264,6 +272,24 @@ const getParticleStyle = (i: number) => {
     border-color: #60A5FA;
     color: #60A5FA;
     box-shadow: 0 0 15px rgba(96, 165, 250, 0.3);
+  }
+
+  /* Green for Skill */
+  .sat-skill {
+    bottom: 5%; right: 15%;
+    transform: translate(50%, 50%) translateZ(60px);
+    border-color: #34D399;
+    color: #34D399;
+    box-shadow: 0 0 15px rgba(52, 211, 153, 0.3);
+  }
+
+  /* Orange for Agent */
+  .sat-agent {
+    top: 55%; left: 0;
+    transform: translate(-50%, -50%) translateZ(-80px);
+    border-color: #FB923C;
+    color: #FB923C;
+    box-shadow: 0 0 15px rgba(251, 146, 60, 0.3);
   }
 }
 

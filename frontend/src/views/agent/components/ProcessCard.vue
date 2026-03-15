@@ -26,6 +26,7 @@
           @toggle-step-expand="handleToggleStepExpand"
           @confirm-tool="handleConfirmTool"
           @reject-tool="handleRejectTool"
+          @answer-question="handleAnswerQuestion"
         />
       </div>
     </div>
@@ -52,7 +53,8 @@ const emit = defineEmits<{
   toggleStepExpand: [stepId: string];
   confirmTool: [];
   rejectTool: [];
-}>();
+  answerQuestion: [questionId: string, answer: string];
+}>(); 
 
 // 迭代数量
 const iterationCount = computed(() => props.process.iterations?.length || 0);
@@ -68,6 +70,10 @@ const handleConfirmTool = () => {
 
 const handleRejectTool = () => {
   emit('rejectTool');
+};
+
+const handleAnswerQuestion = (questionId: string, answer: string) => {
+  emit('answerQuestion', questionId, answer);
 };
 
 // 格式化耗时

@@ -3,6 +3,7 @@ package com.aiagent.application;
 import com.aiagent.domain.action.ActionExecutor;
 import com.aiagent.domain.action.ActionResult;
 import com.aiagent.domain.action.AgentAction;
+import com.aiagent.domain.model.bo.AgentExecutionResult;
 import com.aiagent.domain.model.bo.ObservationResult;
 import com.aiagent.domain.model.bo.ReActExecutionResult;
 import com.aiagent.domain.observation.ObservationEngine;
@@ -12,6 +13,7 @@ import com.aiagent.common.enums.AgentState;
 import com.aiagent.domain.model.bo.AgentContext;
 import com.aiagent.api.dto.AgentEventData;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.UserMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -21,14 +23,21 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * ReAct循环引擎
- * 实现Reasoning-Acting循环，让Agent能够自主思考、行动、观察和反思
- * 
- * @author aiagent
+ * 基于 Prompt 引导的 ReAct（Reasoning + Acting）循环引擎（备选引擎）
+ *
+ * <p>适用于<b>不支持 Function Calling</b> 的模型（如部分私有化部署的老旧模型、Ollama 部分模型）。
+ * 通过在 Prompt 中注入工具定义，由 LLM 以 JSON 格式输出 Action，后端解析后执行，
+ * 支持 TOOL_CALL / RAG_RETRIEVE / LLM_GENERATE / DIRECT_RESPONSE 四种动作类型，
+ * 并支持并行执行多个动作。
+ *
+ * <p>如需切换到此引擎，将 {@code AgentServiceImpl} 中的
+ * {@code @Qualifier} 值改为 {@code "promptReActEngine"}。
+ *
+ * @see FunctionCallingEngine
  */
 @Slf4j
 @Component
-public class ReActEngine {
+public class PromptReActEngine implements AgentEngine {
     
     @Autowired
     private ThinkingEngine thinkingEngine;
@@ -48,13 +57,22 @@ public class ReActEngine {
     private static final int MAX_ITERATIONS = AgentConstants.DEFAULT_MAX_ITERATIONS;
 
     /**
-     * 执行ReAct循环
-     * 
-     * @param goal 目标（用户请求）
+     * 实现 AgentEngine 接口，goal 从 context 最后一条 UserMessage 中提取
+     */
+    @Override
+    public AgentExecutionResult execute(AgentContext context) {
+        String goal = extractGoal(context);
+        return toAgentResult(executeInternal(goal, context));
+    }
+
+    /**
+     * 执行ReAct循环（内部实现）
+     *
+     * @param goal    目标（用户请求）
      * @param context Agent上下文
      * @return 最终结果，包含所有对话消息
      */
-    public ReActExecutionResult execute(String goal, AgentContext context) {
+    public ReActExecutionResult executeInternal(String goal, AgentContext context) {
         log.info("开始ReAct循环执行，目标: {}", goal);
         long totalStartNs = System.nanoTime();
         
@@ -294,6 +312,38 @@ public class ReActEngine {
     
     private long elapsedMs(long startNs) {
         return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs);
+    }
+
+    /**
+     * 从 context 的消息历史中提取最后一条用户输入作为 goal
+     */
+    private String extractGoal(AgentContext context) {
+        List<ChatMessage> messages = context.getMessages();
+        if (messages != null) {
+            for (int i = messages.size() - 1; i >= 0; i--) {
+                ChatMessage msg = messages.get(i);
+                if (msg instanceof UserMessage) {
+                    return ((UserMessage) msg).singleText();
+                }
+            }
+        }
+        return "";
+    }
+
+    /**
+     * 将 ReActExecutionResult 转换为统一的 AgentExecutionResult
+     */
+    private AgentExecutionResult toAgentResult(ReActExecutionResult r) {
+        return AgentExecutionResult.builder()
+                .success(r.isSuccess())
+                .error(r.getError())
+                .errorType(r.getErrorType())
+                .messages(r.getMessages())
+                .iterations(r.getIterations())
+                .totalDurationMs(r.getTotalDurationMs())
+                .finalState(r.getFinalState())
+                .metadata(r.getMetadata())
+                .build();
     }
 }
 

@@ -42,7 +42,7 @@ public class MemorySystem {
      * 
      * @param conversationId 会话ID
      * @param message 消息
-     * @param modelId 模型ID（可选，用于MySQL持久化）
+     * @param modelId 模型ID（可选）
      * @param tokens Token数量（可选）
      * @param duration 耗时（毫秒，可选）
      * @param metadata 元数据（可选，如工具调用、RAG结果等）
@@ -50,10 +50,27 @@ public class MemorySystem {
     public void saveShortTermMemory(String conversationId, ChatMessage message,
                                    String modelId, Integer tokens, Integer duration,
                                    Map<String, Object> metadata) {
+        saveShortTermMemory(conversationId, message, modelId, null, tokens, duration, metadata);
+    }
+
+    /**
+     * 保存消息到MySQL（持久化，含 agentId）
+     * 
+     * @param conversationId 会话ID
+     * @param message 消息
+     * @param modelId 模型ID（可选）
+     * @param agentId Agent ID（可选，assistant 消息时传入）
+     * @param tokens Token数量（可选）
+     * @param duration 耗时（毫秒，可选）
+     * @param metadata 元数据（可选，如工具调用、RAG结果等）
+     */
+    public void saveShortTermMemory(String conversationId, ChatMessage message,
+                                   String modelId, String agentId, Integer tokens, Integer duration,
+                                   Map<String, Object> metadata) {
         // 保存到MySQL（持久化）
         if (messageService != null) {
             try {
-                messageService.saveMessage(conversationId, message, modelId, tokens, duration, metadata);
+                messageService.saveMessage(conversationId, message, modelId, agentId, tokens, duration, metadata);
             } catch (Exception e) {
                 log.warn("保存消息到MySQL失败: conversationId={}", conversationId, e);
                 // 不抛出异常，MySQL失败不影响主流程
@@ -78,7 +95,7 @@ public class MemorySystem {
             // 这些字段已经有 @JsonIgnore，但为了兼容性和安全性，显式设为 null
             String requestId = context.getRequestId();
             StreamingCallback streamingCallback = context.getStreamingCallback();
-            java.util.function.Consumer<com.aiagent.api.dto.AgentEventData> eventPublisher = context.getEventPublisher();
+            com.aiagent.application.AgentEventPublisher eventPublisher = context.getEventPublisher();
             AgentKnowledgeResult initialRagResult = context.getInitialRagResult();
             
             context.setRequestId(null);

@@ -111,5 +111,16 @@ public class AgentConstants {
     public static final String MESSAGE_STREAM_COMPLETE = "流式输出完成";
     public static final String MESSAGE_TASK_COMPLETE = "任务完成";
     public static final String MESSAGE_RAG_QUERYING = "正在检索知识库...";
+
+    /**
+     * 用户交互事件（系统工具 ASK_USER_QUESTION 使用）
+     */
+    public static final String EVENT_AGENT_ASK_USER_QUESTION = "agent:ask_user_question";
+
+    /**
+     * PERSONAL MCP 客户端工具调用事件
+     * 服务端通过 SSE 下发此事件，浏览器在本地执行 MCP 工具，完成后回传结果
+     */
+    public static final String EVENT_PERSONAL_TOOL_CALL = "agent:personal_tool_call";
 }
 

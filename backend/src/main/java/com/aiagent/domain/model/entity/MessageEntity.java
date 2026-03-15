@@ -53,6 +53,11 @@ public class MessageEntity {
     private Integer duration;
     
     /**
+     * 执行此消息的 Agent ID（assistant 消息时有值）
+     */
+    private String agentId;
+
+    /**
      * 元数据（JSON字符串）
      */
     private String metadata;

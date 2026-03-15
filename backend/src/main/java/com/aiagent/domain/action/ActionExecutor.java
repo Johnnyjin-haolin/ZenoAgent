@@ -150,18 +150,7 @@ public class ActionExecutor {
                 }
             }
             
-            // 检查工具是否在启用列表中（如果指定了enabledTools）
-            if (context != null && context.getEnabledTools() != null && !context.getEnabledTools().isEmpty()) {
-                if (!context.getEnabledTools().contains(toolName)) {
-                    String errorMsg = String.format("工具未启用: %s。当前启用的工具列表: %s", 
-                        toolName, context.getEnabledTools());
-                    log.warn(errorMsg);
-                    throw new IllegalArgumentException(errorMsg);
-                }
-                log.debug("工具 {} 已通过启用检查", toolName);
-            } else {
-                log.debug("未指定启用工具列表，允许所有工具");
-            }
+            // 工具白名单过滤已在 ToolRegistry.resolveToolSpecifications() 阶段完成，此处无需再检查
             
             log.info("执行工具调用: name={}, params={}", toolName, toolCallParams);
             

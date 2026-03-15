@@ -1,6 +1,5 @@
 package com.aiagent.domain.tinking;
 
-import com.aiagent.api.dto.ThinkingConfig;
 import com.aiagent.domain.mcp.IntelligentToolSelector;
 import com.aiagent.common.exception.LLMParseException;
 import com.aiagent.domain.model.bo.PromptPair;
@@ -301,8 +300,7 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
 
             // 构造历史对话
             List<ChatMessage> messages = new ArrayList<>();
-            ThinkingConfig cfg = context.getThinkingConfig();
-            int historyLimit = (cfg != null) ? cfg.getHistoryMessageLoadLimitOrDefault() : 10;
+            int historyLimit = context.getHistoryMessageLoadLimit();
             if (context.getMessages() != null && !context.getMessages().isEmpty()) {
                 List<ChatMessage> history = context.getMessages();
                 int start = Math.max(0, history.size() - historyLimit);
@@ -388,17 +386,9 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
     private String buildUserPrompt(String goal, AgentContext context) {
         StringBuilder prompt = new StringBuilder();
         
-        // 获取配置
-        ThinkingConfig config = context.getThinkingConfig();
-        if (config == null) {
-            config = ThinkingConfig.builder().build();
-        }
-        
-
         // ========== 可用工具 ==========
         List<McpToolInfo> availableTools = toolSelector.selectTools(goal,
-                context.getEnabledMcpGroups(),
-                context.getEnabledTools());
+                context.getMcpServers());
         if (!availableTools.isEmpty()) {
             prompt.append("## 可用工具\n\n");
             for (McpToolInfo tool : availableTools) {
@@ -415,12 +405,10 @@ public class PromptGuidedThinkingEngine implements ThinkingEngine {
         if (context.getActionExecutionHistory() != null && !context.getActionExecutionHistory().isEmpty()) {
             int totalIterations = context.getActionExecutionHistory().size();
 
-            Integer showIterations = config.getActionExecutionHistoryCount();
-            int start = showIterations==null?0:totalIterations-showIterations;
-            start=Math.max(start,0);
+            int start = 0;
 
             if (start < totalIterations) {
-                prompt.append("## 最近Action执行历史（最近").append(showIterations).append("轮迭代）\n\n");
+                prompt.append("## 最近Action执行历史\n\n");
 
                 for (int i = start; i < totalIterations; i++) {
                     List<ActionResult> iterationResults = context.getActionExecutionHistory().get(i);

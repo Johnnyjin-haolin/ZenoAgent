@@ -5,6 +5,7 @@
 *.swp
 *.swo
 *~
+playwright-data/
 
 # Maven
 target/
@@ -60,3 +61,4 @@ backend/src/main/resources/config/profile/*/mcp.json
 config/profile/*/mcp.json
 config/mcp.json
 
+/playwright-data/

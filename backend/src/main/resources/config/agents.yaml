@@ -1,0 +1,24 @@
+agents:
+  - id: "default-agent"
+    name: "Zeno Assistant"
+    description: "通用智能助手"
+    systemPrompt: "你是 Zeno Assistant，一个通用智能助手。"
+    tools:
+      serverMcpIds: []
+      systemTools:
+        - RAG_QUERY
+        - ASK_USER_QUESTION
+        - RESOLVE_TOOLS
+        - TODO_WRITE
+  - id: "cloud-assistant"
+    name: "云资源助手"
+    description: "专注云资源管理"
+    systemPrompt: "你是云资源助手，专注于云资源管理。执行操作前先确认关键参数。"
+    tools:
+      serverMcpIds: []
+      systemTools:
+        - RAG_QUERY
+        - ASK_USER_QUESTION
+        - SUB_AGENT
+        - RESOLVE_TOOLS
+        - TODO_WRITE

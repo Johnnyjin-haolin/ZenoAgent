@@ -11,284 +11,393 @@
 
 ## 架构概述
 
-Zeno Agent 是一个基于 Spring Boot 和 Vue 3 的 AI Agent 平台，采用前后端分离架构，集成了 LangChain4j 框架，提供智能对话、RAG 知识检索、MCP 工具调用等核心能力。
+Zeno Agent 是一个面向企业（toB）的服务端 AI Agent 平台，基于 Spring Boot 2.7.18 + LangChain4j 1.11.0 构建，采用前后端分离架构。平台的推理引擎运行在服务端，通过 SSE 向前端推送完整的执行过程，同时支持 PERSONAL MCP 工具由客户端执行的混合模式。
 
 ### 设计原则
 
-1. **模块化设计**: 采用类领域驱动设计（DDD），清晰的分层架构
-2. **可扩展性**: 支持多 LLM 提供商、多工具类型、多知识库
-3. **高性能**: Redis 缓存、流式响应、异步处理
-4. **易维护**: 清晰的代码结构、完善的文档、统一的错误处理
+1. **服务端推理**: Agent 推理循环完全在服务端运行，客户端只负责展示和 PERSONAL 工具执行
+2. **模块化 DDD**: 采用领域驱动设计，清晰分层（API / Application / Domain / Infrastructure）
+3. **渐进式加载**: Skill 摘要注入 + 全文按需加载；工具名称注入 + Schema 按需解析，突破上下文窗口限制
+4. **GLOBAL/PERSONAL 双轨**: 企业统一工具（服务端执行）与用户私有工具（客户端执行）并存
+5. **分布式 Human-in-the-loop**: 基于 Redis 阻塞队列实现跨实例的工具确认，支持水平扩展
 
 ## 系统架构
 
 ### 整体架构图
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        前端层 (Vue 3)                        │
-├─────────────────────────────────────────────────────────────┤
-│  AgentChat.vue  │  知识库管理  │  会话管理  │  配置管理      │
-│  - SSE 流式接收  │  - 文档上传  │  - 会话列表 │  - 模型选择   │
-│  - 状态展示      │  - 知识库CRUD│  - 消息历史 │  - 工具配置   │
-└─────────────────────────────────────────────────────────────┘
-                            │ HTTP/SSE
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    API 层 (Spring Boot)                      │
-├─────────────────────────────────────────────────────────────┤
-│  AgentExecutionController  │  KnowledgeBaseController        │
-│  AgentConversationController│  DocumentController            │
-│  AgentMetadataController    │  AgentToolController            │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   应用服务层 (Application)                   │
-├─────────────────────────────────────────────────────────────┤
-│  AgentService      │  RAGEnhancer      │  MemorySystem      │
-│  - 任务执行        │  - 向量检索        │  - 上下文管理      │
-│  - 流式响应        │  - 知识增强        │  - 记忆存储        │
-│                    │                    │                    │
-│  ReActEngine       │  ThinkingEngine    │  ActionExecutor    │
-│  - 推理循环        │  - 任务分析        │  - 动作执行        │
-│  - 迭代控制        │  - 规划生成        │  - 结果处理        │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   基础设施层 (Infrastructure)                 │
-├─────────────────────────────────────────────────────────────┤
-│  LLM 集成          │  MCP 工具集成      │  数据访问层        │
-│  - LangChain4j     │  - MCP 客户端      │  - MyBatis        │
-│  - OpenAI         │  - 工具发现        │  - Redis            │
-│  - DeepSeek        │  - 工具调用        │  - PostgreSQL     │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                        数据存储层                            │
-├─────────────────────────────────────────────────────────────┤
-│  Redis              │  MySQL            │  PostgreSQL       │
-│  - 会话上下文       │  - 会话持久化      │  - 向量存储        │
-│  - 短期记忆         │  - 消息历史        │  - Embedding      │
-│  - 缓存             │  - 知识库元数据    │  - 文档向量       │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                          前端层（Vue 3）                              │
+├──────────────────────────────────────────────────────────────────────┤
+│  AgentChat.vue         │  Agent 配置管理    │  知识库管理              │
+│  - SSE 流式接收        │  - Agent 定义 CRUD │  - 文档上传              │
+│  - PERSONAL 工具执行   │  - Skill 目录树    │  - 向量构建              │
+│  - 工具确认（MANUAL）  │  - MCP 绑定配置    │  - 知识库 CRUD           │
+└──────────────────────────────────────────────────────────────────────┘
+                              │ HTTP / SSE
+                              ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                        API 层（Spring Boot）                          │
+├──────────────────────────────────────────────────────────────────────┤
+│  AgentExecutionController   │  AgentDefinitionController              │
+│  AgentConversationController│  AgentSkillController                   │
+│  McpServerController        │  KnowledgeBaseController               │
+│  DocumentController         │  AgentToolController                    │
+└──────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                      应用服务层（Application）                        │
+├──────────────────────────────────────────────────────────────────────┤
+│  AgentServiceImpl              │  FunctionCallingEngine               │
+│  - 创建 SseEmitter             │  - Function Calling 推理循环         │
+│  - 异步任务调度                │  - 渐进式工具加载                    │
+│  - 预检索 RAG                 │  - GLOBAL / PERSONAL 工具路由        │
+│  - 保存消息 / 上下文           │  - MANUAL 模式工具确认               │
+│                                │  - Skill 摘要注入                    │
+│  AgentContextService          │  AgentSkillService                   │
+│  MemorySystem                 │  RAGService                          │
+└──────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                       领域层（Domain）                                │
+├──────────────────────────────────────────────────────────────────────┤
+│  ToolRegistry               │  AgentDefinitionLoader                  │
+│  - resolveToolSpecifications│  - 加载 / 缓存 AgentDefinition          │
+│  - appendPersonalToolSpecs  │                                         │
+│  - isProgressiveMode        │  McpServerService                       │
+│  - execute（工具执行路由）  │  - GLOBAL / PERSONAL 服务器管理         │
+│                              │                                         │
+│  AgentSkill / SkillTreeNode  │  KnowledgeBase / Document              │
+│  LoadSkillTool               │  RAGEnhancer                           │
+│  ResolveToolsTool            │  EmbeddingProcessor                    │
+└──────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                     基础设施层（Infrastructure）                      │
+├──────────────────────────────────────────────────────────────────────┤
+│  MCP 客户端层                │  分布式管理                             │
+│  McpClientFactory            │  ToolConfirmationManager               │
+│  McpTransportFactory         │  - Redisson RBlockingQueue             │
+│  McpToolProviderFactory      │  - 跨实例工具确认                      │
+│  McpToolExecutor             │  ClientToolCallManager                 │
+│                              │  - CompletableFuture 等待回传           │
+│  数据访问层                  │  UserAnswerManager                     │
+│  MyBatis Mapper              │                                         │
+│  Druid DataSource            │  搜索                                   │
+│  pgvector EmbeddingStore     │  PlaywrightSearchService               │
+└──────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                           数据存储层                                  │
+├──────────────────────────────────────────────────────────────────────┤
+│  Redis                       │  MySQL                │  PostgreSQL     │
+│  - 会话上下文（AgentContext） │  - 会话 / 消息历史    │  - 向量存储     │
+│  - 工具确认队列               │  - Agent 定义         │  - pgvector     │
+│  - PERSONAL 工具结果等待      │  - MCP 服务器配置     │  - Embedding    │
+│  - 短期记忆缓存               │  - Skill 库           │                 │
+│  - 分布式锁                  │  - 知识库 / 文档元数据│                 │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ## 核心模块
 
-### 1. Agent 执行模块
+### 1. Agent 定义与配置（AgentDefinition）
 
-#### 1.1 ReAct 引擎
-
-ReAct（Reasoning + Acting）是项目的核心推理引擎，实现了思考-行动-观察的循环模式。
-
-**核心类**:
-- `ReActEngine`: 主引擎，控制迭代循环
-- `ThinkingEngine`: 思考引擎，生成动作和计划
-- `ObservationEngine`: 观察引擎，评估执行结果
-- `ActionExecutor`: 动作执行器，执行具体动作
-
-**执行流程**:
+`AgentDefinition` 是平台的核心配置实体，包含四大维度：
 
 ```
-1. 接收用户请求
-   ↓
-2. ThinkingEngine 分析任务
-   - 任务分类（简单对话/知识查询/工具调用/复杂工作流）
-   - 生成思考过程
-   - 生成行动计划
-   ↓
-3. ActionExecutor 执行动作
-   - RAG 检索（如需要）
-   - 工具调用（如需要）
-   - LLM 生成（如需要）
-   ↓
-4. ObservationEngine 观察结果
-   - 评估执行结果
-   - 判断是否需要继续迭代
-   ↓
-5. 如果继续，返回步骤 2
-   如果完成，返回最终结果
+AgentDefinition
+├── systemPrompt           - 系统提示词
+├── ToolsConfig
+│   ├── serverMcpIds       - 绑定的 GLOBAL MCP 服务器 ID 列表
+│   ├── personalMcpCapabilities  - 绑定的 PERSONAL MCP 能力标签
+│   ├── systemTools        - 启用的系统内置工具（system_load_skill 等）
+│   └── knowledgeIds       - 绑定的知识库 ID 列表
+├── ContextConfig
+│   ├── historyMessageLoadLimit  - 历史消息加载上限（默认 20）
+│   └── maxToolRounds      - 最大工具调用轮数（默认 8）
+├── RAGConfig              - RAG 检索参数（阈值 / Top-K 等）
+└── skillTree              - Agent 私有 Skill 目录树（SkillTreeNode 列表）
 ```
 
-#### 1.2 任务分类
+**运行时配置优先级**（高 → 低）：
+1. 前端 `AgentRequest` 中的运行时参数（mode、modelId 等）
+2. `AgentDefinition` 中持久化的默认配置
+3. `AgentRuntimeConfig` 字段默认值
 
-系统自动将用户请求分类为以下类型：
+### 2. FunctionCallingEngine（推理引擎）
 
-- **SIMPLE_CHAT**: 简单对话，直接使用 LLM 生成回复
-- **RAG_QUERY**: 知识查询，需要从知识库检索相关信息
-- **TOOL_CALL**: 工具调用，需要调用 MCP 工具
-- **COMPLEX_WORKFLOW**: 复杂工作流，需要多步骤执行
-
-#### 1.3 模型选择
-
-根据任务类型自动选择最优模型：
-
-```yaml
-task-model-mapping:
-  SIMPLE_CHAT:
-    - gpt-4o-mini      # 优先使用
-  RAG_QUERY:
-    - gpt-4o-mini
-  TOOL_CALL:
-    - gpt-4o           # 优先使用，失败则降级
-    - gpt-4o-mini
-  COMPLEX_WORKFLOW:
-    - gpt-4o
-    - gpt-4o-mini
-```
-
-### 2. RAG 知识检索模块
-
-#### 2.1 文档处理流程
+基于 Function Calling 的推理循环，是 Agent 执行的核心：
 
 ```
-文档上传
-   ↓
-DocumentParser 解析文档
-   - PDF/Word/TXT/Markdown 等格式
-   ↓
-文档分段
-   - 按固定大小分段（默认 1000 字符）
-   - 支持重叠（默认 50 字符）
-   ↓
-EmbeddingProcessor 向量化
-   - 使用 Embedding 模型生成向量
-   ↓
-存储到 PostgreSQL
-   - 使用 pgvector 扩展存储向量
+初始化
+  ↓
+加载 AgentDefinition → 构建 System Prompt（含 Skill 摘要段落）
+  ↓
+解析工具列表（isProgressiveMode?）
+  ├── 普通模式: 全部 ToolSpecification 立即注入
+  └── 渐进式模式: 只注入工具名+描述，加入 system_resolve_tools
+  ↓
+追加 PERSONAL MCP 工具（来自前端 prefetch schema）
+  ↓
+推理循环（最多 maxToolRounds 轮）
+  ├── LLM 流式生成
+  │   ├── FinishReason = STOP → 结束循环
+  │   └── FinishReason = TOOL_EXECUTION → 执行工具
+  │       ├── 判断 manualMode
+  │       │   └── 是: SSE 推送确认事件 → 阻塞等待 Redis 队列 → APPROVED/REJECTED
+  │       ├── 判断 personalTool
+  │       │   └── 是: SSE 下发 PERSONAL_TOOL_CALL → 阻塞等待 CompletableFuture
+  │       └── 否: ToolRegistry.execute() 服务端直接执行
+  │
+  └── 渐进式模式: 检测 activeMcpToolNames → 追加对应 ToolSpecification
+  ↓
+返回 AgentExecutionResult
 ```
 
-#### 2.2 检索流程
+### 3. GLOBAL / PERSONAL MCP 双模式架构
+
+#### 3.1 GLOBAL MCP
 
 ```
-用户查询
-   ↓
-RAGEnhancer 处理
-   ↓
-1. 使用 Embedding 模型将查询向量化
-   ↓
-2. 在 PostgreSQL 中执行相似度搜索
-   - 使用余弦相似度
-   - 过滤低分结果（默认阈值 0.5）
-   ↓
-3. 检索相关文档片段
-   ↓
-4. 将检索结果注入到 LLM 提示词
-   ↓
-5. LLM 基于检索内容生成回答
+McpServerEntity (scope=0)
+  ↓
+McpClientFactory.getOrCreateClient()      - 懒加载 + 复用客户端
+  ↓
+McpTransportFactory.createTransport()
+  ├── streamable-http → StreamableHttpMcpTransport（远端推荐）
+  ├── stdio           → StdioMcpTransport（本地进程）
+  ├── websocket       → WebSocketMcpTransport
+  └── sse             → SseMcpTransport
+  ↓
+McpToolProviderFactory.createFilteredToolProvider(serverIds)
+  ↓
+ToolRegistry.resolveToolSpecifications()  - 按 Agent 绑定过滤工具
+  ↓
+FunctionCallingEngine → LLM 调用工具 → McpToolExecutor.execute()
 ```
 
-#### 2.3 知识库管理
-
-- **知识库创建**: 支持创建多个知识库，独立管理文档
-- **文档管理**: 支持文档上传、删除、重建向量
-- **统计信息**: 提供知识库文档数量、向量数量等统计
-
-### 3. MCP 工具调用模块
-
-#### 3.1 MCP 协议
-
-MCP (Model Context Protocol) 是一个标准化的工具调用协议。
-
-**核心组件**:
-- `McpClientManager`: MCP 客户端管理器
-- `McpToolRegistry`: 工具注册表
-- `McpGroupManager`: 工具分组管理
-- `McpToolInvoker`: 工具调用器
-
-#### 3.2 工具发现
+#### 3.2 PERSONAL MCP
 
 ```
-1. 读取 MCP 配置文件（mcp.json）
-   ↓
-2. 连接到 MCP 服务器
-   ↓
-3. 调用 list_tools 获取工具列表
-   ↓
-4. 注册工具到 ToolRegistry
-   ↓
-5. 按分组组织工具
+McpServerEntity (scope=1)
+  - authHeader 字段只存 Header 名（值为空），运行时由浏览器补充
+  ↓
+前端发送消息前
+  └── prefetch: 调用 MCP tools/list → 获取 PersonalMcpToolSchema
+  └── 将 schema 列表随 AgentRequest 上传
+  ↓
+后端 ToolRegistry.appendPersonalToolSpecs()
+  └── 解析 inputSchema → 构造 ToolSpecification → 追加到工具列表
+  ↓
+FunctionCallingEngine 检测到 PERSONAL 工具被 LLM 调用
+  ↓
+AgentEventPublisher.onPersonalToolCall(callId, toolName, serverId, arguments)
+  └── SSE 推送 PERSONAL_TOOL_CALL 事件给浏览器
+  ↓
+浏览器根据 serverId 路由到对应 MCP 服务器执行工具
+  └── POST /api/mcp/client-tool-result { callId, result }
+  ↓
+ClientToolCallManager.complete(callId, result)
+  └── CompletableFuture.complete() → 唤醒后端推理线程
+  ↓
+推理继续，工具结果追加到对话历史
 ```
 
-#### 3.3 工具调用流程
+### 4. Skill 机制
+
+#### 4.1 数据模型
 
 ```
-用户请求需要工具调用
-   ↓
-IntelligentToolSelector 选择工具
-   - 根据工具描述和用户需求匹配
-   ↓
-ActionExecutor 执行工具调用
-   ↓
-如果是手动模式，等待用户确认
-   ↓
-McpToolInvoker 调用工具
-   ↓
-解析工具执行结果
-   ↓
-将结果传递给 LLM 生成最终回答
+AgentSkill
+├── id        - 全局唯一 Skill ID
+├── name      - 技能名称
+├── summary   - 摘要（一行，注入 System Prompt）
+├── content   - 全文（按需加载，可达数千字）
+└── tags      - 标签列表，用于配置页筛选
+
+SkillTreeNode（目录树节点）
+├── id        - 节点 ID（在 Agent 内唯一）
+├── label     - 显示名称
+├── enabled   - 是否启用（false 则不注入）
+├── skillId   - 引用的 AgentSkill ID（叶节点专用）
+└── children  - 子节点列表（目录节点使用）
 ```
 
-### 4. 记忆管理模块
-
-#### 4.1 记忆类型
-
-- **短期记忆**: 存储在 Redis，用于当前会话的上下文
-- **长期记忆**: 存储在 MySQL，持久化会话和消息历史
-
-#### 4.2 上下文管理
+#### 4.2 渐进式注入流程
 
 ```
-用户发送消息
-   ↓
-MemorySystem 获取上下文
-   - 从 Redis 获取短期记忆（最近 N 轮对话）
-   - 从 MySQL 获取历史消息（如需要）
-   ↓
-构建上下文提示词
-   ↓
-传递给 LLM
-   ↓
-保存新的消息到 Redis 和 MySQL
+System Prompt 构建阶段
+  遍历 Agent.skillTree（DFS）→ 收集所有 enabled=true 的叶节点
+  批量查询 AgentSkill（避免 N+1）
+  注入：
+    ## 可用技能列表
+    - [skill-001] 数据库查询规范: 查询时必须使用参数化 SQL...
+    - [skill-002] 错误处理模板: 遇到业务异常时按以下格式输出...
+
+LLM 推理阶段（按需加载）
+  LLM 判断需要技能 → 调用 system_load_skill("skill-001")
+  LoadSkillTool.execute() → 从数据库查询 content 字段
+  返回："# 数据库查询规范\n\n[完整内容...]"
+  LLM 获得完整规范后执行对应任务
+```
+
+### 5. 工具渐进式加载（Progressive Tool Loading）
+
+#### 5.1 触发条件
+
+```java
+// ToolRegistry.isProgressiveMode()
+boolean hasResolveTools = agentDef.getTools().getSystemTools()
+    .stream().anyMatch("system_resolve_tools"::equalsIgnoreCase);
+int mcpToolCount = mcpManager.getToolsByServerIds(serverMcpIds).size();
+return hasResolveTools && mcpToolCount > progressiveThreshold;
+```
+
+#### 5.2 工作流程
+
+```
+普通模式（工具数 ≤ 阈值）
+  初始 toolSpecs = 全部 ToolSpecification（含完整参数 Schema）
+
+渐进式模式（工具数 > 阈值）
+  初始 toolSpecs = [system_resolve_tools]
+  System Prompt 追加：
+    ## 可用 MCP 工具（按需加载）
+    - list_files: 列出指定目录下的文件
+    - read_file: 读取文件内容
+    - ...
+
+  LLM 调用 system_resolve_tools(["list_files"])
+    → context.activeMcpToolNames.add("list_files")
+    → 工具执行完成后检测到 activeMcpToolNames 非空
+    → 从 McpManager 查询 "list_files" 的完整 ToolSpecification
+    → toolSpecs.addAll(newSpecs) → activeMcpToolNames.clear()
+    → 下一轮 LLM 可直接调用 list_files
+```
+
+### 6. MANUAL 模式 / Human-in-the-loop
+
+#### 6.1 工具确认流程
+
+```
+FunctionCallingEngine（MANUAL 模式下每次工具调用）
+  ↓
+ToolConfirmationManager.register(toolExecutionId)
+  └── Redis: SETEX aiagent:tool:confirm:{id} 5min
+  ↓
+AgentEventPublisher.onToolCall(toolName, args, needConfirm=true, toolExecutionId)
+  └── SSE: { type: "tool_call", toolExecutionId, needConfirm: true, ... }
+  ↓
+toolConfirmationManager.waitForDecision(toolExecutionId, timeoutMs)
+  └── Redisson RBlockingQueue.poll(timeout) —— 阻塞等待
+  ↓
+前端用户点击"批准" / "拒绝"
+  └── POST /aiagent/mcp/tool-confirm { toolExecutionId, action: "APPROVE" }
+  ↓
+ToolConfirmationManager.approve(toolExecutionId)
+  └── Redisson RBlockingQueue.offer("APPROVED")
+  ↓
+waitForDecision() 返回 APPROVED → 执行工具
+或返回 REJECTED → 构造拒绝消息 → LLM 重新规划
+或 poll 超时 → 返回 TIMEOUT → LLM 感知超时重新规划
+```
+
+#### 6.2 分布式特性
+
+基于 `Redisson RBlockingQueue` 实现：多实例部署下，处理前端回调的节点与执行推理的节点可以不同，Redis 消息队列保证跨节点通信。
+
+### 7. RAG 知识检索模块
+
+#### 7.1 文档处理流程
+
+```
+文档上传 → DocumentParser（Apache Tika）解析
+  ↓
+文本分段（默认 1000 字符，50 字符重叠）
+  ↓
+EmbeddingProcessor → Embedding 模型向量化
+  ↓
+pgvector EmbeddingStore（PostgreSQL）存储
+```
+
+#### 7.2 检索与增强流程
+
+```
+Agent 执行前预检索（performInitialRagRetrieval）
+  └── 将结果存入 context.initialRagResult
+  ↓
+RAGService.retrieve(query, knowledgeIds)
+  └── 向量化查询 → pgvector 余弦相似度搜索 → 过滤低分结果
+  ↓
+检索结果注入 System Prompt / 用户消息上下文
+  ↓
+LLM 基于检索内容生成回答
+```
+
+### 8. 记忆管理模块
+
+```
+短期记忆（Redis）
+  - 存储 AgentContext（含消息历史、工具调用历史、RAG 检索历史）
+  - Key: aiagent:context:{conversationId}
+  - TTL: 可配置（默认 24 小时）
+
+长期记忆（MySQL）
+  - 持久化所有会话和消息（agent_conversation / agent_message）
+  - 会话重新激活时从 MySQL 加载历史消息（按 historyMessageLoadLimit 限制）
+
+记忆加载优先级
+  Redis 命中 → 直接使用缓存上下文
+  Redis 未命中 → 从 MySQL 重建 AgentContext
 ```
 
 ## 数据流
 
-### Agent 执行数据流
+### Agent 执行完整数据流
 
 ```
-前端发送请求
-   ↓
-AgentExecutionController 接收
-   ↓
-AgentService.execute()
-   ↓
-创建 SseEmitter（SSE 流式响应）
-   ↓
-异步执行任务
-   ↓
-ReActEngine 执行推理循环
-   ↓
-每个步骤通过 StreamingCallback 发送事件
-   ↓
-前端通过 SSE 接收事件并实时展示
+前端发送请求（含 PersonalMcpToolSchema 列表）
+  ↓
+AgentExecutionController → AgentServiceImpl.execute()
+  ↓
+创建 SseEmitter → CompletableFuture.runAsync() 异步执行
+  ↓
+AgentContextService.loadOrCreateContext()
+  ├── Redis 命中 → 加载缓存上下文
+  └── 未命中 → 从 MySQL 加载历史消息 → 新建 AgentContext
+  ↓
+performInitialRagRetrieval()（如 Agent 绑定了知识库）
+  ↓
+FunctionCallingEngine.execute(context)
+  ├── 构建 System Prompt（含 Skill 摘要）
+  ├── 解析工具列表（普通 / 渐进式）
+  ├── 追加 PERSONAL MCP 工具
+  └── 推理循环（每步通过 StreamingCallback → SSE 推送）
+  ↓
+saveNewAssistantMessages()
+  ↓
+memorySystem.saveContext()（Redis + MySQL）
+  ↓
+streamingService.closeEmitter()
 ```
 
 ### SSE 事件类型
 
-| 事件类型 | 说明 | 数据内容 |
+| 事件类型 | 说明 | 关键数据 |
 |---------|------|---------|
 | `agent:start` | 任务开始 | requestId, conversationId |
-| `agent:thinking` | AI 思考中 | message, statusText |
-| `agent:model_selected` | 模型已选择 | modelId, modelName |
+| `agent:thinking` | 推理中 | statusText |
 | `agent:rag_retrieve` | RAG 检索中 | query, documentCount |
-| `agent:tool_call` | 工具调用中 | toolName, params |
-| `agent:tool_result` | 工具执行结果 | result, success |
-| `agent:message` | 流式内容 | content (增量) |
-| `agent:complete` | 任务完成 | finalMessage, tokens, duration |
+| `agent:tool_call` | 工具调用（GLOBAL）| toolName, args, needConfirm, toolExecutionId |
+| `agent:personal_tool_call` | PERSONAL 工具下发 | callId, toolName, serverId, arguments |
+| `agent:tool_result` | 工具执行结果 | result, success, durationMs |
+| `agent:message` | 流式 Token | content（增量） |
+| `agent:complete` | 任务完成 | finalMessage, tokens, durationMs, toolRounds |
 | `agent:error` | 错误发生 | error, message |
 
 ## 技术选型
@@ -299,12 +408,16 @@ ReActEngine 执行推理循环
 |------|------|------|
 | Java | 17 | 编程语言 |
 | Spring Boot | 2.7.18 | 应用框架 |
-| LangChain4j | 1.9.1 | LLM 抽象层 |
+| LangChain4j | 1.11.0 | LLM 抽象层 / MCP 客户端 / pgvector 集成 |
 | MyBatis | 2.3.1 | ORM 框架 |
-| Redis | 6.0+ | 缓存和会话存储 |
+| Druid | - | 数据库连接池 |
+| Redis | 6.0+ | 上下文缓存 / 分布式队列 |
+| Redisson | 3.23.5 | 分布式锁 / RBlockingQueue |
 | MySQL | 8.0+ | 关系数据库 |
-| PostgreSQL | 14+ | 向量数据库 |
-| Redisson | 3.23.5 | 分布式锁 |
+| PostgreSQL + pgvector | 14+ | 向量数据库 |
+| Apache Tika | 2.9.1 | 文档格式解析 |
+| Playwright | 1.44.0 | 无头浏览器搜索 |
+| Jsoup | 1.18.3 | HTML 解析 |
 
 ### 前端技术栈
 
@@ -331,8 +444,8 @@ ReActEngine 执行推理循环
 │ 后端 (Spring)│  :8080
 └──────┬──────┘
        │
-       ├──► Redis :6379
-       ├──► MySQL :3306
+       ├──► Redis     :6379
+       ├──► MySQL     :3306
        └──► PostgreSQL :5432
 ```
 
@@ -343,6 +456,7 @@ ReActEngine 执行推理循环
 │  Nginx          │  :80/443
 │  - 前端静态文件  │
 │  - API 反向代理  │
+│  - SSE 流式配置  │  proxy_buffering off; proxy_read_timeout 300s;
 └────────┬────────┘
          │
          ▼
@@ -351,106 +465,90 @@ ReActEngine 执行推理循环
 │  - 应用服务      │
 └────────┬────────┘
          │
-         ├──► Redis :6379
-         ├──► MySQL :3306
-         └──► PostgreSQL :5432
+         ├──► Redis     :6379  （上下文缓存 / 工具确认队列）
+         ├──► MySQL     :3306  （持久化）
+         └──► PostgreSQL :5432  （向量存储）
 ```
 
-### 容器编排
+### 水平扩展
 
-使用 Docker Compose 编排所有服务：
+系统支持无状态水平扩展：
 
-- `backend`: Spring Boot 应用
-- `frontend`: Nginx 服务前端静态文件
-- `redis`: Redis 缓存
-- `mysql`: MySQL 数据库（可选，如使用外部数据库）
-- `postgres`: PostgreSQL 数据库（可选，如使用外部数据库）
+- **AgentContext** 存储于 Redis，多实例共享
+- **工具确认队列**（`ToolConfirmationManager`）基于 Redisson RBlockingQueue，跨节点可见
+- **PERSONAL 工具回传**（`ClientToolCallManager`）使用 CompletableFuture，需路由到同一节点（建议按 conversationId 做会话粘连）
 
 ## 性能优化
 
-### 1. 缓存策略
+### 1. 渐进式加载
 
-- **Redis 缓存**: 会话上下文、模型列表、工具列表等
-- **本地缓存**: 配置信息、枚举值等
+- Skill 摘要注入：System Prompt 保持轻量，不因 Skill 数量增加而膨胀
+- 工具渐进式加载：超大规模工具集不受 LLM Token 限制
 
-### 2. 异步处理
+### 2. 缓存策略
 
-- **SSE 流式响应**: 实时推送执行过程，提升用户体验
-- **异步任务执行**: Agent 任务在独立线程中执行
+- Redis 缓存 AgentContext：避免每次从 MySQL 重建对话历史
+- AgentDefinition 本地缓存：减少频繁查询数据库
 
-### 3. 数据库优化
+### 3. 异步处理
 
-- **连接池**: 使用 Druid 连接池管理数据库连接
-- **索引优化**: 为常用查询字段添加索引
-- **分页查询**: 列表查询使用分页，避免一次性加载大量数据
+- SSE 流式响应：Agent 推理在独立线程，LLM 生成内容增量推送，用户无需等待完整响应
+- 批量查询 Skill：构建 System Prompt 时一次性批量查询所有 Skill，避免 N+1
+
+### 4. 数据库连接池
+
+- Druid 连接池管理 MySQL 连接
+- pgvector 连接复用
 
 ## 安全考虑
 
-### 1. API 安全
+### 1. PERSONAL MCP 密钥隔离
 
-- **参数校验**: 使用 Spring Validation 进行参数校验
-- **统一异常处理**: 全局异常处理器统一处理错误
-- **CORS 配置**: 配置跨域访问策略
+PERSONAL MCP 服务器的认证密钥（API Key 等）只存储在用户浏览器 localStorage，服务端数据库只存储 Header 名（值为空）。即使数据库泄露，也不会暴露用户的私有 API Key。
 
-### 2. 数据安全
+### 2. GLOBAL MCP 密钥加密
 
-- **敏感信息**: API Key 等敏感信息通过环境变量配置
-- **SQL 注入防护**: 使用 MyBatis 参数化查询
-- **XSS 防护**: 前端对用户输入进行转义
+GLOBAL MCP 服务器的认证信息（`authHeader`、`extraHeaders`）在数据库中加密存储，通过 AES 等对称加密保护。
 
-### 3. 工具调用安全
+### 3. MANUAL 模式风控
 
-- **手动确认模式**: 危险操作支持手动确认
-- **工具权限控制**: 支持按工具分组控制权限
+对于可能影响生产数据的危险工具，可将 Agent 配置为 MANUAL 模式，要求人工确认后才执行，提供企业级风控保障。
 
-## 扩展性设计
+### 4. API 安全
 
-### 1. 多 LLM 提供商支持
+- Spring Validation 参数校验
+- 全局异常处理器统一处理错误
+- CORS 跨域访问策略配置
 
-通过 LangChain4j 的抽象层，可以轻松添加新的 LLM 提供商：
+### 5. 敏感信息
 
-```yaml
-aiagent:
-  llm:
-    models:
-      - id: gpt-4o
-        provider: OPENAI
-      - id: deepseek-chat
-        provider: DEEPSEEK
-      - id: claude-3
-        provider: ANTHROPIC  # 未来支持
-```
-
-### 2. 插件系统
-
-未来可以支持插件系统，允许第三方扩展功能：
-
-- 自定义工具
-- 自定义知识库处理
-- 自定义推理引擎
-
-### 3. 分布式部署
-
-支持水平扩展：
-
-- 无状态服务设计，可以部署多个实例
-- Redis 作为共享缓存和会话存储
-- 数据库支持主从复制
+- API Key 等敏感信息通过环境变量注入，不硬编码在代码中
+- MyBatis 参数化查询防止 SQL 注入
 
 ## 监控和日志
 
-### 1. 日志
+### 日志分级
 
-- **应用日志**: 使用 Logback，输出到文件和控制台
-- **访问日志**: 记录 API 访问日志
-- **错误日志**: 单独记录错误日志
+- `application.log` - 应用主日志
+- `api.log` - API 访问日志
+- `error.log` - 错误单独记录
+- Logback 滚动策略，按天分割
 
-### 2. 监控指标
+### 健康检查
 
-- **健康检查**: `/aiagent/health` 端点
-- **性能指标**: 记录请求耗时、Token 使用量等
-- **业务指标**: 会话数量、消息数量、工具调用次数等
+```bash
+curl http://localhost:8080/aiagent/health
+```
+
+### 可观测指标
+
+- 每次推理记录 Token 用量、工具调用轮数、总耗时（随 `agent:complete` 事件推送）
+- SSE 事件链路完整记录推理过程（可接 ELK / OpenTelemetry）
 
 ## 总结
 
-Zeno Agent 采用现代化的技术栈和清晰的分层架构，实现了完整的 AI Agent 功能。通过 ReAct 推理引擎、RAG 知识检索、MCP 工具调用等核心模块，为用户提供了强大的 AI 助手能力。项目具有良好的扩展性和可维护性，适合作为 AI Agent 平台的基础框架。
+Zeno Agent 采用服务端推理 + GLOBAL/PERSONAL MCP 双模式 + 渐进式加载的创新架构，解决了企业 AI Agent 落地中的三大核心问题：
+
+1. **大规模工具集管理**: 渐进式工具加载突破 LLM 上下文限制，支持绑定数十乃至上百个工具
+2. **用户私有工具安全接入**: PERSONAL MCP 使密钥永不离开用户侧，满足企业数据合规要求
+3. **关键操作风险管控**: MANUAL 模式 + 分布式 Human-in-the-loop 提供企业级审批流程

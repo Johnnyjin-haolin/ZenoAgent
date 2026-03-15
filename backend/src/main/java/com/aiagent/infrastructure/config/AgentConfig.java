@@ -159,6 +159,57 @@ public class AgentConfig {
     @Data
     public static class ToolConfig {
         private boolean enabledByDefault = true;
+        
+        /**
+         * 渐进式工具加载阈值
+         * 当 MCP 工具数量超过此值时，启用渐进式加载（仅展示工具概览，需要时按需加载详情）
+         */
+        private int progressiveThreshold = 20;
+
+        /**
+         * Web 搜索工具配置
+         */
+        private WebSearchConfig webSearch = new WebSearchConfig();
+
+        @Data
+        public static class WebSearchConfig {
+            /**
+             * 搜索引擎实现类型：http（轻量 Jsoup 爬取）或 playwright（真实无头浏览器）
+             */
+            private String engine = "http";
+
+            /**
+             * HTTP 请求超时（秒）；playwright 模式建议设置 30 以上
+             */
+            private int timeoutSeconds = 15;
+
+            /**
+             * 搜索结果最大条数
+             */
+            private int maxResults = 5;
+
+            /**
+             * system_fetch_url 返回正文最大字符数
+             */
+            private int maxContentChars = 5000;
+
+            /**
+             * 模拟浏览器 User-Agent
+             */
+            private String userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+            /**
+             * Playwright 无头模式（true=无头，false=有窗口用于调试）
+             * 仅 engine=playwright 时生效
+             */
+            private boolean headless = true;
+
+            /**
+             * Playwright 用户数据目录（持久化 Cookie/Session，提升搜索质量）
+             * 仅 engine=playwright 时生效，留空则每次使用临时 Context
+             */
+            private String userDataDir = "./playwright-data";
+        }
     }
 }
 

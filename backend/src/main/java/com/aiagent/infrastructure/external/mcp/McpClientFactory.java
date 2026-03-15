@@ -114,6 +114,13 @@ public class McpClientFactory {
     }
     
     /**
+     * 移除并关闭指定 serverId 的客户端（删除服务器时调用）
+     */
+    public void removeClient(String serverId) {
+        closeClient(serverId);
+    }
+
+    /**
      * 关闭客户端
      */
     public void closeClient(String serverId) {

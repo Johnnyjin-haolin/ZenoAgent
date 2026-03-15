@@ -3,6 +3,9 @@
  * @date 2025-11-30
  */
 
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { http } from '@/utils/http';
 import logger from '@/utils/logger';
 import i18n from '@/locales';
@@ -15,6 +18,14 @@ import type {
   ConversationInfo,
   PageResult,
   HealthResponse,
+  UserQuestion,
+  AgentDefinition,
+  AgentDefinitionRequest,
+  McpServerInfo,
+  McpToolInfo,
+  McpServerRequest,
+  SystemToolInfo,
+  PersonalMcpToolSchema,
 } from './agent.types';
 import { ModelType } from '@/types/model.types';
 
@@ -26,6 +37,8 @@ export enum AgentApi {
   execute = '/aiagent/execute',
   /** 停止 Agent 执行 */
   stop = '/aiagent/stop',
+  /** 提交用户对 Agent 提问的回答 */
+  answer = '/aiagent/answer',
   /** 获取可用模型列表 */
   availableModels = '/aiagent/models/available',
   /** 健康检查 */
@@ -40,6 +53,16 @@ export enum AgentApi {
   conversationMessages = '/aiagent/conversation/{id}/messages',
   /** 工具执行确认 */
   toolConfirm = '/aiagent/tool/confirm',
+  /** 更新会话绑定 Agent */
+  conversationAgent = '/aiagent/conversation/agent',
+  /** Agent 定义列表/创建 */
+  agentDefinitions = '/aiagent/agent-definitions',
+  /** 可用系统工具 */
+  availableSystemTools = '/aiagent/agent-definitions/available-system-tools',
+  /** MCP 服务器列表 */
+  mcpServers = '/api/mcp/servers',
+  /** 客户端工具执行结果回传 */
+  mcpClientToolResult = '/api/mcp/client-tool-result',
 }
 
 /**
@@ -177,6 +200,25 @@ export async function stopAgent(requestId: string): Promise<boolean> {
     return response.success === true;
   } catch (error) {
     logger.error('停止 Agent 失败:', error);
+    return false;
+  }
+}
+
+/**
+ * 提交用户对 Agent 提问的回答
+ * 在收到 agent:ask_user_question 事件后，用户填写回答后调用此函数
+ * @param questionId  问题ID（从事件 data.questionId 获取）
+ * @param answer      用户的回答内容
+ */
+export async function submitAnswer(questionId: string, answer: string): Promise<boolean> {
+  try {
+    const response = await http.post(
+      { url: AgentApi.answer, params: { questionId, answer } },
+      { isTransformResponse: false }
+    );
+    return response.success === true;
+  } catch (error) {
+    logger.error('提交用户回答失败:', error);
     return false;
   }
 }
@@ -321,12 +363,8 @@ function dispatchEvent(event: AgentEvent, callbacks: AgentEventCallbacks) {
       break;
 
     case 'agent:tool_executing':
+      // tool_executing 已合并到 tool_call 事件，此处保留兼容
       logger.debug('[Agent] 正在执行工具:', event.message);
-      callbacks.onThinking?.({
-        ...event,
-        message: event.message || t('agent.status.calling_tool'),
-        statusText: t('agent.status.calling_tool')
-      });
       break;
 
     case 'agent:rag_querying':
@@ -374,6 +412,34 @@ function dispatchEvent(event: AgentEvent, callbacks: AgentEventCallbacks) {
       logger.debug('[Agent] RAG 检索:', event.message);
       callbacks.onRagRetrieve?.(event);
       break;
+
+    case 'agent:ask_user_question': {
+      logger.debug('[Agent] 向用户提问:', event.data);
+      if (callbacks.onAskUserQuestion && event.data) {
+        const question: UserQuestion = {
+          questionId: event.data.questionId,
+          question: event.data.question,
+          questionType: event.data.questionType,
+          options: event.data.options,
+          previewContent: event.data.previewContent,
+        };
+        callbacks.onAskUserQuestion(question);
+      }
+      break;
+    }
+
+    case 'agent:personal_tool_call': {
+      logger.debug('[Agent] PERSONAL MCP 工具调用:', event.data);
+      if (callbacks.onPersonalToolCall && event.data) {
+        callbacks.onPersonalToolCall({
+          callId: event.data.callId,
+          toolName: event.data.toolName,
+          serverId: event.data.serverId,
+          params: event.data.params || {},
+        });
+      }
+      break;
+    }
 
     case 'agent:tool_call':
       logger.debug('[Agent] 工具调用:', event.data);
@@ -454,6 +520,7 @@ export async function getConversations(pageNo = 1, pageSize = 50, status?: strin
         status: item.status,
         modelId: item.modelId,
         modelName: item.modelName,
+        agentId: item.agentId || undefined,
         createTime: item.createTime,
         updateTime: item.updateTime,
       }));
@@ -544,5 +611,368 @@ export async function deleteConversation(conversationId: string): Promise<boolea
   } catch (error) {
     logger.error('删除会话失败:', error);
     return false;
+  }
+}
+
+/**
+ * 更新会话绑定的 Agent
+ */
+export async function updateConversationAgent(conversationId: string, agentId: string | null): Promise<boolean> {
+  try {
+    const response = await http.put(
+      {
+        url: AgentApi.conversationAgent,
+        params: { conversationId, agentId },
+      },
+      { joinParamsToUrl: true }
+    );
+    return response.success === true;
+  } catch (error) {
+    logger.error('更新会话 Agent 失败:', error);
+    return false;
+  }
+}
+
+// ─── Agent 定义 CRUD ────────────────────────────────────────────────────────
+
+/**
+ * 获取所有 Agent 定义（全量，向后兼容）
+ */
+export async function getAgentDefinitions(): Promise<AgentDefinition[]> {
+  try {
+    const response = await http.get(
+      { url: AgentApi.agentDefinitions },
+      { isTransformResponse: false }
+    );
+    return response.data || [];
+  } catch (error) {
+    logger.error('获取 Agent 列表失败:', error);
+    return [];
+  }
+}
+
+/**
+ * 分页获取 Agent 定义列表
+ */
+export async function getAgentDefinitionsPage(
+  pageNo: number,
+  pageSize = 12
+): Promise<PageResult<AgentDefinition> | null> {
+  try {
+    const response = await http.get(
+      { url: AgentApi.agentDefinitions, params: { pageNo, pageSize } },
+      { isTransformResponse: false }
+    );
+    return response.data || null;
+  } catch (error) {
+    logger.error('分页获取 Agent 列表失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 获取单个 Agent 定义
+ */
+export async function getAgentDefinition(id: string): Promise<AgentDefinition | null> {
+  try {
+    const response = await http.get(
+      { url: `${AgentApi.agentDefinitions}/${id}` },
+      { isTransformResponse: false }
+    );
+    return response.data || null;
+  } catch (error) {
+    logger.error('获取 Agent 详情失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 创建用户自定义 Agent
+ */
+export async function createAgentDefinition(request: AgentDefinitionRequest): Promise<AgentDefinition | null> {
+  try {
+    const response = await http.post(
+      { url: AgentApi.agentDefinitions, params: request },
+      { isTransformResponse: false }
+    );
+    return response.success ? response.data : null;
+  } catch (error) {
+    logger.error('创建 Agent 失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 更新 Agent 定义
+ */
+export async function updateAgentDefinition(id: string, request: AgentDefinitionRequest): Promise<AgentDefinition | null> {
+  try {
+    const response = await http.put(
+      { url: `${AgentApi.agentDefinitions}/${id}`, params: request },
+      { isTransformResponse: false }
+    );
+    return response.success ? response.data : null;
+  } catch (error) {
+    logger.error('更新 Agent 失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 删除 Agent 定义
+ */
+export async function deleteAgentDefinition(id: string): Promise<boolean> {
+  try {
+    const response = await http.delete({ url: `${AgentApi.agentDefinitions}/${id}` });
+    return response.success === true;
+  } catch (error) {
+    logger.error('删除 Agent 失败:', error);
+    return false;
+  }
+}
+
+/**
+ * 获取 MCP 服务器列表（用于配置页工具选择器和管理页面）
+ * @param scope 可选过滤：0=GLOBAL, 1=PERSONAL
+ */
+export async function getMcpServers(scope?: 0 | 1): Promise<McpServerInfo[]> {
+  try {
+    const response = await http.get(
+      { url: AgentApi.mcpServers, params: scope != null ? { scope } : undefined },
+      { isTransformResponse: false }
+    );
+    return response.data || [];
+  } catch (error) {
+    logger.error('获取 MCP 服务器列表失败:', error);
+    return [];
+  }
+}
+
+/**
+ * 获取单个 MCP 服务器
+ */
+export async function getMcpServer(id: string): Promise<McpServerInfo | null> {
+  try {
+    const response = await http.get(
+      { url: `${AgentApi.mcpServers}/${id}` },
+      { isTransformResponse: false }
+    );
+    return response.success ? response.data : null;
+  } catch (error) {
+    logger.error('获取 MCP 服务器失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 创建 MCP 服务器
+ */
+export async function createMcpServer(request: McpServerRequest): Promise<McpServerInfo | null> {
+  try {
+    const response = await http.post(
+      { url: AgentApi.mcpServers, params: request },
+      { isTransformResponse: false }
+    );
+    return response.success ? response.data : null;
+  } catch (error) {
+    logger.error('创建 MCP 服务器失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 更新 MCP 服务器
+ */
+export async function updateMcpServer(id: string, request: McpServerRequest): Promise<McpServerInfo | null> {
+  try {
+    const response = await http.put(
+      { url: `${AgentApi.mcpServers}/${id}`, params: request },
+      { isTransformResponse: false }
+    );
+    return response.success ? response.data : null;
+  } catch (error) {
+    logger.error('更新 MCP 服务器失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 删除 MCP 服务器
+ */
+export async function deleteMcpServer(id: string): Promise<boolean> {
+  try {
+    const response = await http.delete({ url: `${AgentApi.mcpServers}/${id}` });
+    return response.success === true;
+  } catch (error) {
+    logger.error('删除 MCP 服务器失败:', error);
+    return false;
+  }
+}
+
+/**
+ * 启用/禁用 MCP 服务器
+ */
+export async function toggleMcpServer(id: string, enabled: boolean): Promise<boolean> {
+  try {
+    const response = await http.put(
+      { url: `${AgentApi.mcpServers}/${id}/toggle`, params: { enabled } },
+      { isTransformResponse: false }
+    );
+    return response.success === true;
+  } catch (error) {
+    logger.error('切换 MCP 服务器状态失败:', error);
+    return false;
+  }
+}
+
+/**
+ * 获取 MCP 服务器工具列表（GLOBAL 类型）
+ */
+export async function getMcpServerTools(serverId: string): Promise<McpToolInfo[]> {
+  try {
+    const response = await http.get(
+      { url: `${AgentApi.mcpServers}/${serverId}/tools` },
+      { isTransformResponse: false }
+    );
+    return response.data || [];
+  } catch (error) {
+    logger.error('获取 MCP 工具列表失败:', error);
+    return [];
+  }
+}
+
+/**
+ * 测试 MCP 服务器连通性（GLOBAL 类型）
+ */
+export async function testMcpServer(serverId: string): Promise<string> {
+  try {
+    const response = await http.post(
+      { url: `${AgentApi.mcpServers}/${serverId}/test` },
+      { isTransformResponse: false }
+    );
+    return response.success ? response.data : 'FAIL';
+  } catch (error) {
+    logger.error('测试 MCP 服务器连通性失败:', error);
+    return 'FAIL';
+  }
+}
+
+/**
+ * 回传 PERSONAL MCP 工具执行结果
+ */
+export async function submitClientToolResult(
+  callId: string,
+  result?: string,
+  error?: string
+): Promise<void> {
+  try {
+    await http.post(
+      { url: AgentApi.mcpClientToolResult, params: { callId, result, error } },
+      { isTransformResponse: false }
+    );
+  } catch (err) {
+    logger.error('回传客户端工具结果失败:', err);
+  }
+}
+
+/**
+ * 获取可用的系统内置工具列表（用于配置页工具选择器）
+ */
+export async function getAvailableSystemToolsForAgent(): Promise<SystemToolInfo[]> {
+  try {
+    const response = await http.get(
+      { url: AgentApi.availableSystemTools },
+      { isTransformResponse: false }
+    );
+    return response.data || [];
+  } catch (error) {
+    logger.error('获取可用系统工具失败:', error);
+    return [];
+  }
+}
+
+/**
+ * 创建 MCP Client（通过 SDK，自动处理 initialize 握手）
+ *
+ * 支持 streamable-http 和 sse 两种连接类型，失败时抛出异常。
+ * 调用方负责在使用完毕后调用 client.close()。
+ */
+async function createMcpClient(
+  server: McpServerInfo,
+  authHeaders: Record<string, string>
+): Promise<Client> {
+  const requestInit: RequestInit = {
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      ...authHeaders,
+    },
+  };
+
+  const url = new URL(server.endpointUrl);
+  const client = new Client({ name: 'zeno-agent', version: '1.0.0' });
+
+  let transport: StreamableHTTPClientTransport | SSEClientTransport;
+
+  if (server.connectionType === 'sse') {
+    transport = new SSEClientTransport(url, { requestInit });
+  } else {
+    transport = new StreamableHTTPClientTransport(url, { requestInit });
+  }
+
+  await client.connect(transport);
+  return client;
+}
+
+/**
+ * 从 PERSONAL MCP 服务器直接 prefetch 工具列表（浏览器端调用，不经过后端）
+ *
+ * 使用 @modelcontextprotocol/sdk 完成标准 MCP 握手（initialize/initialized）
+ * 后调用 tools/list，符合 MCP Streamable HTTP 协议规范。
+ *
+ * @param server       MCP 服务器信息（包含 endpointUrl、connectionType、authHeaders）
+ * @param authHeaders  运行时补充的认证 Header（来自 localStorage）
+ * @returns 工具 schema 列表，失败返回空数组
+ */
+export async function prefetchPersonalMcpTools(
+  server: McpServerInfo,
+  authHeaders: Record<string, string>
+): Promise<PersonalMcpToolSchema[]> {
+  let client: Client | null = null;
+  try {
+    client = await createMcpClient(server, authHeaders);
+    const result = await client.listTools();
+    const toolList = result?.tools ?? [];
+    return toolList
+      .filter((t) => t.name)
+      .map((t) => ({
+        serverId: server.id,
+        toolName: t.name,
+        description: t.description ?? '',
+        inputSchema: (t.inputSchema as Record<string, unknown>) ?? undefined,
+      }));
+  } catch (error) {
+    logger.warn(`[MCP prefetch] 预取工具列表失败: serverId=${server.id}, error=`, error);
+    return [];
+  } finally {
+    client?.close().catch(() => {});
+  }
+}
+
+/**
+ * 本地连通性测试（PERSONAL MCP，浏览器直连）
+ *
+ * 调用 tools/list，成功返回 "OK:<工具数量>"，失败返回 "FAIL:<原因>"
+ */
+export async function testPersonalMcpServer(
+  server: McpServerInfo,
+  authHeaders: Record<string, string>
+): Promise<string> {
+  try {
+    const tools = await prefetchPersonalMcpTools(server, authHeaders);
+    return `OK:${tools.length}`;
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return `FAIL:${msg}`;
   }
 }

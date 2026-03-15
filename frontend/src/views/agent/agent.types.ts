@@ -3,81 +3,212 @@
  * @date 2025-11-30
  */
 
-/**
- * 思考引擎配置
- */
-export interface ThinkingConfig {
-  /** 对话历史轮数（默认3轮，最近的N轮对话） */
-  conversationHistoryRounds?: number;
-  /** 单条消息最大长度（默认200字符，超过截断） */
-  maxMessageLength?: number;
-  /** 动作执行历史轮数（默认2轮，最近的N轮迭代） */
-  actionExecutionHistoryCount?: number;
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Agent 定义级别配置（持久化到数据库）
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * 思考引擎配置的默认值
+ * Agent 上下文行为配置（对应后端 AgentDefinition.ContextConfig）
  */
-export const DEFAULT_THINKING_CONFIG: Required<ThinkingConfig> = {
-  conversationHistoryRounds: 3,
-  maxMessageLength: 200,
-  actionExecutionHistoryCount: 2,
+export interface AgentContextConfig {
+  /** 从数据库加载的历史消息条数上限（默认 20） */
+  historyMessageLoadLimit?: number;
+  /** 最大工具调用轮数（默认 8） */
+  maxToolRounds?: number;
+}
+
+/** Agent 上下文配置的默认值 */
+export const DEFAULT_CONTEXT_CONFIG: Required<AgentContextConfig> = {
+  historyMessageLoadLimit: 20,
+  maxToolRounds: 8,
 };
 
 /**
- * RAG配置
+ * RAG 检索参数（AgentDefinition.ragConfig 的映射）
  */
 export interface RAGConfig {
-  /** 最大检索文档数量（默认3） */
+  /** 最大检索文档数量（默认 3） */
   maxResults?: number;
-  /** 最小相似度分数（默认0.5，范围0-1） */
+  /** 最小相似度分数（默认 0.5，范围 0-1） */
   minScore?: number;
-  /** 单个文档最大字符数（null或不传表示无限制） */
+  /** 单个文档最大字符数（null 表示不限制） */
   maxDocumentLength?: number | null;
-  /** 所有文档总长度限制（null或不传表示无限制） */
+  /** 所有文档总内容最大字符数（null 表示不限制） */
   maxTotalContentLength?: number | null;
-  /** 是否在提示词中包含RAG结果（默认true） */
-  includeInPrompt?: boolean;
-  /** 是否启用智能摘要（默认false，实验性） */
-  enableSmartSummary?: boolean;
 }
 
-/**
- * RAG配置的默认值
- */
+/** RAG 配置的默认值 */
 export const DEFAULT_RAG_CONFIG: RAGConfig = {
   maxResults: 3,
   minScore: 0.5,
-  maxDocumentLength: 1000,  // 默认限制
-  maxTotalContentLength: 3000,  // 默认限制
-  includeInPrompt: true,
-  enableSmartSummary: false,
+  maxDocumentLength: 1000,
+  maxTotalContentLength: 3000,
 };
 
+/** Agent 定义中的 RAG 配置（与 RAGConfig 类型共用） */
+export type AgentRagConfig = RAGConfig;
+
 /**
- * Agent 请求参数
+ * Agent Skill 目录树节点
  */
-export interface AgentRequest {
-  /** 用户输入内容 */
-  content: string;
-  /** 会话ID（可选，用于上下文关联） */
-  conversationId?: string;
-  /** 指定使用的模型ID（可选） */
-  modelId?: string;
-  /** 关联的知识库ID列表 */
+export interface SkillTreeNode {
+  /** 节点 ID（在 Agent 树内唯一） */
+  id: string;
+  /** 节点显示名称 */
+  label: string;
+  /** 是否启用 */
+  enabled: boolean;
+  /** 引用的 Skill ID（叶节点专用，目录节点为 undefined） */
+  skillId?: string;
+  /** 子节点列表 */
+  children: SkillTreeNode[];
+}
+
+/**
+ * MCP 服务器工具细粒度选择
+ */
+export interface McpServerSelection {
+  /** MCP 服务器 ID */
+  serverId: string;
+  /**
+   * 允许的工具名称列表。
+   * null 或空数组 = 该服务器所有工具均可用；非空 = 仅允许列表中的工具。
+   */
+  toolNames: string[] | null;
+}
+
+/**
+ * Agent 工具选择配置（对应后端 AgentDefinition.ToolsConfig）
+ */
+export interface AgentToolsConfig {
+  /** MCP 服务器工具选择列表（服务端执行） */
+  mcpServers?: McpServerSelection[];
+  /** 系统内置工具名称列表 */
+  systemTools?: string[];
+  /** 绑定的知识库 ID 列表 */
   knowledgeIds?: string[];
-  /** 启用的工具名称（支持通配符） */
-  enabledTools?: string[];
-  /** 启用的MCP分组列表（可选，为空则使用所有启用分组） */
-  enabledMcpGroups?: string[];
-  /** 执行模式：AUTO-自动 / MANUAL-手动 */
-  mode?: 'AUTO' | 'MANUAL';
-  /** 思考引擎配置（可选，不传则使用默认值） */
-  thinkingConfig?: ThinkingConfig;
-  /** RAG配置（可选，不传则使用默认值） */
-  ragConfig?: RAGConfig;
-  /** 自定义上下文参数 */
-  context?: Record<string, any>;
+}
+
+/**
+ * Agent 定义（用户可配置的 Agent）
+ */
+export interface AgentDefinition {
+  /** Agent ID */
+  id: string;
+  /** Agent 名称 */
+  name: string;
+  /** 描述 */
+  description?: string;
+  /** 系统提示词 */
+  systemPrompt?: string;
+  /** 工具选择配置 */
+  tools?: AgentToolsConfig;
+  /** 上下文行为配置 */
+  contextConfig?: AgentContextConfig;
+  /** RAG 检索配置 */
+  ragConfig?: AgentRagConfig;
+  /** Agent 私有 Skill 目录树 */
+  skillTree?: SkillTreeNode[];
+  /** 是否内置 */
+  builtin: boolean;
+  /** 状态 */
+  status?: string;
+  /** 创建时间 */
+  createTime?: string;
+  /** 更新时间 */
+  updateTime?: string;
+}
+
+/**
+ * 创建/更新 Agent 的请求体
+ */
+export interface AgentDefinitionRequest {
+  name: string;
+  description?: string;
+  systemPrompt?: string;
+  tools?: AgentToolsConfig;
+  contextConfig?: AgentContextConfig;
+  ragConfig?: AgentRagConfig;
+  /** Agent 私有 Skill 目录树 */
+  skillTree?: SkillTreeNode[];
+}
+
+/**
+ * 系统工具信息
+ */
+export interface SystemToolInfo {
+  name: string;
+  description: string;
+}
+
+/**
+ * PERSONAL MCP 工具 Schema
+ * 由前端在发送消息前 prefetch 各 PERSONAL MCP 服务器的工具列表，
+ * 将真实工具 schema 随 AgentRequest 上传到后端。
+ */
+export interface PersonalMcpToolSchema {
+  /** 对应的 PERSONAL MCP 服务器 ID（SSE 下发时用于前端路由） */
+  serverId: string;
+  /** 真实工具名（如 search_bailian、list_files） */
+  toolName: string;
+  /** 工具描述（来自 MCP tools/list 响应） */
+  description: string;
+  /**
+   * JSON Schema 参数定义（兼容 OpenAI function calling 格式）
+   * 来自 MCP tools/list 响应中的 inputSchema 字段
+   */
+  inputSchema?: Record<string, unknown>;
+}
+
+/**
+* Agent 请求参数
+*/
+export interface AgentRequest {
+/** 用户输入内容 */
+content: string;
+/** 会话ID（可选，用于上下文关联） */
+conversationId?: string;
+/** 指定使用的 Agent ID（可选） */
+agentId?: string;
+/** 指定使用的模型ID（可选） */
+modelId?: string;
+/** 关联的知识库ID列表 */
+knowledgeIds?: string[];
+/** MCP 服务器工具细粒度选择（为空则使用 Agent 默认配置） */
+mcpServers?: McpServerSelection[];
+/** 系统内置工具名称列表（为空则使用 Agent 默认配置） */
+systemTools?: string[];
+/**
+ * PERSONAL MCP 工具 Schema 列表（前端 prefetch 后随请求上传）
+ * 后端直接用这些 schema 构造真实 ToolSpecification 交给 LLM。
+ * prefetch 失败的服务器工具不会出现在此列表，该服务器的工具本次对话不可用。
+ */
+personalMcpTools?: PersonalMcpToolSchema[];
+/** 执行模式：AUTO-自动 / MANUAL-手动 */
+mode?: 'AUTO' | 'MANUAL';
+/** 自定义上下文参数 */
+context?: Record<string, any>;
+}
+
+/**
+ * Agent 向用户提问的问题类型
+ */
+export type UserQuestionType = 'SINGLE_SELECT' | 'MULTI_SELECT' | 'INPUT' | 'PREVIEW';
+
+/**
+ * Agent 向用户发起的问题（由 system_ask_user_question 工具触发）
+ */
+export interface UserQuestion {
+  /** 问题唯一ID（提交答案时回传） */
+  questionId: string;
+  /** 问题内容 */
+  question: string;
+  /** 问题类型 */
+  questionType: UserQuestionType;
+  /** 选项列表（SINGLE_SELECT / MULTI_SELECT 时有值） */
+  options?: string[];
+  /** 预览内容（PREVIEW 时有值） */
+  previewContent?: string;
 }
 
 /**
@@ -98,8 +229,8 @@ export type AgentEventType =
   | 'agent:tool_call'       // 工具调用中
   | 'agent:tool_result'     // 工具执行结果
   | 'agent:message'         // 流式内容
-  | 'agent:iteration_start' // 迭代开始
-  | 'agent:iteration_end'       // 迭代结束
+  | 'agent:iteration_start' // 迭代开始（tool_call 事件触发时自动创建）
+  | 'agent:iteration_end'   // 迭代结束（tool_result 后触发）
   | 'agent:status:analyzing'          // 正在分析任务和用户意图
   | 'agent:status:thinking_process'     // 思考过程
   | 'agent:status:planning'             // 正在规划
@@ -107,9 +238,11 @@ export type AgentEventType =
   | 'agent:status:tool_executing_single' // 单个工具执行
   | 'agent:status:tool_executing_batch'  // 批量工具执行
   | 'agent:status:retrying'              // 格式重试中
-  | 'agent:stream_complete' // 流式输出完成
-  | 'agent:complete'        // 任务完成
-  | 'agent:error';          // 错误发生
+  | 'agent:ask_user_question'    // Agent 向用户提问（AskUserQuestion 工具触发）
+  | 'agent:personal_tool_call'   // PERSONAL MCP 工具调用（客户端执行）
+  | 'agent:stream_complete'      // 流式输出完成
+  | 'agent:complete'             // 任务完成
+  | 'agent:error';               // 错误发生
 
 /**
  * Agent 事件数据
@@ -390,10 +523,17 @@ export interface ExecutionProcess {
 export interface AgentMessage {
   /** 消息ID */
   id: string;
-  /** 角色 */
-  role: 'user' | 'assistant' | 'system';
+  /**
+   * 角色
+   * - 'question': Agent 通过 AskUserQuestion 工具向用户发起的提问（嵌入在对话流中）
+   */
+  role: 'user' | 'assistant' | 'system' | 'question';
   /** 角色名称 */
   roleName?: string;
+  /** 发出此消息的 Agent ID（assistant 消息时有值） */
+  agentId?: string;
+  /** 发出此消息的 Agent 名称（运行时填充，不存库） */
+  agentName?: string;
   /** 消息内容 */
   content: string;
   /** 时间 */
@@ -424,6 +564,12 @@ export interface AgentMessage {
   duration?: number;
   /** 执行过程（新增） */
   process?: ExecutionProcess;
+  /** AskUserQuestion 提问内容（role === 'question' 时有值） */
+  question?: UserQuestion;
+  /** 是否已回答（role === 'question' 时有效） */
+  questionAnswered?: boolean;
+  /** 用户的回答内容（已回答后写入） */
+  questionAnswer?: string;
 }
 
 /**
@@ -544,46 +690,108 @@ export interface ConversationInfo {
   createTime?: string;
   /** 更新时间 */
   updateTime?: string;
+  /** 绑定的 Agent ID */
+  agentId?: string;
 }
 
 /**
- * MCP分组信息
+ * MCP 服务器信息（对应后端 McpServerVO）
  */
-export interface McpGroupInfo {
-  /** 分组ID */
+export interface McpServerInfo {
+  /** 服务器 ID */
   id: string;
-  /** 分组名称 */
+  /** 显示名称 */
   name: string;
-  /** 分组描述 */
+  /** 描述 */
   description?: string;
+  /**
+   * 作用域：0=GLOBAL（服务端执行），1=PERSONAL（客户端执行）
+   */
+  scope: 0 | 1;
+  /** 连接类型 */
+  connectionType: string;
+  /** 端点 URL */
+  endpointUrl: string;
+  /**
+   * 认证请求头（键值对）
+   * GLOBAL 类型：值脱敏为 "***"；PERSONAL 类型：值为 ""（运行时由浏览器 localStorage 补充）
+   */
+  authHeaders?: Record<string, string>;
+  /** 超时（毫秒） */
+  timeoutMs?: number;
   /** 是否启用 */
   enabled: boolean;
+  /** 创建人 */
+  createdBy?: string;
+  /** 创建时间 */
+  createdAt?: string;
+  /** 工具列表（按需加载） */
+  tools?: McpToolInfo[];
   /** 工具数量 */
-  toolCount: number;
-  /** 所属服务器ID */
-  serverId?: string;
-  /** 连接类型 */
-  connectionType?: string;
+  toolCount?: number;
+  /**
+   * 运行时连接状态（前端本地，不上传后端）
+   * undefined = 未检测；true = 已连接；false = 连接失败
+   */
+  _connected?: boolean;
 }
 
 /**
- * MCP工具信息
+ * MCP 工具信息
  */
 export interface McpToolInfo {
+  /** 工具 ID（格式：serverId:toolName） */
+  id?: string;
   /** 工具名称 */
   name: string;
   /** 工具描述 */
   description: string;
-  /** 工具分组 */
-  group: string;
   /** 是否启用 */
   enabled: boolean;
-  /** 工具版本 */
-  version?: string;
   /** 所属服务器ID */
   serverId?: string;
+  /** 是否是 PERSONAL 工具（客户端执行） */
+  personal?: boolean;
   /** 连接类型 */
   connectionType?: string;
+  /** 工具参数 JSON Schema（GLOBAL 类型由后端提供） */
+  inputSchema?: Record<string, unknown>;
+}
+
+/**
+ * PERSONAL MCP 工具调用事件数据（agent:personal_tool_call）
+ */
+export interface PersonalToolCallData {
+  /** 唯一调用 ID，执行完成后回传给 /api/mcp/client-tool-result */
+  callId: string;
+  /** MCP 工具名称 */
+  toolName: string;
+  /** 对应的 PERSONAL MCP 服务器 ID */
+  serverId: string;
+  /** 工具参数 */
+  params: Record<string, unknown>;
+}
+
+/**
+ * 创建 / 更新 MCP 服务器请求
+ */
+export interface McpServerRequest {
+  name: string;
+  description?: string;
+  scope: 0 | 1;
+  connectionType: string;
+  endpointUrl: string;
+  /**
+   * 认证请求头（键值对）
+   * GLOBAL 类型：{"Authorization":"Bearer sk-xxx"}
+   * PERSONAL 类型：{"Authorization":""} （值留空，运行时由浏览器补充）
+   */
+  authHeaders?: Record<string, string>;
+  extraHeaders?: string;
+  timeoutMs?: number;
+  readTimeoutMs?: number;
+  retryCount?: number;
+  enabled?: boolean;
 }
 
 /**
@@ -592,6 +800,8 @@ export interface McpToolInfo {
 export interface AgentEventCallbacks {
   onStart?: (event: AgentEvent) => void;
   onIterationStart?: (event: AgentEvent) => void;
+  onAskUserQuestion?: (question: UserQuestion) => void;
+  onPersonalToolCall?: (data: PersonalToolCallData) => void;
   onThinking?: (event: AgentEvent) => void;
   onThinkingDelta?: (event: AgentEvent) => void;
   onModelSelected?: (event: AgentEvent) => void;

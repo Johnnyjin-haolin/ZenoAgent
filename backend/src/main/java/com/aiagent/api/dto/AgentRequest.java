@@ -1,6 +1,7 @@
 package com.aiagent.api.dto;
 
 import com.aiagent.common.enums.AgentMode;
+import com.aiagent.domain.agent.AgentDefinition;
 import lombok.Data;
 
 import java.util.List;
@@ -8,68 +9,50 @@ import java.util.Map;
 
 /**
  * Agent 请求参数
- * 
- * @author aiagent
  */
 @Data
 public class AgentRequest {
-    
-    /**
-     * 用户输入内容
-     */
+
+    /** 用户输入内容 */
     private String content;
-    
-    /**
-     * 会话ID
-     */
+
+    /** 会话 ID */
     private String conversationId;
-    
-    /**
-     * Agent配置ID，暂未泳道功能，默认值为DEFAULT_AGENT_ID
-     */
+
+    /** Agent 配置 ID，默认值为 DEFAULT_AGENT_ID */
     private String agentId;
-    
-    /**
-     * 关联知识库ID列表
-     */
+
+    /** 关联知识库 ID 列表 */
     private List<String> knowledgeIds;
-    
+
     /**
-     * 启用的工具名称列表（为空则使用所有可用工具）
+     * 本次会话 MCP 服务器工具细粒度选择（为空则使用 Agent 默认配置）
      */
-    private List<String> enabledTools;
-    
+    private List<AgentDefinition.McpServerSelection> mcpServers;
+
     /**
-     * 启用的MCP分组列表（为空则使用所有可用分组）
+     * 本次会话启用的系统内置工具名称列表（为空则使用 Agent 默认配置）
      */
-    private List<String> enabledMcpGroups;
-    
+    private List<String> systemTools;
+
     /**
-     * 上下文参数
+     * PERSONAL MCP 工具 Schema 列表（由前端 prefetch 后随请求上传）
+     * <p>
+     * 前端在发送消息前先调用各 PERSONAL MCP 服务器的 tools/list 接口，
+     * 获取真实工具 schema 后将其放入此字段一起上传。
+     * 后端直接用这些 schema 构造 ToolSpecification，不再注入占位假工具。
+     * <p>
+     * 若前端 prefetch 失败（网络不通 / 密钥缺失），此字段为空或不含对应工具，
+     * 该服务器的工具对本次对话不可用（不阻塞对话）。
      */
+    private List<PersonalMcpToolSchema> personalMcpTools;
+
+    /** 上下文参数 */
     private Map<String, Object> context;
-    
-    /**
-     * 执行模式
-     */
+
+    /** 执行模式（AUTO / MANUAL） */
     private AgentMode mode = AgentMode.AUTO;
-    
-    /**
-     * 指定的模型ID（可选）
-     */
+
+    /** 指定的模型 ID（可选） */
     private String modelId;
-    
-    /**
-     * 思考引擎配置（可选，不传则使用默认值）
-     * 用于控制提示词构建时的历史长度、截断等行为
-     */
-    private ThinkingConfig thinkingConfig;
-    
-    /**
-     * RAG配置（可选，不传则使用默认值）
-     * 用于控制知识库检索的参数（检索数量、相似度阈值、内容长度限制等）
-     */
-    private RAGConfig ragConfig;
 }
-
-

@@ -1,17 +1,14 @@
 package com.aiagent.api.controller;
 
-import com.aiagent.api.dto.McpGroupInfo;
 import com.aiagent.api.dto.McpToolInfo;
 import com.aiagent.infrastructure.config.AgentConfig;
-import com.aiagent.common.response.ErrorCode;
 import com.aiagent.common.enums.ModelType;
-import com.aiagent.infrastructure.external.mcp.McpGroupManager;
+import com.aiagent.infrastructure.external.mcp.McpManager;
 import com.aiagent.api.dto.ModelInfoVO;
 import com.aiagent.common.response.Result;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -32,7 +29,7 @@ public class AgentMetadataController {
     private AgentConfig agentConfig;
 
     @Autowired
-    private McpGroupManager mcpGroupManager;
+    private McpManager mcpManager;
 
     /**
      * 获取可用模型列表
@@ -101,33 +98,22 @@ public class AgentMetadataController {
     
 
     /**
-     * 获取MCP分组列表
+     * 获取 GLOBAL MCP 服务器列表（已加载到内存中的服务器）
+     * 完整管理请使用 /api/mcp/servers
      */
-    @GetMapping("/mcp/groups")
-    public Result<List<McpGroupInfo>> getMcpGroups() {
-        List<McpGroupInfo> groups = mcpGroupManager.getEnabledGroups();
-        return Result.success(groups);
+    @GetMapping("/mcp/servers")
+    public Result<List<com.aiagent.infrastructure.config.McpServerConfig.McpServerDefinition>> getMcpServers() {
+        return Result.success(mcpManager.getAllServers());
     }
 
     /**
-     * 获取MCP分组详情
-     */
-    @GetMapping("/mcp/groups/{groupId}")
-    public Result<McpGroupInfo> getMcpGroup(@PathVariable String groupId) {
-        McpGroupInfo group = mcpGroupManager.getGroupById(groupId);
-        if (group != null) {
-            return Result.success(group);
-        }
-        return Result.error(ErrorCode.NOT_FOUND, "分组不存在");
-    }
-
-    /**
-     * 获取MCP工具列表
-     * 支持按分组筛选
+     * 获取所有 MCP 工具列表（GLOBAL 类型）
+     * 支持按服务器 ID 列表筛选
      */
     @GetMapping("/mcp/tools")
-    public Result<List<McpToolInfo>> getMcpTools(@RequestParam(required = false) List<String> groups) {
-        List<McpToolInfo> tools = mcpGroupManager.getToolsByGroups(groups);
+    public Result<List<McpToolInfo>> getMcpTools(
+            @RequestParam(required = false) List<String> serverIds) {
+        List<McpToolInfo> tools = mcpManager.getToolsByServerIds(serverIds);
         return Result.success(tools);
     }
 
