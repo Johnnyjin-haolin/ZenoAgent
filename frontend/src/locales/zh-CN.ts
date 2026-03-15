@@ -32,6 +32,8 @@ export default {
     agent: '智能对话',
     knowledgeBase: '知识库管理',
     agentManage: 'Agent 管理',
+    skillManage: 'Skill 管理',
+    mcpServer: 'MCP 服务器',
     settings: '系统设置',
     language: '语言切换',
   },

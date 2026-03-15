@@ -136,7 +136,7 @@ declare global {
   }
 }
 
-const { t } = useI18n();
+const { t, tm, rt } = useI18n();
 const router = useRouter();
 const route = useRoute();
 
@@ -243,20 +243,27 @@ const inputPlaceholder = computed(() => {
   return t('agent.inputPlaceholder');
 });
 
-const welcomeCategories = computed(() => [
-  {
-    label: t('agent.welcomeCategories.knowledge.label'),
-    items: (t('agent.welcomeCategories.knowledge.items') as unknown as string[]),
-  },
-  {
-    label: t('agent.welcomeCategories.tool.label'),
-    items: (t('agent.welcomeCategories.tool.items') as unknown as string[]),
-  },
-  {
-    label: t('agent.welcomeCategories.analysis.label'),
-    items: (t('agent.welcomeCategories.analysis.items') as unknown as string[]),
-  },
-]);
+const welcomeCategories = computed(() => {
+  const toStrings = (key: string): string[] => {
+    const raw = tm(key);
+    if (Array.isArray(raw)) return raw.map((v) => rt(v));
+    return [];
+  };
+  return [
+    {
+      label: t('agent.welcomeCategories.knowledge.label'),
+      items: toStrings('agent.welcomeCategories.knowledge.items'),
+    },
+    {
+      label: t('agent.welcomeCategories.tool.label'),
+      items: toStrings('agent.welcomeCategories.tool.items'),
+    },
+    {
+      label: t('agent.welcomeCategories.analysis.label'),
+      items: toStrings('agent.welcomeCategories.analysis.items'),
+    },
+  ];
+});
 
 const applyScenarioPrompt = (prompt: string) => {
   userInput.value = prompt;

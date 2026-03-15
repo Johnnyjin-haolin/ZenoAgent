@@ -32,6 +32,8 @@ export default {
     agent: 'AGENT CHAT',
     knowledgeBase: 'KNOWLEDGE BASE',
     agentManage: 'AGENT MANAGE',
+    skillManage: 'SKILL MANAGE',
+    mcpServer: 'MCP SERVERS',
     settings: 'SETTINGS',
     language: 'LANGUAGE',
   },

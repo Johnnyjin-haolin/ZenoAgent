@@ -57,7 +57,7 @@
             <thunderbolt-outlined />
           </template>
           <router-link to="/skills">
-            <span>Skill 管理</span>
+            <span>{{ t('menu.skillManage') }}</span>
           </router-link>
         </a-menu-item>
 
@@ -66,7 +66,7 @@
             <api-outlined />
           </template>
           <router-link to="/mcp">
-            <span>MCP 服务器</span>
+            <span>{{ t('menu.mcpServer') }}</span>
           </router-link>
         </a-menu-item>
       </a-menu>
