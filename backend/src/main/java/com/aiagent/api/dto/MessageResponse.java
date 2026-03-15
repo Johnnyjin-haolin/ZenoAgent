@@ -32,6 +32,11 @@ public class MessageResponse {
      * 使用的模型ID
      */
     private String modelId;
+
+    /**
+     * 执行此消息的 Agent ID（assistant 消息时有值）
+     */
+    private String agentId;
     
     /**
      * Token数量

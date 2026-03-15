@@ -491,6 +491,10 @@ export interface AgentMessage {
   role: 'user' | 'assistant' | 'system' | 'question';
   /** 角色名称 */
   roleName?: string;
+  /** 发出此消息的 Agent ID（assistant 消息时有值） */
+  agentId?: string;
+  /** 发出此消息的 Agent 名称（运行时填充，不存库） */
+  agentName?: string;
   /** 消息内容 */
   content: string;
   /** 时间 */

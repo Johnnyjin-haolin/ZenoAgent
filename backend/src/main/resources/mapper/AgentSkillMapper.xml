@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiagent.infrastructure.mapper.AgentSkillMapper">
+
+    <resultMap id="BaseResultMap" type="com.aiagent.domain.model.entity.AgentSkillEntity">
+        <id     column="id"          property="id"/>
+        <result column="name"        property="name"/>
+        <result column="summary"     property="summary"/>
+        <result column="content"     property="content"/>
+        <result column="tags"        property="tags"/>
+        <result column="status"      property="status"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="insert">
+        INSERT INTO agent_skill (id, name, summary, content, tags, status)
+        VALUES (#{id}, #{name}, #{summary}, #{content}, #{tags}, #{status})
+    </insert>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM agent_skill WHERE id = #{id} AND status != 'deleted'
+    </select>
+
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT * FROM agent_skill WHERE status != 'deleted' ORDER BY create_time ASC
+    </select>
+
+    <select id="selectPage" resultMap="BaseResultMap">
+        SELECT * FROM agent_skill WHERE status != 'deleted'
+        ORDER BY create_time ASC
+        LIMIT #{pageSize} OFFSET #{offset}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM agent_skill WHERE status != 'deleted'
+    </select>
+
+    <update id="update">
+        UPDATE agent_skill
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="summary != null">summary = #{summary},</if>
+            <if test="content != null">content = #{content},</if>
+            <if test="tags != null">tags = #{tags},</if>
+            <if test="status != null">status = #{status},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <update id="deleteById">
+        UPDATE agent_skill SET status = 'deleted' WHERE id = #{id}
+    </update>
+
+    <select id="countById" resultType="int">
+        SELECT COUNT(*) FROM agent_skill WHERE id = #{id}
+    </select>
+
+</mapper>

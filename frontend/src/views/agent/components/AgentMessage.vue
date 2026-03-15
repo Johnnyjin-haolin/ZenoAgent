@@ -9,9 +9,13 @@
 
     <!-- 消息内容区 -->
     <div class="message-content-wrapper">
-      <!-- 时间和模型信息 -->
+      <!-- 时间、Agent 名称和模型信息 -->
       <div class="message-header">
         <span class="message-time">{{ formattedTime }}</span>
+        <span v-if="message.agentName && message.role === 'assistant'" class="message-agent-tag">
+          <Icon icon="ant-design:robot-outlined" class="message-agent-icon" />
+          {{ message.agentName }}
+        </span>
         <a-tag v-if="message.model && message.role === 'assistant'" color="blue" size="small">
           {{ message.model }}
         </a-tag>
@@ -497,6 +501,25 @@ function handleAnswerQuestion(questionId: string, answer: string) {
   color: rgba(148, 163, 184, 0.6);
   font-family: 'JetBrains Mono', monospace;
   margin-bottom: 2px;
+}
+
+.message-agent-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+
+  .message-agent-icon {
+    font-size: 10px;
+  }
 }
 
 .status-card {

@@ -19,10 +19,16 @@
         @click="handleSelect(item)"
       >
         <div class="conversation-main">
-          <div v-if="!item.isEdit" class="conversation-title">
-            <span>{{ item.title }}</span>
-            <span v-if="item.isTemporary" class="conversation-temp-tag">未保存</span>
-          </div>
+          <template v-if="!item.isEdit">
+            <div class="conversation-title">
+              <span>{{ item.title }}</span>
+              <span v-if="item.isTemporary" class="conversation-temp-tag">未保存</span>
+            </div>
+            <div v-if="item.agentId" class="conversation-agent-name">
+              <Icon icon="ant-design:robot-outlined" class="conversation-agent-icon" />
+              <span>{{ agentNameMap?.[item.agentId] || item.agentId }}</span>
+            </div>
+          </template>
           <a-input
             v-else
             v-model:value="item.title"
@@ -78,6 +84,8 @@ type ConversationView = ConversationInfo & { isTemporary?: boolean };
 const props = defineProps<{
   conversations: ConversationView[];
   activeId?: string;
+  /** agentId → agentName 的映射，用于展示会话绑定的 Agent 名称 */
+  agentNameMap?: Record<string, string>;
 }>();
 
 const emit = defineEmits<{
@@ -228,6 +236,28 @@ const handleDelete = (conversation: ConversationInfo) => {
     border-radius: 4px;
     padding: 0 6px;
     border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .conversation-agent-name {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-top: 3px;
+    font-size: 11px;
+    color: rgba(96, 165, 250, 0.7);
+    font-family: 'JetBrains Mono', monospace;
+    overflow: hidden;
+
+    .conversation-agent-icon {
+      font-size: 10px;
+      flex-shrink: 0;
+    }
+
+    span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
   }
 
   .conversation-actions {

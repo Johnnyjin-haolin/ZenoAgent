@@ -40,6 +40,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string | undefined): void;
   (e: 'change', value: string | undefined, agent: AgentDefinition | null): void;
+  (e: 'agents-loaded', agents: AgentDefinition[]): void;
 }>();
 
 const selectedAgentId = ref<string | undefined>(props.modelValue);
@@ -57,6 +58,12 @@ async function loadAgents() {
   loading.value = true;
   try {
     agents.value = await getAgentDefinitions();
+    // agents 加载完成后，重新将 props.modelValue 同步到内部状态，
+    // 确保从其他页面跳转时携带的 agentId 能在下拉框中正确显示
+    if (props.modelValue) {
+      selectedAgentId.value = props.modelValue;
+    }
+    emit('agents-loaded', agents.value);
   } finally {
     loading.value = false;
   }
@@ -68,7 +75,12 @@ function handleChange(value: string | undefined) {
   emit('change', value, found);
 }
 
-defineExpose({ loadAgents });
+/** 根据 ID 查找 Agent 定义 */
+function getAgentById(id: string): AgentDefinition | undefined {
+  return agents.value.find((a) => a.id === id);
+}
+
+defineExpose({ loadAgents, getAgentById, agents });
 
 onMounted(() => {
   loadAgents();

@@ -5,6 +5,7 @@
       <AgentSlide
         :conversations="conversations"
         :active-id="currentConversationId"
+        :agent-name-map="agentNameMap"
         @select="handleSelectConversation"
         @new="handleNewConversation"
         @update="handleUpdateConversation"
@@ -32,13 +33,28 @@
         @open-config="showConfigDrawer = true"
       />
 
-      <!-- Agent 选择器 -->
-      <div class="agent-selector-bar">
-        <span class="agent-selector-label">Agent：</span>
-        <AgentSelector
-          v-model="selectedAgentId"
-          @change="handleAgentChange"
-        />
+      <!-- Agent 信息横幅 -->
+      <div class="agent-banner">
+        <div class="agent-banner-avatar">
+          <Icon icon="ant-design:robot-outlined" class="agent-banner-icon" />
+        </div>
+        <div class="agent-banner-info">
+          <div class="agent-banner-name">
+            <span v-if="currentAgent" class="agent-name-text">{{ currentAgent.name }}</span>
+            <span v-else class="agent-name-placeholder">未选择 Agent</span>
+            <span v-if="currentAgent?.builtin" class="agent-builtin-badge">系统</span>
+          </div>
+          <div v-if="currentAgent?.description" class="agent-banner-desc">{{ currentAgent.description }}</div>
+          <div v-else class="agent-banner-desc agent-banner-desc--empty">点击右侧切换 Agent 以开始专属对话</div>
+        </div>
+        <div class="agent-banner-selector">
+          <AgentSelector
+            ref="agentSelectorRef"
+            v-model="selectedAgentId"
+            @change="handleAgentChange"
+            @agents-loaded="handleAgentsLoaded"
+          />
+        </div>
       </div>
 
       <ChatMessages
@@ -99,7 +115,7 @@ import ChatMessages from './components/ChatMessages.vue';
 import AgentSlide from './components/AgentSlide.vue';
 import AgentSelector from './components/AgentSelector.vue';
 import { AGENT_CONFIG_STORAGE_KEY } from './agent.constants';
-import type { ModelInfo, KnowledgeInfo } from './agent.types';
+import type { ModelInfo, KnowledgeInfo, AgentDefinition } from './agent.types';
 import { ModelType } from '@/types/model.types';
 import type { BrandConfig } from './hooks/useBrandConfig';
 
@@ -124,6 +140,25 @@ const showConfigDrawer = ref(false);
 
 // Agent 选择器
 const selectedAgentId = ref<string | undefined>(undefined);
+const agentSelectorRef = ref<InstanceType<typeof AgentSelector> | null>(null);
+// 标记 URL 携带的 agentId 是否已生效，防止 watch(currentConversationId) 在首次加载时将其覆盖
+const urlAgentIdHandled = ref(false);
+
+/** 当前选中的 Agent 定义（从 AgentSelector 内部列表查询） */
+const currentAgent = computed<AgentDefinition | undefined>(() => {
+  if (!selectedAgentId.value || !agentSelectorRef.value) return undefined;
+  return agentSelectorRef.value.getAgentById(selectedAgentId.value);
+});
+
+/** agentId → agentName 映射，供会话列表展示 Agent 名称 */
+const agentNameMap = computed<Record<string, string>>(() => {
+  if (!agentSelectorRef.value?.agents) return {};
+  const map: Record<string, string> = {};
+  for (const agent of agentSelectorRef.value.agents) {
+    map[agent.id] = agent.name;
+  }
+  return map;
+});
 
 // 会话 ID（由会话列表与SSE更新）
 const currentConversationId = ref('');
@@ -159,6 +194,7 @@ const {
   defaultModelId: selectedModelId.value,  // 初始值
   defaultKnowledgeIds: selectedKnowledgeIds.value,  // 初始值
   defaultEnabledTools: selectedTools.value,  // 初始值
+  getAgentName: (agentId: string) => agentSelectorRef.value?.getAgentById(agentId)?.name,
 });
 
 // 用户输入
@@ -388,6 +424,13 @@ const handleAgentChange = (agentId: string | undefined) => {
 // 切换会话时同步 selectedAgentId（从会话列表中读取绑定信息）
 watch(currentConversationId, (newId) => {
   if (!newId) return;
+  // 如果 URL 携带了 agentId 且尚未生效，优先使用 URL 参数，不跟随会话覆盖
+  const queryAgentId = route.query.agentId as string | undefined;
+  if (queryAgentId && !urlAgentIdHandled.value) {
+    urlAgentIdHandled.value = true;
+    selectedAgentId.value = queryAgentId;
+    return;
+  }
   const conv = conversations.value.find((c) => c.id === newId);
   if (conv) {
     selectedAgentId.value = conv.agentId || undefined;
@@ -399,12 +442,13 @@ onMounted(() => {
   loadBrandConfig();
   initAgentConfig();
   loadConversations();
-  // 若从 Agent 管理页跳转而来，自动选中对应的 Agent
-  const queryAgentId = route.query.agentId as string | undefined;
-  if (queryAgentId) {
-    selectedAgentId.value = queryAgentId;
-  }
 });
+
+// AgentSelector 完成 agents 加载后的回调
+// agents 列表就绪后，确保当前 selectedAgentId 在下拉框中正确显示
+const handleAgentsLoaded = (_loadedAgents: import('./agent.types').AgentDefinition[]) => {
+  // AgentSelector 内部已在 loadAgents 完成后重新同步 props.modelValue，此处无需额外处理
+};
 
 watch(
   [selectedModelId, selectedKnowledgeIds, selectedTools, executionMode],
@@ -488,21 +532,92 @@ watch(
   }
 }
 
-.agent-selector-bar {
+.agent-banner {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 16px;
-  border-bottom: 1px solid rgba(59, 130, 246, 0.1);
-  background: rgba(15, 23, 42, 0.3);
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(59, 130, 246, 0.15);
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(8px);
   flex-shrink: 0;
-}
+  min-height: 56px;
 
-.agent-selector-label {
-  font-size: 12px;
-  color: #64748b;
-  font-family: 'JetBrains Mono', monospace;
-  flex-shrink: 0;
+  .agent-banner-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(139, 92, 246, 0.3));
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    .agent-banner-icon {
+      font-size: 18px;
+      color: #60a5fa;
+    }
+  }
+
+  .agent-banner-info {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+
+    .agent-banner-name {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 2px;
+
+      .agent-name-text {
+        font-size: 14px;
+        font-weight: 600;
+        color: #e2e8f0;
+        font-family: 'JetBrains Mono', monospace;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .agent-name-placeholder {
+        font-size: 14px;
+        font-weight: 500;
+        color: #475569;
+        font-family: 'JetBrains Mono', monospace;
+      }
+
+      .agent-builtin-badge {
+        font-size: 10px;
+        padding: 1px 5px;
+        background: rgba(59, 130, 246, 0.2);
+        color: #60a5fa;
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        border-radius: 3px;
+        line-height: 16px;
+        flex-shrink: 0;
+      }
+    }
+
+    .agent-banner-desc {
+      font-size: 11px;
+      color: #64748b;
+      font-family: 'JetBrains Mono', monospace;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+
+      &.agent-banner-desc--empty {
+        color: #334155;
+        font-style: italic;
+      }
+    }
+  }
+
+  .agent-banner-selector {
+    flex-shrink: 0;
+  }
 }
 </style>
 

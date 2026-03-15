@@ -35,6 +35,16 @@ public class MessageService {
      */
     public void saveMessage(String conversationId, ChatMessage message, String modelId,
                            Integer tokens, Integer duration, Map<String, Object> customMetadata) {
+        saveMessage(conversationId, message, modelId, null, tokens, duration, customMetadata);
+    }
+
+    /**
+     * 保存消息（含 agentId）
+     * 将 ChatMessage 通过 MessageDTO 完整序列化（含 tool_calls），存入 metadata.messageData
+     * 支持无损还原所有 LangChain4j 消息类型
+     */
+    public void saveMessage(String conversationId, ChatMessage message, String modelId,
+                           String agentId, Integer tokens, Integer duration, Map<String, Object> customMetadata) {
         // 1. 通过 MessageDTO（BO）将 ChatMessage 完整序列化
         MessageBO messageBO = MessageBO.from(message);
         if (messageBO == null) {
@@ -58,6 +68,7 @@ public class MessageService {
         entity.setRole(role);
         entity.setContent(messageBO.getText() != null ? messageBO.getText() : "");
         entity.setModelId(modelId);
+        entity.setAgentId(agentId);
         entity.setTokens(tokens);
         entity.setDuration(duration);
 
@@ -70,7 +81,7 @@ public class MessageService {
         entity.setMetadata(JSON.toJSONString(fullMetadata));
 
         messageMapper.insert(entity);
-        log.debug("保存消息: conversationId={}, role={}", conversationId, role);
+        log.debug("保存消息: conversationId={}, role={}, agentId={}", conversationId, role, agentId);
     }
     
     /**
@@ -143,6 +154,7 @@ public class MessageService {
         response.setRole(entity.getRole());
         response.setContent(entity.getContent());
         response.setModelId(entity.getModelId());
+        response.setAgentId(entity.getAgentId());
         response.setTokens(entity.getTokens());
         response.setDuration(entity.getDuration());
         response.setCreateTime(entity.getCreateTime());

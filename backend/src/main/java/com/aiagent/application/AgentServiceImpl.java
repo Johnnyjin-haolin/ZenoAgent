@@ -128,7 +128,8 @@ public class AgentServiceImpl implements IAgentService {
 
             // 2. 保存用户消息到记忆和MySQL（统一通过MemorySystem处理）
             UserMessage userMessage = new UserMessage(request.getContent());
-            memorySystem.saveShortTermMemory(conversationId, userMessage, null, null, null, null);
+            // 用户消息不携带 agentId（agentId 只用于 assistant 消息）
+            memorySystem.saveShortTermMemory(conversationId, userMessage, null, null, null, null, null);
             context.addMessage(userMessage);
             stepStartNs = logStep("save_user_message", stepStartNs, requestId, conversationId, null, emitter);
 
@@ -328,6 +329,9 @@ public class AgentServiceImpl implements IAgentService {
         // 判断是否有执行过程记录（有工具调用时才有）
         ExecutionProcessRecord executionProcess = context.getExecutionProcess();
 
+        // 从 context 获取本轮使用的 agentId（assistant 消息专用）
+        String agentId = context.getAgentId();
+
         // 简单策略：遍历最后几条消息，保存所有 AI / TOOL_EXECUTION 类型
         // （因为执行循环中多次 addMessage，这些消息一定是新增的）
         int savedCount = 0;
@@ -350,7 +354,9 @@ public class AgentServiceImpl implements IAgentService {
                             metadata.put("executionProcess", executionProcess);
                             firstAiSaved = true;
                         }
-                        memorySystem.saveShortTermMemory(conversationId, message, modelId, null, null, metadata);
+                        // AI/assistant 消息携带 agentId；TOOL_EXECUTION 消息不需要
+                        String msgAgentId = "AI".equals(type) ? agentId : null;
+                        memorySystem.saveShortTermMemory(conversationId, message, modelId, msgAgentId, null, null, metadata);
                         savedCount++;
                     }
                 } catch (Exception e) {
@@ -363,8 +369,8 @@ public class AgentServiceImpl implements IAgentService {
         }
 
         if (savedCount > 0) {
-            log.info("批量保存本轮新增消息完成: conversationId={}, count={}, hasExecutionProcess={}",
-                conversationId, savedCount, executionProcess != null && !executionProcess.getIterations().isEmpty());
+            log.info("批量保存本轮新增消息完成: conversationId={}, count={}, agentId={}, hasExecutionProcess={}",
+                conversationId, savedCount, agentId, executionProcess != null && !executionProcess.getIterations().isEmpty());
         }
     }
 }

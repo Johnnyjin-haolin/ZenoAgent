@@ -33,6 +33,8 @@ export interface UseAgentChatOptions {
   defaultKnowledgeIds?: string[];
   /** 默认启用的工具 */
   defaultEnabledTools?: string[];
+  /** 根据 agentId 查询 Agent 名称（运行时填充 agentName 用） */
+  getAgentName?: (agentId: string) => string | undefined;
 }
 
 /**
@@ -45,6 +47,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     defaultModelId,
     defaultKnowledgeIds = [],
     defaultEnabledTools = [],
+    getAgentName,
   } = options;
 
   // 消息列表
@@ -251,6 +254,8 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       loading: true,
       toolCalls: [],
       ragResults: [],
+      agentId: options.agentId,
+      agentName: options.agentId ? getAgentName?.(options.agentId) : undefined,
       process: {
         iterations: [],
         completedCount: 0,
@@ -966,6 +971,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
    * 转换后端消息格式为前端格式
    */
   const convertToAgentMessage = (raw: any): AgentMessage => {
+    const agentId: string | undefined = raw.agentId || undefined;
     return {
       id: raw.id || raw.messageId || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       role: mapRole(raw.role),
@@ -973,6 +979,8 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       datetime: raw.createTime || new Date().toISOString(),
       status: 'done', // 历史消息都是已完成状态
       model: raw.modelId,
+      agentId,
+      agentName: agentId ? getAgentName?.(agentId) : undefined,
       tokens: raw.tokens,
       duration: raw.duration,
       // 从 metadata 中提取工具调用和RAG结果
