@@ -11,6 +11,7 @@
         <result column="tools_config"   property="toolsConfig"/>
         <result column="context_config" property="contextConfig"/>
         <result column="rag_config"     property="ragConfig"/>
+        <result column="skill_tree"     property="skillTree"/>
         <result column="is_builtin"     property="isBuiltin"/>
         <result column="status"       property="status"/>
         <result column="create_time"  property="createTime"/>
@@ -18,8 +19,8 @@
     </resultMap>
 
     <insert id="insert">
-        INSERT INTO agent (id, name, description, system_prompt, tools_config, context_config, rag_config, is_builtin, status)
-        VALUES (#{id}, #{name}, #{description}, #{systemPrompt}, #{toolsConfig}, #{contextConfig}, #{ragConfig}, #{isBuiltin}, #{status})
+        INSERT INTO agent (id, name, description, system_prompt, tools_config, context_config, rag_config, skill_tree, is_builtin, status)
+        VALUES (#{id}, #{name}, #{description}, #{systemPrompt}, #{toolsConfig}, #{contextConfig}, #{ragConfig}, #{skillTree}, #{isBuiltin}, #{status})
     </insert>
 
     <select id="selectById" resultMap="BaseResultMap">
@@ -53,6 +54,7 @@
             <if test="toolsConfig != null">tools_config = #{toolsConfig},</if>
             <if test="contextConfig != null">context_config = #{contextConfig},</if>
             <if test="ragConfig != null">rag_config = #{ragConfig},</if>
+            skill_tree = #{skillTree},
             <if test="status != null">status = #{status},</if>
         </set>
         WHERE id = #{id}

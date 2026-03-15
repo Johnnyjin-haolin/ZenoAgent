@@ -1,7 +1,9 @@
 package com.aiagent.api.dto;
 
+import com.aiagent.domain.skill.SkillTreeNode;
 import lombok.Data;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -27,6 +29,9 @@ public class AgentDefinitionRequest {
 
     /** RAG 检索配置（可选，不传则使用引擎默认值） */
     private RagConfigRequest ragConfig;
+
+    /** Agent 私有 Skill 目录树（可选） */
+    private List<SkillTreeNode> skillTree = new ArrayList<>();
 
     // ─────────────────────────────────────────────────────────────────────────
 

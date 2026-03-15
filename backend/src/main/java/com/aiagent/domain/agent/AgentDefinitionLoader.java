@@ -2,7 +2,9 @@ package com.aiagent.domain.agent;
 
 import com.aiagent.api.dto.RAGConfig;
 import com.aiagent.domain.model.entity.AgentEntity;
+import com.aiagent.domain.skill.SkillTreeNode;
 import com.aiagent.infrastructure.mapper.AgentMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import lombok.RequiredArgsConstructor;
@@ -120,6 +122,14 @@ public class AgentDefinitionLoader {
             }
         }
 
+        if (def.getSkillTree() != null && !def.getSkillTree().isEmpty()) {
+            try {
+                entity.setSkillTree(jsonMapper.writeValueAsString(def.getSkillTree()));
+            } catch (Exception e) {
+                log.warn("序列化 skillTree 失败: {}", e.getMessage());
+            }
+        }
+
         return entity;
     }
 
@@ -156,6 +166,16 @@ public class AgentDefinitionLoader {
                 def.setRagConfig(ragCfg);
             } catch (Exception e) {
                 log.warn("反序列化 ragConfig 失败: id={}, err={}", entity.getId(), e.getMessage());
+            }
+        }
+
+        if (entity.getSkillTree() != null) {
+            try {
+                List<SkillTreeNode> skillTree = jsonMapper.readValue(
+                        entity.getSkillTree(), new TypeReference<List<SkillTreeNode>>() {});
+                def.setSkillTree(skillTree);
+            } catch (Exception e) {
+                log.warn("反序列化 skillTree 失败: id={}, err={}", entity.getId(), e.getMessage());
             }
         }
 

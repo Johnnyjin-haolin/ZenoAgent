@@ -12,6 +12,9 @@ import com.aiagent.domain.model.bo.AgentRuntimeConfig;
 import com.aiagent.domain.model.bo.ExecutionProcessRecord;
 import com.aiagent.domain.model.bo.ExecutionProcessRecord.Iteration;
 import com.aiagent.domain.model.bo.ExecutionProcessRecord.Step;
+import com.aiagent.domain.skill.AgentSkill;
+import com.aiagent.domain.skill.AgentSkillService;
+import com.aiagent.domain.skill.SkillTreeNode;
 import com.aiagent.domain.tool.ToolRegistry;
 import com.aiagent.domain.tool.todo.TodoItem;
 import com.aiagent.infrastructure.external.mcp.ToolConfirmationDecision;
@@ -69,6 +72,9 @@ public class FunctionCallingEngine implements AgentEngine {
 
     @Autowired
     private ToolConfirmationManager toolConfirmationManager;
+
+    @Autowired
+    private AgentSkillService agentSkillService;
 
     @Override
     public AgentExecutionResult execute(AgentContext context) {
@@ -330,6 +336,11 @@ public class FunctionCallingEngine implements AgentEngine {
                 }
             }
 
+            String skillSection = buildSkillSection(agentDef);
+            if (!skillSection.isEmpty()) {
+                systemPrompt += skillSection;
+            }
+
             String todoSection = buildTodoSection(context);
             if (!todoSection.isEmpty()) {
                 systemPrompt += todoSection;
@@ -343,6 +354,51 @@ public class FunctionCallingEngine implements AgentEngine {
             messages.addAll(history);
         }
         return messages;
+    }
+
+    /**
+     * 构建 Skill 摘要段落，注入到 System Prompt
+     * <p>遍历 Agent 的 skillTree，收集所有 enabled=true 的叶节点 AgentSkill 摘要。
+     */
+    private String buildSkillSection(AgentDefinition agentDef) {
+        if (agentDef.getSkillTree() == null || agentDef.getSkillTree().isEmpty()) {
+            return "";
+        }
+
+        List<SkillTreeNode> enabledLeaves = new ArrayList<>();
+        collectEnabledLeafNodes(agentDef.getSkillTree(), enabledLeaves);
+        if (enabledLeaves.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("\n\n## Available Skills\n");
+        sb.append("Use `system_load_skill` tool with the skill ID to load full content when needed.\n\n");
+
+        for (SkillTreeNode node : enabledLeaves) {
+            if (node.getSkillId() == null) continue;
+            AgentSkill skill = agentSkillService.getById(node.getSkillId());
+            if (skill == null) continue;
+            sb.append("- [").append(skill.getId()).append("] **").append(skill.getName()).append("**: ");
+            sb.append(skill.getSummary()).append("\n");
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * 递归收集 enabled=true 的叶节点（有 skillId 的节点）
+     */
+    private void collectEnabledLeafNodes(List<SkillTreeNode> nodes, List<SkillTreeNode> result) {
+        if (nodes == null) return;
+        for (SkillTreeNode node : nodes) {
+            if (!node.isEnabled()) continue;
+            if (node.getSkillId() != null) {
+                result.add(node);
+            } else {
+                collectEnabledLeafNodes(node.getChildren(), result);
+            }
+        }
     }
 
     private String buildTodoSection(AgentContext context) {

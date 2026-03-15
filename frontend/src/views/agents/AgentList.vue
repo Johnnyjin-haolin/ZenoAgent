@@ -6,14 +6,14 @@
         <div class="page-title-group">
           <robot-outlined class="title-icon" />
           <div>
-            <h1 class="page-title">Agent 管理</h1>
-            <p class="page-subtitle">创建和管理自定义 Agent，配置系统提示词与工具能力</p>
+            <h1 class="page-title">{{ t('agentList.title') }}</h1>
+            <p class="page-subtitle">{{ t('agentList.subtitle') }}</p>
           </div>
         </div>
       </div>
       <a-button type="primary" class="create-btn" @click="goToCreate">
         <template #icon><plus-outlined /></template>
-        新建 Agent
+        {{ t('agentList.create') }}
       </a-button>
     </div>
 
@@ -36,7 +36,7 @@
           </div>
           <div class="card-title-group">
             <div class="card-name">
-              <span v-if="agent.builtin" class="builtin-badge">系统内置</span>
+              <span v-if="agent.builtin" class="builtin-badge">{{ t('agentList.builtin') }}</span>
               {{ agent.name }}
             </div>
             <div class="card-meta">
@@ -48,7 +48,7 @@
 
         <!-- 描述 -->
         <div class="card-desc">
-          {{ agent.description || '暂无描述' }}
+          {{ agent.description || t('agentList.noDesc') }}
         </div>
 
         <!-- 系统提示词预览 -->
@@ -75,7 +75,7 @@
               {{ tool }}
             </a-tag>
           </template>
-          <span v-else class="no-tools">未配置工具</span>
+          <span v-else class="no-tools">{{ t('agentList.noTools') }}</span>
         </div>
 
         <!-- 知识库 Tags -->
@@ -94,30 +94,30 @@
         <div class="card-actions">
           <a-button type="primary" size="small" class="action-btn chat-btn" @click="goToChat(agent)">
             <template #icon><message-outlined /></template>
-            开始对话
+            {{ t('agentList.chat') }}
           </a-button>
           <a-button type="text" size="small" class="action-btn edit-btn" @click="goToEdit(agent)">
             <template #icon><edit-outlined /></template>
-            编辑
+            {{ t('agentList.edit') }}
           </a-button>
           <a-popconfirm
             v-if="!agent.builtin"
-            :title="`确认删除 Agent「${agent.name}」？`"
-            description="删除后不可恢复"
-            ok-text="删除"
+            :title="t('agentList.deleteConfirmTitle', { name: agent.name })"
+            :description="t('agentList.deleteDesc')"
+            :ok-text="t('agentList.delete')"
             ok-type="danger"
-            cancel-text="取消"
+            :cancel-text="t('common.cancel')"
             placement="topRight"
             @confirm="handleDelete(agent)"
           >
             <a-button type="text" size="small" danger class="action-btn delete-btn">
               <template #icon><delete-outlined /></template>
-              删除
+              {{ t('agentList.delete') }}
             </a-button>
           </a-popconfirm>
           <span v-else class="builtin-lock">
             <lock-outlined />
-            内置不可删除
+            {{ t('agentList.builtinLock') }}
           </span>
         </div>
       </div>
@@ -125,11 +125,11 @@
       <!-- 空状态 -->
       <div v-if="agents.length === 0" class="empty-state">
         <robot-outlined class="empty-icon" />
-        <p class="empty-text">暂无 Agent</p>
-        <p class="empty-hint">点击「新建 Agent」创建第一个自定义 Agent</p>
+        <p class="empty-text">{{ t('agentList.empty') }}</p>
+        <p class="empty-hint">{{ t('agentList.emptyHint') }}</p>
         <a-button type="primary" @click="goToCreate">
           <template #icon><plus-outlined /></template>
-          新建 Agent
+          {{ t('agentList.create') }}
         </a-button>
       </div>
     </div>
@@ -137,7 +137,7 @@
     <!-- 加载更多触发器（IntersectionObserver 锚点） -->
     <div ref="loadMoreAnchor" class="load-more-anchor">
       <a-spin v-if="loadingMore" size="small" />
-      <span v-else-if="noMore && agents.length > 0" class="no-more-text">已加载全部 Agent</span>
+      <span v-else-if="noMore && agents.length > 0" class="no-more-text">{{ t('agentList.loadedAll') }}</span>
     </div>
   </div>
 </template>
@@ -146,6 +146,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { message } from 'ant-design-vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import {
   RobotOutlined,
   PlusOutlined,
@@ -170,6 +171,7 @@ const PAGE_SIZE = 12;
 // ─── 数据 ──────────────────────────────────────────────────────────────────
 
 const router = useRouter();
+const { t } = useI18n();
 
 const initialLoading = ref(false);
 const loadingMore = ref(false);
@@ -199,7 +201,7 @@ async function loadNextPage() {
       noMore.value = true;
     }
   } catch {
-    message.error('加载 Agent 列表失败');
+    message.error(t('agentList.loadFailed'));
   } finally {
     loadingMore.value = false;
   }
@@ -228,7 +230,7 @@ async function loadInitial() {
       }
     }
   } catch {
-    message.error('加载 Agent 列表失败');
+    message.error(t('agentList.loadFailed'));
   } finally {
     initialLoading.value = false;
   }
@@ -277,10 +279,10 @@ function goToChat(agent: AgentDefinition) {
 async function handleDelete(agent: AgentDefinition) {
   const ok = await deleteAgentDefinition(agent.id);
   if (ok) {
-    message.success('删除成功');
+    message.success(t('agentList.deleteSuccess'));
     await loadInitial();
   } else {
-    message.error('删除失败');
+    message.error(t('agentList.deleteFailed'));
   }
 }
 

@@ -4,16 +4,16 @@
     <div class="edit-header">
       <a-button type="text" class="back-btn" @click="goBack">
         <template #icon><arrow-left-outlined /></template>
-        返回列表
+        {{ t('agentEdit.backToList') }}
       </a-button>
       <div class="header-title">
         <robot-outlined class="header-icon" />
-        <span>{{ isEdit ? '编辑 Agent' : '新建 Agent' }}</span>
+        <span>{{ isEdit ? t('agentEdit.editTitle') : t('agentEdit.createTitle') }}</span>
       </div>
       <div class="header-actions">
-        <a-button class="cancel-btn" @click="goBack">取消</a-button>
+        <a-button class="cancel-btn" @click="goBack">{{ t('agentEdit.cancel') }}</a-button>
         <a-button type="primary" class="save-btn" :loading="saving" @click="handleSave">
-          保存
+          {{ t('agentEdit.save') }}
         </a-button>
       </div>
     </div>
@@ -30,15 +30,15 @@
       <section class="config-section">
         <div class="section-title">
           <info-circle-outlined class="section-icon" />
-          基本信息
+          {{ t('agentEdit.basicInfo') }}
         </div>
 
         <div class="form-row">
           <div class="form-item">
-            <label class="form-label">名称 <span class="required">*</span></label>
+            <label class="form-label">{{ t('agentEdit.nameLabel') }} <span class="required">*</span></label>
             <a-input
               v-model:value="form.name"
-              placeholder="输入 Agent 名称"
+              :placeholder="t('agentEdit.namePlaceholder')"
               :disabled="editingBuiltin"
               class="tech-input"
               :maxlength="50"
@@ -48,10 +48,10 @@
 
         <div class="form-row">
           <div class="form-item">
-            <label class="form-label">描述</label>
+            <label class="form-label">{{ t('agentEdit.descLabel') }}</label>
             <a-textarea
               v-model:value="form.description"
-              placeholder="描述该 Agent 的用途（可选）"
+              :placeholder="t('agentEdit.descPlaceholder')"
               :rows="2"
               :disabled="editingBuiltin"
               class="tech-input"
@@ -62,10 +62,10 @@
 
         <div class="form-row">
           <div class="form-item">
-            <label class="form-label">系统提示词</label>
+            <label class="form-label">{{ t('agentEdit.systemPromptLabel') }}</label>
             <a-textarea
               v-model:value="form.systemPrompt"
-              placeholder="输入系统提示词，定义 Agent 的行为和角色..."
+              :placeholder="t('agentEdit.systemPromptPlaceholder')"
               :rows="8"
               class="tech-input prompt-input"
             />
@@ -77,16 +77,16 @@
       <section class="config-section">
         <div class="section-title">
           <tool-outlined class="section-icon" />
-          工具配置
+          {{ t('agentEdit.toolConfig') }}
         </div>
 
         <div class="form-row two-cols">
           <div class="form-item">
-            <label class="form-label">MCP 工具分组</label>
+            <label class="form-label">{{ t('agentEdit.mcpGroups') }}</label>
             <a-select
               v-model:value="form.mcpGroups"
               mode="multiple"
-              placeholder="选择启用的 MCP 工具分组（留空表示允许全部）"
+              :placeholder="t('agentEdit.mcpGroupsPlaceholder')"
               :options="mcpGroupOptions"
               allow-clear
               class="tech-select"
@@ -94,11 +94,11 @@
             />
           </div>
           <div class="form-item">
-            <label class="form-label">系统内置工具</label>
+            <label class="form-label">{{ t('agentEdit.systemTools') }}</label>
             <a-select
               v-model:value="form.systemTools"
               mode="multiple"
-              placeholder="选择启用的系统工具（留空表示允许全部）"
+              :placeholder="t('agentEdit.systemToolsPlaceholder')"
               :options="systemToolOptions"
               allow-clear
               class="tech-select"
@@ -109,11 +109,11 @@
 
         <div class="form-row">
           <div class="form-item">
-            <label class="form-label">关联知识库</label>
+            <label class="form-label">{{ t('agentEdit.knowledgeBases') }}</label>
             <a-select
               v-model:value="form.knowledgeIds"
               mode="multiple"
-              placeholder="选择关联的知识库（对话时自动检索）"
+              :placeholder="t('agentEdit.knowledgeBasesPlaceholder')"
               :options="knowledgeOptions"
               allow-clear
               class="tech-select"
@@ -127,15 +127,15 @@
       <section class="config-section">
         <div class="section-title">
           <setting-outlined class="section-icon" />
-          上下文配置
-          <span class="section-hint">控制对话历史加载量与工具调用轮数</span>
+          {{ t('agentEdit.contextConfig') }}
+          <span class="section-hint">{{ t('agentEdit.contextHint') }}</span>
         </div>
 
         <div class="form-row two-cols">
           <div class="form-item">
             <label class="form-label">
-              历史消息加载条数
-              <a-tooltip title="每次对话时从数据库加载的最近历史消息条数，影响上下文记忆深度">
+              {{ t('agentEdit.historyLimit') }}
+              <a-tooltip :title="t('agentEdit.historyLimitTooltip')">
                 <question-circle-outlined class="help-icon" />
               </a-tooltip>
             </label>
@@ -143,15 +143,15 @@
               v-model:value="form.historyMessageLoadLimit"
               :min="1"
               :max="200"
-              placeholder="默认 20"
+              :placeholder="t('agentEdit.historyLimitDefault')"
               class="tech-number"
             />
-            <span class="field-hint">默认 20 条，范围 1–200</span>
+            <span class="field-hint">{{ t('agentEdit.historyLimitHint') }}</span>
           </div>
           <div class="form-item">
             <label class="form-label">
-              最大工具调用轮数
-              <a-tooltip title="单次对话中 LLM 最多可连续调用工具的轮数，防止无限循环">
+              {{ t('agentEdit.maxToolRounds') }}
+              <a-tooltip :title="t('agentEdit.maxToolRoundsTooltip')">
                 <question-circle-outlined class="help-icon" />
               </a-tooltip>
             </label>
@@ -159,10 +159,10 @@
               v-model:value="form.maxToolRounds"
               :min="1"
               :max="50"
-              placeholder="默认 8"
+              :placeholder="t('agentEdit.maxToolRoundsDefault')"
               class="tech-number"
             />
-            <span class="field-hint">默认 8 轮，范围 1–50</span>
+            <span class="field-hint">{{ t('agentEdit.maxToolRoundsHint') }}</span>
           </div>
         </div>
       </section>
@@ -171,15 +171,15 @@
       <section class="config-section">
         <div class="section-title">
           <database-outlined class="section-icon" />
-          RAG 检索配置
-          <span class="section-hint">控制知识库检索行为，需配合「关联知识库」使用</span>
+          {{ t('agentEdit.ragConfig') }}
+          <span class="section-hint">{{ t('agentEdit.ragHint') }}</span>
         </div>
 
         <div class="form-row two-cols">
           <div class="form-item">
             <label class="form-label">
-              最大检索文档数
-              <a-tooltip title="每次检索最多返回的文档块数量">
+              {{ t('agentEdit.ragMaxResults') }}
+              <a-tooltip :title="t('agentEdit.ragMaxResultsTooltip')">
                 <question-circle-outlined class="help-icon" />
               </a-tooltip>
             </label>
@@ -187,15 +187,15 @@
               v-model:value="form.ragMaxResults"
               :min="1"
               :max="20"
-              placeholder="默认 3"
+              :placeholder="t('agentEdit.ragMaxResultsDefault')"
               class="tech-number"
             />
-            <span class="field-hint">默认 3 条，范围 1–20</span>
+            <span class="field-hint">{{ t('agentEdit.ragMaxResultsHint') }}</span>
           </div>
           <div class="form-item">
             <label class="form-label">
-              最小相似度分数
-              <a-tooltip title="低于此相似度的文档块将被过滤，范围 0–1，值越高越严格">
+              {{ t('agentEdit.ragMinScore') }}
+              <a-tooltip :title="t('agentEdit.ragMinScoreTooltip')">
                 <question-circle-outlined class="help-icon" />
               </a-tooltip>
             </label>
@@ -205,43 +205,53 @@
               :max="1"
               :step="0.05"
               :precision="2"
-              placeholder="默认 0.5"
+              :placeholder="t('agentEdit.ragMinScoreDefault')"
               class="tech-number"
             />
-            <span class="field-hint">默认 0.5，范围 0–1</span>
+            <span class="field-hint">{{ t('agentEdit.ragMinScoreHint') }}</span>
           </div>
         </div>
 
         <div class="form-row two-cols">
           <div class="form-item">
             <label class="form-label">
-              单文档最大字符数
-              <a-tooltip title="单个文档块截断的最大字符数，留空表示不限制">
+              {{ t('agentEdit.ragMaxDocLen') }}
+              <a-tooltip :title="t('agentEdit.ragMaxDocLenTooltip')">
                 <question-circle-outlined class="help-icon" />
               </a-tooltip>
             </label>
             <a-input-number
               v-model:value="form.ragMaxDocumentLength"
               :min="100"
-              placeholder="留空表示不限制"
+              :placeholder="t('agentEdit.ragMaxDocLenPlaceholder')"
               class="tech-number"
             />
           </div>
           <div class="form-item">
             <label class="form-label">
-              总内容最大字符数
-              <a-tooltip title="所有检索文档块合计的最大字符数，留空表示不限制">
+              {{ t('agentEdit.ragMaxTotalLen') }}
+              <a-tooltip :title="t('agentEdit.ragMaxTotalLenTooltip')">
                 <question-circle-outlined class="help-icon" />
               </a-tooltip>
             </label>
             <a-input-number
               v-model:value="form.ragMaxTotalContentLength"
               :min="100"
-              placeholder="留空表示不限制"
+              :placeholder="t('agentEdit.ragMaxDocLenPlaceholder')"
               class="tech-number"
             />
           </div>
         </div>
+      </section>
+
+      <!-- ── Skill 目录配置 ─────────────────────────────────────────── -->
+      <section class="config-section">
+        <div class="section-title">
+          <ThunderboltOutlined class="section-icon" />
+          {{ t('agentEdit.skillTree') }}
+          <span class="section-hint">{{ t('agentEdit.skillTreeHint') }}</span>
+        </div>
+        <SkillTreeEditor v-model="form.skillTree" />
       </section>
 
     </div>
@@ -252,6 +262,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
+import { useI18n } from 'vue-i18n';
 import {
   RobotOutlined,
   ArrowLeftOutlined,
@@ -260,6 +271,7 @@ import {
   SettingOutlined,
   DatabaseOutlined,
   QuestionCircleOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons-vue';
 import {
   getAgentDefinition,
@@ -269,12 +281,14 @@ import {
   getAvailableSystemToolsForAgent,
   getKnowledgeList,
 } from '../agent/agent.api';
-import type { AgentDefinitionRequest } from '../agent/agent.types';
+import type { AgentDefinitionRequest, SkillTreeNode } from '../agent/agent.types';
+import SkillTreeEditor from './components/SkillTreeEditor.vue';
 
 // ─── 路由 ────────────────────────────────────────────────────────────────────
 
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 
 const isEdit = computed(() => !!route.params.id);
 const agentId = computed(() => route.params.id as string | undefined);
@@ -302,6 +316,7 @@ const form = ref({
   ragMinScore: null as number | null,
   ragMaxDocumentLength: null as number | null,
   ragMaxTotalContentLength: null as number | null,
+  skillTree: [] as SkillTreeNode[],
 });
 
 // ─── 初始化 ──────────────────────────────────────────────────────────────────
@@ -324,7 +339,7 @@ async function loadAgent() {
   if (!agentId.value) return;
   const agent = await getAgentDefinition(agentId.value);
   if (!agent) {
-    message.error('Agent 不存在');
+    message.error(t('agentEdit.agentNotFound'));
     router.push({ name: 'AgentList' });
     return;
   }
@@ -342,6 +357,7 @@ async function loadAgent() {
     ragMinScore: agent.ragConfig?.minScore ?? null,
     ragMaxDocumentLength: agent.ragConfig?.maxDocumentLength ?? null,
     ragMaxTotalContentLength: agent.ragConfig?.maxTotalContentLength ?? null,
+    skillTree: agent.skillTree || [],
   };
 }
 
@@ -350,7 +366,7 @@ onMounted(async () => {
   try {
     await Promise.all([loadOptions(), loadAgent()]);
   } catch {
-    message.error('加载数据失败');
+    message.error(t('agentEdit.loadFailed'));
   } finally {
     loading.value = false;
   }
@@ -360,7 +376,7 @@ onMounted(async () => {
 
 async function handleSave() {
   if (!form.value.name.trim()) {
-    message.warning('请输入 Agent 名称');
+    message.warning(t('agentEdit.nameRequired'));
     return;
   }
 
@@ -373,6 +389,7 @@ async function handleSave() {
       systemTools: form.value.systemTools,
       knowledgeIds: form.value.knowledgeIds,
     },
+    skillTree: form.value.skillTree.length > 0 ? form.value.skillTree : undefined,
   };
 
   if (form.value.historyMessageLoadLimit != null || form.value.maxToolRounds != null) {
@@ -407,10 +424,10 @@ async function handleSave() {
       result = await createAgentDefinition(request);
     }
     if (result) {
-      message.success(isEdit.value ? '保存成功' : '创建成功');
+      message.success(isEdit.value ? t('agentEdit.saveSuccess') : t('agentEdit.createSuccess'));
       router.push({ name: 'AgentList' });
     } else {
-      message.error(isEdit.value ? '保存失败' : '创建失败');
+      message.error(isEdit.value ? t('agentEdit.saveFailed') : t('agentEdit.createFailed'));
     }
   } finally {
     saving.value = false;

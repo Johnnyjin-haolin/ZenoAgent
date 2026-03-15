@@ -128,6 +128,307 @@ body {
   }
 }
 
+/* ─── Ant Design Global Dark Overrides ────────────────────────────────────── */
+
+/* Tech Modal 深色主题（全局生效，供所有页面的 a-modal class="tech-modal" 使用） */
+.tech-modal {
+  .ant-modal-content {
+    background-color: rgba(10, 15, 30, 0.97) !important;
+    backdrop-filter: blur(20px) !important;
+    border: 1px solid rgba(59, 130, 246, 0.2) !important;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6) !important;
+    border-radius: 10px !important;
+  }
+
+  .ant-modal-header {
+    background: transparent !important;
+    border-bottom: 1px solid rgba(59, 130, 246, 0.12) !important;
+    padding: 16px 24px !important;
+    border-radius: 10px 10px 0 0 !important;
+
+    .ant-modal-title {
+      color: #e2e8f0 !important;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+    }
+  }
+
+  .ant-modal-close {
+    color: rgba(148, 163, 184, 0.7) !important;
+    &:hover {
+      color: #e2e8f0 !important;
+      background: rgba(59, 130, 246, 0.1) !important;
+    }
+  }
+
+  .ant-modal-body {
+    background: transparent !important;
+    padding: 20px 24px !important;
+    color: #e2e8f0;
+  }
+
+  .ant-modal-footer {
+    background: transparent !important;
+    border-top: 1px solid rgba(59, 130, 246, 0.12) !important;
+    padding: 12px 24px !important;
+
+    .ant-btn-default {
+      background: transparent !important;
+      border-color: rgba(148, 163, 184, 0.3) !important;
+      color: #94a3b8 !important;
+      &:hover {
+        border-color: #60a5fa !important;
+        color: #60a5fa !important;
+      }
+    }
+
+    .ant-btn-primary {
+      background: rgba(59, 130, 246, 0.2) !important;
+      border-color: rgba(59, 130, 246, 0.5) !important;
+      color: #60a5fa !important;
+      &:hover {
+        background: rgba(59, 130, 246, 0.35) !important;
+        border-color: #60a5fa !important;
+        color: #fff !important;
+      }
+    }
+  }
+
+  /* Modal 内输入框统一深色风格 */
+  .ant-input,
+  .ant-input-affix-wrapper {
+    background-color: rgba(15, 23, 42, 0.7) !important;
+    border-color: rgba(59, 130, 246, 0.2) !important;
+    color: #e2e8f0 !important;
+    border-radius: 6px !important;
+
+    &::placeholder {
+      color: #334155 !important;
+    }
+    &:hover,
+    &:focus,
+    &.ant-input-affix-wrapper-focused {
+      border-color: rgba(59, 130, 246, 0.5) !important;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1) !important;
+    }
+    input, textarea {
+      background: transparent !important;
+      color: #e2e8f0 !important;
+      &::placeholder { color: #334155 !important; }
+    }
+  }
+
+  textarea.ant-input {
+    background-color: rgba(15, 23, 42, 0.7) !important;
+    border-color: rgba(59, 130, 246, 0.2) !important;
+    color: #e2e8f0 !important;
+    &::placeholder { color: #334155 !important; }
+    &:hover, &:focus {
+      border-color: rgba(59, 130, 246, 0.5) !important;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1) !important;
+    }
+  }
+
+  .ant-input-textarea-show-count::after {
+    color: #475569 !important;
+  }
+
+  .ant-select-selector {
+    background-color: rgba(15, 23, 42, 0.7) !important;
+    border-color: rgba(59, 130, 246, 0.2) !important;
+    border-radius: 6px !important;
+    color: #e2e8f0 !important;
+    &:hover { border-color: rgba(59, 130, 246, 0.5) !important; }
+  }
+  .ant-select-selection-placeholder { color: #334155 !important; }
+  .ant-select-selection-item {
+    background: rgba(59, 130, 246, 0.15) !important;
+    border-color: rgba(59, 130, 246, 0.3) !important;
+    color: #60a5fa !important;
+    border-radius: 4px !important;
+  }
+  .ant-select-selection-item-remove {
+    color: #60a5fa !important;
+    opacity: 0.7;
+    &:hover { opacity: 1; }
+  }
+  .ant-select-arrow { color: #475569 !important; }
+
+  /* Form label 颜色 */
+  .ant-form-item-label > label {
+    color: #94a3b8 !important;
+  }
+}
+
+/* Popconfirm & Tooltip 弹出层 */
+.ant-popover {
+  .ant-popover-inner {
+    background-color: rgba(10, 15, 30, 0.97) !important;
+    border: 1px solid rgba(59, 130, 246, 0.2) !important;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5) !important;
+    border-radius: 8px !important;
+  }
+  /* Tooltip 普通标题 */
+  .ant-popover-title {
+    color: #e2e8f0 !important;
+    border-bottom-color: rgba(59, 130, 246, 0.15) !important;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+  }
+  .ant-popover-inner-content {
+    color: #94a3b8 !important;
+    font-size: 13px;
+  }
+  /* Popconfirm v5 专用 */
+  .ant-popconfirm-title {
+    color: #e2e8f0 !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    font-family: 'Inter', sans-serif;
+  }
+  .ant-popconfirm-description {
+    color: #94a3b8 !important;
+    font-size: 13px !important;
+  }
+  .ant-popconfirm-message {
+    color: #e2e8f0 !important;
+  }
+  .ant-popconfirm-message-text {
+    color: #e2e8f0 !important;
+    font-size: 13px !important;
+  }
+  /* Popconfirm 图标 */
+  .ant-popconfirm-message-icon {
+    .anticon {
+      color: #f59e0b !important;
+    }
+  }
+  .ant-popover-arrow::before {
+    background-color: rgba(10, 15, 30, 0.97) !important;
+  }
+  /* Popconfirm buttons */
+  .ant-popconfirm-buttons {
+    .ant-btn-default {
+      background: transparent !important;
+      border-color: rgba(148, 163, 184, 0.3) !important;
+      color: #94a3b8 !important;
+      &:hover {
+        border-color: #60a5fa !important;
+        color: #60a5fa !important;
+      }
+    }
+    .ant-btn-primary {
+      background: rgba(59, 130, 246, 0.2) !important;
+      border-color: rgba(59, 130, 246, 0.5) !important;
+      color: #60a5fa !important;
+      &:hover {
+        background: rgba(59, 130, 246, 0.35) !important;
+        color: #fff !important;
+      }
+    }
+    .ant-btn-dangerous {
+      background: rgba(239, 68, 68, 0.12) !important;
+      border-color: rgba(239, 68, 68, 0.4) !important;
+      color: #f87171 !important;
+      &:hover {
+        background: rgba(239, 68, 68, 0.25) !important;
+        border-color: #f87171 !important;
+        color: #fff !important;
+      }
+    }
+  }
+}
+
+/* Select / Tags 下拉菜单 */
+.ant-select-dropdown {
+  background-color: #0c1220 !important;
+  border: 1px solid rgba(59, 130, 246, 0.2) !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5) !important;
+  border-radius: 8px !important;
+
+  .ant-select-item {
+    color: #cbd5e1 !important;
+    font-size: 13px;
+    border-radius: 4px;
+
+    &-option-active,
+    &.ant-select-item-option-active {
+      background-color: rgba(59, 130, 246, 0.1) !important;
+    }
+    &-option-selected,
+    &.ant-select-item-option-selected {
+      background-color: rgba(59, 130, 246, 0.18) !important;
+      color: #60a5fa !important;
+      font-weight: 500;
+    }
+  }
+  .ant-select-item-empty {
+    color: #475569 !important;
+  }
+}
+
+/* SkillTreeEditor / Skill 池添加 Skill 下拉 */
+.skill-pool-dropdown {
+  .ant-dropdown-menu {
+    background-color: #0c1220 !important;
+    border: 1px solid rgba(59, 130, 246, 0.2) !important;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5) !important;
+    border-radius: 8px !important;
+    padding: 4px !important;
+  }
+  .ant-dropdown-menu-item,
+  .ant-dropdown-menu-submenu-title {
+    color: #cbd5e1 !important;
+    font-size: 13px;
+    border-radius: 4px;
+    &:hover {
+      background-color: rgba(59, 130, 246, 0.1) !important;
+      color: #e2e8f0 !important;
+    }
+  }
+  .ant-dropdown-menu-item-divider {
+    background-color: rgba(59, 130, 246, 0.12) !important;
+  }
+}
+
+/* Dropdown 菜单（SkillTreeNodeItem 的 + 按钮下拉） */
+.ant-dropdown-menu,
+.ant-dropdown .ant-dropdown-menu {
+  background-color: #0c1220 !important;
+  border: 1px solid rgba(59, 130, 246, 0.2) !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5) !important;
+  border-radius: 8px !important;
+  padding: 4px !important;
+
+  .ant-dropdown-menu-item,
+  .ant-dropdown-menu-submenu-title {
+    color: #cbd5e1 !important;
+    font-size: 13px;
+    border-radius: 4px;
+
+    &:hover {
+      background-color: rgba(59, 130, 246, 0.1) !important;
+      color: #e2e8f0 !important;
+    }
+  }
+  .ant-dropdown-menu-item-danger {
+    color: #f87171 !important;
+    &:hover {
+      background-color: rgba(239, 68, 68, 0.1) !important;
+    }
+  }
+  .ant-dropdown-menu-item-disabled {
+    color: #334155 !important;
+  }
+  .ant-dropdown-menu-submenu-popup {
+    background-color: #0c1220 !important;
+    .ant-dropdown-menu {
+      background-color: #0c1220 !important;
+    }
+  }
+}
+
 /* Ant Design Message Component Override for Dark Tech Theme */
 .ant-message-notice-content {
   background: rgba(15, 23, 42, 0.9) !important;

@@ -1,7 +1,9 @@
 package com.aiagent.api.dto;
 
+import com.aiagent.domain.skill.SkillTreeNode;
 import lombok.Data;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -18,6 +20,8 @@ public class AgentDefinitionVO {
     private ToolsConfigVO tools;
     private ContextConfigVO contextConfig;
     private RagConfigVO ragConfig;
+    /** Agent 私有 Skill 目录树 */
+    private List<SkillTreeNode> skillTree = new ArrayList<>();
     private boolean builtin;
     private String status;
     private Date createTime;

@@ -51,6 +51,15 @@
             <span>{{ t('menu.agentManage') }}</span>
           </router-link>
         </a-menu-item>
+
+        <a-menu-item key="skills">
+          <template #icon>
+            <thunderbolt-outlined />
+          </template>
+          <router-link to="/skills">
+            <span>Skill 管理</span>
+          </router-link>
+        </a-menu-item>
       </a-menu>
       
       <div class="sidebar-footer" @click="toggleCollapse">
@@ -106,6 +115,7 @@ import {
   MessageOutlined,
   BookOutlined,
   RobotOutlined,
+  ThunderboltOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   TranslationOutlined,
@@ -131,6 +141,8 @@ const goHome = () => {
     (path) => {
       if (path.startsWith('/agents')) {
         selectedKeys.value = ['agents'];
+      } else if (path.startsWith('/skills')) {
+        selectedKeys.value = ['skills'];
       } else if (path.startsWith('/agent')) {
         selectedKeys.value = ['agent'];
       } else if (path.startsWith('/knowledge-bases')) {

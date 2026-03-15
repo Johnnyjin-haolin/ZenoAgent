@@ -40,6 +40,12 @@ public class AgentEntity {
      */
     private String ragConfig;
 
+    /**
+     * Agent 私有 Skill 目录树 JSON 字符串（可为 null）
+     * 结构：SkillTreeNode[] 数组
+     */
+    private String skillTree;
+
     /** 是否内置（1=内置示例, 0=用户创建） */
     private Integer isBuiltin;
 

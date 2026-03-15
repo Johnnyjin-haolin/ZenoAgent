@@ -49,6 +49,22 @@ export const DEFAULT_RAG_CONFIG: RAGConfig = {
 export type AgentRagConfig = RAGConfig;
 
 /**
+ * Agent Skill 目录树节点
+ */
+export interface SkillTreeNode {
+  /** 节点 ID（在 Agent 树内唯一） */
+  id: string;
+  /** 节点显示名称 */
+  label: string;
+  /** 是否启用 */
+  enabled: boolean;
+  /** 引用的 Skill ID（叶节点专用，目录节点为 undefined） */
+  skillId?: string;
+  /** 子节点列表 */
+  children: SkillTreeNode[];
+}
+
+/**
  * Agent 工具选择配置（对应后端 AgentDefinition.ToolsConfig）
  */
 export interface AgentToolsConfig {
@@ -78,6 +94,8 @@ export interface AgentDefinition {
   contextConfig?: AgentContextConfig;
   /** RAG 检索配置 */
   ragConfig?: AgentRagConfig;
+  /** Agent 私有 Skill 目录树 */
+  skillTree?: SkillTreeNode[];
   /** 是否内置 */
   builtin: boolean;
   /** 状态 */
@@ -98,6 +116,8 @@ export interface AgentDefinitionRequest {
   tools?: AgentToolsConfig;
   contextConfig?: AgentContextConfig;
   ragConfig?: AgentRagConfig;
+  /** Agent 私有 Skill 目录树 */
+  skillTree?: SkillTreeNode[];
 }
 
 /**

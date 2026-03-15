@@ -65,6 +65,14 @@ const routes: RouteRecordRaw[] = [
           title: '编辑 Agent',
         },
       },
+      {
+        path: 'skills',
+        name: 'SkillList',
+        component: () => import('@/views/skills/SkillList.vue'),
+        meta: {
+          title: 'Skill 管理',
+        },
+      },
     ],
   },
 ];

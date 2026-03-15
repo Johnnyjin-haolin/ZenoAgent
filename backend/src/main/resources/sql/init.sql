@@ -73,6 +73,25 @@ CREATE TABLE IF NOT EXISTS `knowledge_base` (
   INDEX `idx_update_time` (`update_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识库表';
 
+-- Skill 定义表
+CREATE TABLE IF NOT EXISTS `agent_skill` (
+  `id`          VARCHAR(64)   PRIMARY KEY  COMMENT 'Skill ID（UUID）',
+  `name`        VARCHAR(128)  NOT NULL     COMMENT 'Skill 名称',
+  `summary`     VARCHAR(512)  NOT NULL     COMMENT '摘要（注入 System Prompt 的一行描述）',
+  `content`     LONGTEXT      NOT NULL     COMMENT 'Skill 全文（LLM 按需加载）',
+  `tags`        JSON          DEFAULT NULL COMMENT '标签列表，如 ["代码","SQL"]',
+  `status`      VARCHAR(16)   NOT NULL DEFAULT 'active'  COMMENT '状态：active / deleted',
+  `create_time` DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  INDEX `idx_status`      (`status`),
+  INDEX `idx_update_time` (`update_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Skill 定义表';
+
+-- Agent 表新增 skill_tree 列（已存在则忽略）
+ALTER TABLE `agent`
+  ADD COLUMN IF NOT EXISTS `skill_tree` JSON DEFAULT NULL
+  COMMENT 'Agent 私有 Skill 目录树 JSON，结构为 SkillTreeNode[]';
+
 -- 文档表
 CREATE TABLE IF NOT EXISTS `document` (
   `id` VARCHAR(64) PRIMARY KEY COMMENT '文档ID（UUID）',

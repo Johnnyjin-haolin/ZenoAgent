@@ -8,9 +8,11 @@ import com.aiagent.api.dto.PageResult;
 import com.aiagent.common.response.Result;
 import com.aiagent.domain.agent.AgentDefinitionLoader;
 import com.aiagent.domain.model.entity.AgentEntity;
+import com.aiagent.domain.skill.SkillTreeNode;
 import com.aiagent.domain.tool.SystemTool;
 import com.aiagent.infrastructure.external.mcp.McpGroupManager;
 import com.aiagent.infrastructure.mapper.AgentMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -117,6 +119,7 @@ public class AgentDefinitionController {
         entity.setToolsConfig(serializeTools(request.getTools()));
         entity.setContextConfig(serializeContextConfig(request.getContextConfig()));
         entity.setRagConfig(serializeRagConfig(request.getRagConfig()));
+        entity.setSkillTree(serializeSkillTree(request.getSkillTree()));
 
         agentMapper.insert(entity);
         log.info("创建 Agent 定义: id={}, name={}", entity.getId(), entity.getName());
@@ -149,6 +152,7 @@ public class AgentDefinitionController {
         update.setToolsConfig(serializeTools(request.getTools()));
         update.setContextConfig(serializeContextConfig(request.getContextConfig()));
         update.setRagConfig(serializeRagConfig(request.getRagConfig()));
+        update.setSkillTree(serializeSkillTree(request.getSkillTree()));
 
         agentMapper.update(update);
         log.info("更新 Agent 定义: id={}", id);
@@ -249,6 +253,16 @@ public class AgentDefinitionController {
             }
         }
 
+        if (entity.getSkillTree() != null) {
+            try {
+                List<SkillTreeNode> skillTree = objectMapper.readValue(
+                        entity.getSkillTree(), new TypeReference<List<SkillTreeNode>>() {});
+                vo.setSkillTree(skillTree);
+            } catch (Exception e) {
+                log.warn("反序列化 skillTree 失败: id={}", entity.getId());
+            }
+        }
+
         return vo;
     }
 
@@ -288,6 +302,18 @@ public class AgentDefinitionController {
             return objectMapper.writeValueAsString(cfg);
         } catch (Exception e) {
             log.warn("序列化 ragConfig 失败", e);
+            return null;
+        }
+    }
+
+    private String serializeSkillTree(List<SkillTreeNode> skillTree) {
+        if (skillTree == null || skillTree.isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(skillTree);
+        } catch (Exception e) {
+            log.warn("序列化 skillTree 失败", e);
             return null;
         }
     }

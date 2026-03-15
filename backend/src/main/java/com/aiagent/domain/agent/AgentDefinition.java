@@ -1,6 +1,7 @@
 package com.aiagent.domain.agent;
 
 import com.aiagent.api.dto.RAGConfig;
+import com.aiagent.domain.skill.SkillTreeNode;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -9,11 +10,12 @@ import java.util.List;
 /**
  * Agent 定义领域对象
  * <p>
- * 配置分三块：
+ * 配置分四块：
  * <ul>
  *   <li>{@link ToolsConfig}   - 工具选择（MCP 分组、系统工具、知识库）</li>
  *   <li>{@link ContextConfig} - 上下文行为（历史消息加载数、最大工具轮数）</li>
  *   <li>{@link RAGConfig}     - RAG 检索参数，直接复用 {@code api.dto.RAGConfig}</li>
+ *   <li>skillTree             - Agent 私有 Skill 目录树</li>
  * </ul>
  */
 @Data
@@ -32,6 +34,9 @@ public class AgentDefinition {
 
     /** RAG 检索配置（可选，不配置时使用引擎默认值） */
     private RAGConfig ragConfig;
+
+    /** Agent 私有 Skill 目录树（可选，节点引用全局 AgentSkill） */
+    private List<SkillTreeNode> skillTree = new ArrayList<>();
 
     // ─────────────────────────────────────────────────────────────────────────
 
