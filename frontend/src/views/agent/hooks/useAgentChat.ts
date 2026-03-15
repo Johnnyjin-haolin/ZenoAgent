@@ -6,6 +6,9 @@
 import { ref, Ref, computed, reactive, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { message } from 'ant-design-vue';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import logger from '@/utils/logger';
 import {
   executeAgent,
@@ -80,7 +83,9 @@ export interface PendingSecretRequest {
 }
 
 /**
- * 调用 PERSONAL MCP endpoint（浏览器端直接 fetch）
+ * 调用 PERSONAL MCP endpoint（通过 SDK，遵循标准 MCP 协议）
+ *
+ * 流程：connect（initialize/initialized 握手）→ tools/call → close
  */
 async function callPersonalMcpEndpoint(
   server: McpServerInfo,
@@ -88,40 +93,40 @@ async function callPersonalMcpEndpoint(
   params: Record<string, unknown>,
   extraHeaders: Record<string, string> = {}
 ): Promise<string> {
-  const headers: Record<string, string> = {
+  const authHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
+    Accept: 'application/json, text/event-stream',
     ...buildPersonalMcpHeaders(server.id, server.authHeaders),
     ...extraHeaders,
   };
 
-  const body = JSON.stringify({
-    method: 'tools/call',
-    params: {
-      name: toolName,
-      arguments: params,
-    },
-  });
+  const url = new URL(server.endpointUrl);
+  const client = new Client({ name: 'zeno-agent', version: '1.0.0' });
 
-  const resp = await fetch(server.endpointUrl, {
-    method: 'POST',
-    headers,
-    body,
-  });
-
-  if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+  let transport: StreamableHTTPClientTransport | SSEClientTransport;
+  if (server.connectionType === 'sse') {
+    transport = new SSEClientTransport(url, { requestInit: { headers: authHeaders } });
+  } else {
+    transport = new StreamableHTTPClientTransport(url, { requestInit: { headers: authHeaders } });
   }
 
-  const data = await resp.json();
-  // MCP 标准结果在 result.content[0].text 或 result.content
-  if (data?.result?.content) {
-    const content = data.result.content;
+  try {
+    await client.connect(transport);
+    const result = await client.callTool({ name: toolName, arguments: params });
+
+    const content = result?.content;
     if (Array.isArray(content)) {
-      return content.map((c: any) => c.text || JSON.stringify(c)).join('\n');
+      return content
+        .map((c) => {
+          if (typeof c === 'object' && c !== null && 'text' in c) return String(c.text);
+          return JSON.stringify(c);
+        })
+        .join('\n');
     }
-    return String(content);
+    return JSON.stringify(result);
+  } finally {
+    client.close().catch(() => {});
   }
-  return JSON.stringify(data);
 }
 
 /**

@@ -115,8 +115,7 @@ import logger from '@/utils/logger';
 import { useAgentChat } from './hooks/useAgentChat';
 import { useBrandConfig } from './hooks/useBrandConfig';
 import { useConversationList } from './hooks/useConversationList';
-import { getAvailableModels, getKnowledgeList, updateConversationAgent, getMcpServers } from './agent.api';
-import { getMcpTools } from './agent.api.adapted';
+import { getAvailableModels, getKnowledgeList, updateConversationAgent, getMcpServers, getMcpServerTools } from './agent.api';
 import type { McpServerInfo } from './agent.types';
 import ChatConfigDrawer from './components/ChatConfigDrawer.vue';
 import ChatHeader from './components/ChatHeader.vue';
@@ -310,10 +309,10 @@ const applyCachedConfig = (cache: AgentConfigCache) => {
 };
 
 const validateConfigWithLatestLists = async () => {
-  const [models, knowledgeList, tools] = await Promise.all([
+  const [models, knowledgeList, servers] = await Promise.all([
     getAvailableModels(ModelType.CHAT).catch(() => []),
     getKnowledgeList().catch(() => []),
-    getMcpTools().catch(() => []),
+    getMcpServers().catch(() => []),
   ]);
 
   if (models.length > 0) {
@@ -329,9 +328,16 @@ const validateConfigWithLatestLists = async () => {
     selectedKnowledgeIds.value = selectedKnowledgeIds.value.filter((id) => knowledgeIdSet.has(id));
   }
 
-  if (tools.length > 0) {
-    const toolNameSet = new Set(tools.map((tool) => tool.name));
-    selectedTools.value = selectedTools.value.filter((name) => toolNameSet.has(name));
+  if (servers.length > 0 && selectedTools.value.length > 0) {
+    const toolResults = await Promise.allSettled(
+      servers.filter((s) => s.scope === 0).map((s) => getMcpServerTools(s.id).catch(() => []))
+    );
+    const allToolNames = new Set(
+      toolResults.flatMap((r) => (r.status === 'fulfilled' ? r.value.map((t) => t.name) : []))
+    );
+    if (allToolNames.size > 0) {
+      selectedTools.value = selectedTools.value.filter((name) => allToolNames.has(name));
+    }
   }
 };
 

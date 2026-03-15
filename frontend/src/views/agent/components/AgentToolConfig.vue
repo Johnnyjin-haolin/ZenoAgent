@@ -98,18 +98,21 @@
             <div v-else class="server-items">
               <div
                 v-for="server in filteredServers"
-                :key="server.serverId || server.id"
+                :key="server.id"
                 class="server-item"
-                :class="{ active: activeServerId === (server.serverId || server.id) }"
-                @click="selectServer(server.serverId || server.id)"
+                :class="{ active: activeServerId === server.id }"
+                @click="selectServer(server.id)"
               >
                 <div class="server-info">
                   <Icon :icon="getServerIcon(server)" class="server-icon" />
                   <div class="server-details">
-                    <div class="server-name">{{ server.name || server.id }}</div>
+                    <div class="server-name">
+                      {{ server.name }}
+                      <a-tag v-if="server.scope === 1" color="blue" style="margin-left:4px;font-size:10px;padding:0 4px;">PERSONAL</a-tag>
+                    </div>
                     <div class="server-meta">
                       <span class="status-dot" :class="{ active: server.enabled }"></span>
-                      <span class="tool-count">{{ server.toolCount }} tools</span>
+                      <span class="tool-count">{{ server.toolCount ?? 0 }} tools</span>
                     </div>
                   </div>
                 </div>
@@ -251,13 +254,13 @@
           <a-collapse v-model:activeKey="activeServerKeys" :bordered="false" class="tech-collapse">
             <a-collapse-panel
               v-for="server in serverGroups"
-              :key="server.serverId || server.id"
+              :key="server.id"
               :header="getServerHeader(server)"
             >
               <div class="server-info">
                 <div class="info-item">
                   <span class="info-label">ID:</span>
-                  <span class="info-value">{{ server.serverId || server.id }}</span>
+                  <span class="info-value">{{ server.id }}</span>
                 </div>
                 <div class="info-item" v-if="server.connectionType">
                   <span class="info-label">{{ t('common.connectionType') }}:</span>
@@ -276,14 +279,14 @@
               </div>
               <div class="tools-list">
                 <div class="tools-header">
-                  <span>{{ t('agent.toolConfig.toolListTitle') }} ({{ getServerTools(server.serverId || server.id).length }})</span>
+                  <span>{{ t('agent.toolConfig.toolListTitle') }} ({{ getServerTools(server.id).length }})</span>
                 </div>
-                <div v-if="getServerTools(server.serverId || server.id).length === 0" class="no-tools">
+                <div v-if="getServerTools(server.id).length === 0" class="no-tools">
                   {{ t('agent.toolConfig.noToolsInServer') }}
                 </div>
                 <div v-else class="tools-items">
                   <div
-                    v-for="tool in getServerTools(server.serverId || server.id)"
+                    v-for="tool in getServerTools(server.id)"
                     :key="tool.name"
                     class="tool-item"
                   >
@@ -328,9 +331,10 @@
 import { ref, watch, onMounted, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Icon } from '@/components/Icon';
-import { getMcpTools, getMcpGroups } from '../agent.api.adapted';
+import { getMcpServers, getMcpServerTools, prefetchPersonalMcpTools } from '../agent.api';
+import { getMcpSecret } from '@/utils/mcpSecretStore';
 import { message } from 'ant-design-vue';
-import type { McpGroupInfo, McpToolInfo } from '../agent.types';
+import type { McpServerInfo, McpToolInfo } from '../agent.types';
 
 const { t } = useI18n();
 
@@ -354,8 +358,8 @@ const selectedTools = ref<string[]>(props.modelValue || []);
 const loading = ref(false);
 const maxVisibleTags = 3;
 
-// 数据相关
-const serverGroups = ref<McpGroupInfo[]>([]);
+// 数据相关（用 McpServerInfo 直接作为服务器列表项）
+const serverGroups = ref<McpServerInfo[]>([]);
 const allTools = ref<McpToolInfo[]>([]);
 
 // 工具选择Modal相关
@@ -373,27 +377,54 @@ const activeServerKeys = ref<string[]>([]);
 const expandedToolDescs = ref<Set<string>>(new Set());
 const expandedServerToolDescs = ref<Set<string>>(new Set());
 
-// 描述文本最大显示行数（超过此行数显示展开按钮）
-const MAX_DESC_LINES = 2;
+// 从 McpServerInfo 加载单个服务器的工具列表
+const loadServerTools = async (server: McpServerInfo): Promise<McpToolInfo[]> => {
+  if (server.scope === 1) {
+    // PERSONAL：浏览器端直连 MCP，补充 localStorage 里的认证 Header
+    const localHeaders: Record<string, string> = {};
+    for (const key of Object.keys(server.authHeaders || {})) {
+      const val = getMcpSecret(server.id, key);
+      if (val) localHeaders[key] = val;
+    }
+    const schemas = await prefetchPersonalMcpTools(server, localHeaders);
+    return schemas.map((s) => ({
+      name: s.name,
+      description: s.description || '',
+      enabled: true,
+      serverId: server.id,
+      personal: true,
+      connectionType: server.connectionType,
+    }));
+  }
+  // GLOBAL：后端拉取
+  const tools = await getMcpServerTools(server.id);
+  return tools.map((t) => ({ ...t, serverId: server.id }));
+};
 
 // 加载数据
 const loadData = async () => {
   loading.value = true;
   try {
-    const [groups, tools] = await Promise.all([
-      getMcpGroups(),
-      getMcpTools()
-    ]);
-    serverGroups.value = groups;
-    allTools.value = tools;
-    
+    const servers = await getMcpServers();
+    // GLOBAL 在前，PERSONAL 在后
+    serverGroups.value = [...servers].sort((a, b) => a.scope - b.scope);
+
+    // 并行加载每个服务器的工具列表
+    const toolResults = await Promise.allSettled(
+      serverGroups.value.map((s) => loadServerTools(s))
+    );
+    allTools.value = toolResults.flatMap((r) =>
+      r.status === 'fulfilled' ? r.value : []
+    );
+    // 回填 toolCount
+    serverGroups.value = serverGroups.value.map((s) => ({
+      ...s,
+      toolCount: allTools.value.filter((t) => t.serverId === s.id).length,
+    }));
+
     // 默认选中第一个服务器
-    if (groups.length > 0 && !activeServerId.value) {
-      activeServerId.value = groups[0].serverId || groups[0].id;
-    }
-    
-    if (groups.length === 0) {
-      // message.warning(t('agent.toolConfig.noServer')); // Optional: suppress warning on load
+    if (serverGroups.value.length > 0 && !activeServerId.value) {
+      activeServerId.value = serverGroups.value[0].id;
     }
   } catch (error) {
     console.error('加载数据失败:', error);
@@ -492,12 +523,13 @@ const removeTool = (toolName: string) => {
 };
 
 // 获取服务器图标
-const getServerIcon = (server: McpGroupInfo): string => {
-  const serverId = (server.serverId || server.id).toLowerCase();
-  if (serverId.includes('device')) return 'ant-design:mobile-outlined';
-  if (serverId.includes('analytics')) return 'ant-design:bar-chart-outlined';
-  if (serverId.includes('file')) return 'ant-design:file-outlined';
-  if (serverId.includes('aliyun')) return 'ant-design:cloud-outlined';
+const getServerIcon = (server: McpServerInfo): string => {
+  if (server.scope === 1) return 'ant-design:user-outlined';
+  const id = server.id.toLowerCase();
+  if (id.includes('device')) return 'ant-design:mobile-outlined';
+  if (id.includes('analytics')) return 'ant-design:bar-chart-outlined';
+  if (id.includes('file')) return 'ant-design:file-outlined';
+  if (id.includes('aliyun')) return 'ant-design:cloud-outlined';
   return 'ant-design:api-outlined';
 };
 
@@ -507,7 +539,7 @@ const handleToolModalOpen = () => {
   tempSelectedTools.value = [...selectedTools.value];
   // 如果还没有选中服务器，默认选中第一个
   if (!activeServerId.value && serverGroups.value.length > 0) {
-    activeServerId.value = serverGroups.value[0].serverId || serverGroups.value[0].id;
+    activeServerId.value = serverGroups.value[0].id;
   }
 };
 
@@ -532,8 +564,9 @@ const handleChange = (value: string[]) => {
 };
 
 // 获取服务器头部信息
-const getServerHeader = (server: McpGroupInfo) => {
-  return `${server.name || server.id} (${server.toolCount} 个工具)`;
+const getServerHeader = (server: McpServerInfo) => {
+  const scopeLabel = server.scope === 1 ? ' [个人]' : ' [云端]';
+  return `${server.name}${scopeLabel} (${server.toolCount ?? 0} 个工具)`;
 };
 
 // 获取指定服务器的工具列表
@@ -547,25 +580,15 @@ const handleServerModalOpen = () => {
   loadServerGroups();
 };
 
-// 加载服务器列表（用于查看对话框）
+// 加载服务器列表（用于查看对话框，复用 loadData）
 const loadServerGroups = async () => {
   serverLoading.value = true;
   try {
-    const [groups, tools] = await Promise.all([
-      getMcpGroups(),
-      getMcpTools()
-    ]);
-    serverGroups.value = groups;
-    allTools.value = tools;
+    await loadData();
     // 默认展开第一个服务器
-    if (groups.length > 0 && activeServerKeys.value.length === 0) {
-      activeServerKeys.value = [groups[0].serverId || groups[0].id];
+    if (serverGroups.value.length > 0 && activeServerKeys.value.length === 0) {
+      activeServerKeys.value = [serverGroups.value[0].id];
     }
-  } catch (error) {
-    console.error('加载服务器列表失败:', error);
-    message.error(t('agent.toolConfig.loadingError'));
-    serverGroups.value = [];
-    allTools.value = [];
   } finally {
     serverLoading.value = false;
   }

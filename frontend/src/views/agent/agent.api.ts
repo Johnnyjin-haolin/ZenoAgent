@@ -3,6 +3,9 @@
  * @date 2025-11-30
  */
 
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { http } from '@/utils/http';
 import logger from '@/utils/logger';
 import i18n from '@/locales';
@@ -889,14 +892,45 @@ export async function getAvailableSystemToolsForAgent(): Promise<SystemToolInfo[
 }
 
 /**
+ * 创建 MCP Client（通过 SDK，自动处理 initialize 握手）
+ *
+ * 支持 streamable-http 和 sse 两种连接类型，失败时抛出异常。
+ * 调用方负责在使用完毕后调用 client.close()。
+ */
+async function createMcpClient(
+  server: McpServerInfo,
+  authHeaders: Record<string, string>
+): Promise<Client> {
+  const requestInit: RequestInit = {
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      ...authHeaders,
+    },
+  };
+
+  const url = new URL(server.endpointUrl);
+  const client = new Client({ name: 'zeno-agent', version: '1.0.0' });
+
+  let transport: StreamableHTTPClientTransport | SSEClientTransport;
+
+  if (server.connectionType === 'sse') {
+    transport = new SSEClientTransport(url, { requestInit });
+  } else {
+    transport = new StreamableHTTPClientTransport(url, { requestInit });
+  }
+
+  await client.connect(transport);
+  return client;
+}
+
+/**
  * 从 PERSONAL MCP 服务器直接 prefetch 工具列表（浏览器端调用，不经过后端）
  *
- * 流程：
- * 1. 构建携带认证 Header 的 fetch 请求
- * 2. 调用 MCP SSE endpoint，发送 tools/list JSON-RPC 请求
- * 3. 解析响应，返回 PersonalMcpToolSchema[]
+ * 使用 @modelcontextprotocol/sdk 完成标准 MCP 握手（initialize/initialized）
+ * 后调用 tools/list，符合 MCP Streamable HTTP 协议规范。
  *
- * @param server       MCP 服务器信息（包含 endpointUrl、authHeaders）
+ * @param server       MCP 服务器信息（包含 endpointUrl、connectionType、authHeaders）
  * @param authHeaders  运行时补充的认证 Header（来自 localStorage）
  * @returns 工具 schema 列表，失败返回空数组
  */
@@ -904,115 +938,25 @@ export async function prefetchPersonalMcpTools(
   server: McpServerInfo,
   authHeaders: Record<string, string>
 ): Promise<PersonalMcpToolSchema[]> {
+  let client: Client | null = null;
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10_000);
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
-      ...authHeaders,
-    };
-
-    const body = JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'tools/list',
-      params: {},
-    });
-
-    const response = await fetch(server.endpointUrl, {
-      method: 'POST',
-      headers,
-      body,
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      logger.warn(`[MCP prefetch] HTTP ${response.status} from ${server.endpointUrl}`);
-      return [];
-    }
-
-    const contentType = response.headers.get('content-type') || '';
-
-    if (contentType.includes('text/event-stream')) {
-      return await parseToolsFromSSE(response, server.id);
-    }
-
-    const json = await response.json();
-    return parseToolsFromJsonRpc(json, server.id);
+    client = await createMcpClient(server, authHeaders);
+    const result = await client.listTools();
+    const toolList = result?.tools ?? [];
+    return toolList
+      .filter((t) => t.name)
+      .map((t) => ({
+        serverId: server.id,
+        toolName: t.name,
+        description: t.description ?? '',
+        inputSchema: (t.inputSchema as Record<string, unknown>) ?? undefined,
+      }));
   } catch (error) {
     logger.warn(`[MCP prefetch] 预取工具列表失败: serverId=${server.id}, error=`, error);
     return [];
-  }
-}
-
-/**
- * 从 SSE 响应中解析 tools/list 结果
- */
-async function parseToolsFromSSE(
-  response: Response,
-  serverId: string
-): Promise<PersonalMcpToolSchema[]> {
-  const reader = response.body?.getReader();
-  if (!reader) return [];
-
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (!line.startsWith('data:')) continue;
-        const dataStr = line.slice(5).trim();
-        if (!dataStr || dataStr === '[DONE]') continue;
-        try {
-          const json = JSON.parse(dataStr);
-          const tools = parseToolsFromJsonRpc(json, serverId);
-          if (tools.length > 0) {
-            reader.cancel();
-            return tools;
-          }
-        } catch {
-          // ignore parse errors
-        }
-      }
-    }
   } finally {
-    reader.cancel().catch(() => {});
+    client?.close().catch(() => {});
   }
-  return [];
-}
-
-/**
- * 从 JSON-RPC 响应中解析 tools/list 工具列表
- */
-function parseToolsFromJsonRpc(json: unknown, serverId: string): PersonalMcpToolSchema[] {
-  if (!json || typeof json !== 'object') return [];
-  const rpc = json as Record<string, unknown>;
-
-  const result = rpc['result'] as Record<string, unknown> | undefined;
-  if (!result) return [];
-
-  const toolList = (result['tools'] as unknown[]) || [];
-
-  return toolList
-    .filter((t): t is Record<string, unknown> => typeof t === 'object' && t !== null)
-    .map((t) => ({
-      serverId,
-      toolName: (t['name'] as string) || '',
-      description: (t['description'] as string) || '',
-      inputSchema: (t['inputSchema'] as Record<string, unknown>) || undefined,
-    }))
-    .filter((s) => s.toolName.length > 0);
 }
 
 /**
@@ -1026,10 +970,7 @@ export async function testPersonalMcpServer(
 ): Promise<string> {
   try {
     const tools = await prefetchPersonalMcpTools(server, authHeaders);
-    if (tools.length >= 0) {
-      return `OK:${tools.length}`;
-    }
-    return 'FAIL:无工具';
+    return `OK:${tools.length}`;
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     return `FAIL:${msg}`;

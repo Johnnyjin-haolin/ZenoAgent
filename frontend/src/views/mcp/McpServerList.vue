@@ -47,7 +47,6 @@
         @edit="handleEdit(server)"
         @delete="handleDelete(server)"
         @toggle="handleToggle(server, $event)"
-        @view-tools="handleViewTools(server)"
         @test="handleTest(server)"
         @configure-secret="handleConfigureSecret(server)"
       />
@@ -58,12 +57,6 @@
       v-model:open="drawerOpen"
       :server="editingServer"
       @saved="handleSaved"
-    />
-
-    <!-- 工具查看 Modal -->
-    <McpToolsModal
-      v-model:open="toolsModalOpen"
-      :server="viewingServer"
     />
 
     <!-- 密钥配置 Modal（PERSONAL 专用） -->
@@ -82,7 +75,6 @@ import { getMcpServers, deleteMcpServer, toggleMcpServer, testMcpServer } from '
 import type { McpServerInfo } from '../agent/agent.types';
 import McpServerCard from './components/McpServerCard.vue';
 import McpServerDrawer from './components/McpServerDrawer.vue';
-import McpToolsModal from './components/McpToolsModal.vue';
 import McpSecretModal from './components/McpSecretModal.vue';
 
 // ─── 状态 ──────────────────────────────────────────────────────────────────
@@ -94,9 +86,6 @@ const searchText = ref('');
 
 const drawerOpen = ref(false);
 const editingServer = ref<McpServerInfo | null>(null);
-
-const toolsModalOpen = ref(false);
-const viewingServer = ref<McpServerInfo | null>(null);
 
 const secretModalOpen = ref(false);
 const secretServer = ref<McpServerInfo | null>(null);
@@ -198,11 +187,6 @@ async function handleTest(server: McpServerInfo) {
   } else {
     message.error({ content: `连通性测试失败: ${result}`, key: 'test', duration: 5 });
   }
-}
-
-function handleViewTools(server: McpServerInfo) {
-  viewingServer.value = server;
-  toolsModalOpen.value = true;
 }
 
 function handleConfigureSecret(server: McpServerInfo) {
@@ -327,9 +311,20 @@ async function handleSaved() {
 // scope-filter 样式
 .mcp-page {
   .scope-filter {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(59, 130, 246, 0.15);
+    border-radius: 7px;
+    padding: 2px;
+
+    .ant-segmented-group {
+      background: transparent;
+    }
+
     .ant-segmented-item {
       color: #64748b;
       font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      background: transparent;
 
       &:hover {
         color: #e2e8f0;
@@ -338,23 +333,73 @@ async function handleSaved() {
       &.ant-segmented-item-selected {
         color: #60a5fa;
         font-weight: 500;
+        background: rgba(59, 130, 246, 0.15);
+        box-shadow: none;
       }
+    }
+
+    .ant-segmented-thumb {
+      background: rgba(59, 130, 246, 0.15);
     }
   }
 
   // search input dark 主题
   .search-input {
-    .ant-input {
-      background: rgba(0, 0, 0, 0.2) !important;
-      border-color: rgba(59, 130, 246, 0.2) !important;
-      color: #e2e8f0 !important;
-      font-size: 13px;
-      font-family: 'JetBrains Mono', monospace;
-    }
+    .ant-input-wrapper {
+      .ant-input-affix-wrapper {
+        background: rgba(0, 0, 0, 0.25) !important;
+        border-color: rgba(59, 130, 246, 0.2) !important;
+        border-right: none;
 
-    .ant-input:focus,
-    .ant-input-affix-wrapper-focused {
-      border-color: #60a5fa !important;
+        &:hover,
+        &.ant-input-affix-wrapper-focused {
+          border-color: #60a5fa !important;
+          box-shadow: none !important;
+        }
+
+        .ant-input {
+          background: transparent !important;
+          color: #e2e8f0 !important;
+          font-size: 13px;
+          font-family: 'JetBrains Mono', monospace;
+
+          &::placeholder {
+            color: #475569 !important;
+          }
+        }
+
+        .ant-input-prefix,
+        .ant-input-suffix {
+          .anticon {
+            color: #475569;
+
+            &:hover {
+              color: #60a5fa;
+            }
+          }
+        }
+      }
+
+      .ant-input-group-addon {
+        background: rgba(0, 0, 0, 0.25) !important;
+        border-color: rgba(59, 130, 246, 0.2) !important;
+
+        .ant-btn {
+          background: rgba(59, 130, 246, 0.15) !important;
+          border-color: rgba(59, 130, 246, 0.2) !important;
+          color: #60a5fa !important;
+          box-shadow: none;
+
+          &:hover {
+            background: rgba(59, 130, 246, 0.25) !important;
+            border-color: #60a5fa !important;
+          }
+
+          .anticon {
+            color: #60a5fa;
+          }
+        }
+      }
     }
   }
 }
