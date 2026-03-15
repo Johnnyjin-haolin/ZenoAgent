@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS `agent` (
   `tools_config`   JSON          DEFAULT NULL               COMMENT '工具配置 JSON，包含 mcpGroups / systemTools / knowledgeIds',
   `context_config` JSON          DEFAULT NULL               COMMENT '上下文行为配置 JSON，包含 historyMessageLoadLimit / maxToolRounds',
   `rag_config`     JSON          DEFAULT NULL               COMMENT 'RAG 检索配置 JSON，包含 maxResults / minScore / maxDocumentLength',
+  `skill_tree`     JSON          DEFAULT NULL               COMMENT 'Agent 私有 Skill 目录树 JSON，结构为 SkillTreeNode[]',
   `is_builtin`   TINYINT(1)    NOT NULL DEFAULT 0         COMMENT '是否内置（1=内置示例, 0=用户创建）',
   `status`       VARCHAR(16)   NOT NULL DEFAULT 'active'  COMMENT '状态：active / deleted',
   `create_time`  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -50,6 +51,7 @@ CREATE TABLE IF NOT EXISTS `agent_message` (
   `role` VARCHAR(32) NOT NULL COMMENT '角色：user/assistant/system',
   `content` TEXT NOT NULL COMMENT '消息内容',
   `model_id` VARCHAR(64) DEFAULT NULL COMMENT '使用的模型ID',
+  `agent_id` VARCHAR(64) DEFAULT NULL COMMENT '执行此消息的 Agent ID（assistant 消息时有值）',
   `tokens` INT DEFAULT NULL COMMENT 'Token数量',
   `duration` INT DEFAULT NULL COMMENT '耗时（毫秒）',
   `metadata` JSON DEFAULT NULL COMMENT '元数据（工具调用、RAG结果等）',
@@ -86,11 +88,6 @@ CREATE TABLE IF NOT EXISTS `agent_skill` (
   INDEX `idx_status`      (`status`),
   INDEX `idx_update_time` (`update_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Skill 定义表';
-
--- Agent 表新增 skill_tree 列（已存在则忽略）
-ALTER TABLE `agent`
-  ADD COLUMN IF NOT EXISTS `skill_tree` JSON DEFAULT NULL
-  COMMENT 'Agent 私有 Skill 目录树 JSON，结构为 SkillTreeNode[]';
 
 -- 文档表
 CREATE TABLE IF NOT EXISTS `document` (
