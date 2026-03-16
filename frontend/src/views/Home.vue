@@ -24,21 +24,39 @@
     <!-- Features Section -->
     <section class="features">
       <div class="feature-card glass">
-        <div class="icon-box blue">🧠</div>
-        <h3>{{ t('home.capabilities.context.title') }}</h3>
-        <p>{{ t('home.capabilities.context.desc') }}</p>
+        <div class="icon-box orange">🤖</div>
+        <h3>{{ t('home.capabilities.customAgent.title') }}</h3>
+        <p>{{ t('home.capabilities.customAgent.desc') }}</p>
       </div>
-      
+
       <div class="feature-card glass">
-        <div class="icon-box cyan">🔍</div>
+        <div class="icon-box purple">🔌</div>
+        <h3>{{ t('home.capabilities.dualMcp.title') }}</h3>
+        <p>{{ t('home.capabilities.dualMcp.desc') }}</p>
+      </div>
+
+      <div class="feature-card glass">
+        <div class="icon-box green">✨</div>
+        <h3>{{ t('home.capabilities.skill.title') }}</h3>
+        <p>{{ t('home.capabilities.skill.desc') }}</p>
+      </div>
+
+      <div class="feature-card glass">
+        <div class="icon-box yellow">⚡</div>
+        <h3>{{ t('home.capabilities.progressiveTools.title') }}</h3>
+        <p>{{ t('home.capabilities.progressiveTools.desc') }}</p>
+      </div>
+
+      <div class="feature-card glass">
+        <div class="icon-box red">🛡️</div>
+        <h3>{{ t('home.capabilities.humanInLoop.title') }}</h3>
+        <p>{{ t('home.capabilities.humanInLoop.desc') }}</p>
+      </div>
+
+      <div class="feature-card glass">
+        <div class="icon-box cyan">📚</div>
         <h3>{{ t('home.capabilities.rag.title') }}</h3>
         <p>{{ t('home.capabilities.rag.desc') }}</p>
-      </div>
-      
-      <div class="feature-card glass">
-        <div class="icon-box purple">⚡️</div>
-        <h3>{{ t('home.capabilities.mcp.title') }}</h3>
-        <p>{{ t('home.capabilities.mcp.desc') }}</p>
       </div>
     </section>
 
@@ -159,16 +177,16 @@ const { t } = useI18n();
 
 /* Features */
 .features {
-  display: flex;
-  justify-content: center;
-  gap: 32px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
   padding: 80px 64px;
+  max-width: 1200px;
+  margin: 0 auto;
   position: relative;
   z-index: 1;
 
   .feature-card {
-    flex: 1;
-    max-width: 360px;
     padding: 32px;
     border-radius: 16px;
     background: rgba(15, 23, 42, 0.4);
@@ -185,10 +203,17 @@ const { t } = useI18n();
     .icon-box {
       font-size: 32px;
       margin-bottom: 24px;
+      &.blue   { filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.6)); }
+      &.cyan   { filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.6)); }
+      &.purple { filter: drop-shadow(0 0 8px rgba(167, 139, 250, 0.6)); }
+      &.green  { filter: drop-shadow(0 0 8px rgba(52, 211, 153, 0.6)); }
+      &.yellow { filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.6)); }
+      &.orange { filter: drop-shadow(0 0 8px rgba(251, 146, 60, 0.6)); }
+      &.red    { filter: drop-shadow(0 0 8px rgba(248, 113, 113, 0.6)); }
     }
 
     h3 {
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 600;
       margin-bottom: 12px;
       color: #F8FAFC;
@@ -197,7 +222,7 @@ const { t } = useI18n();
     p {
       color: #94A3B8;
       line-height: 1.6;
-      font-size: 15px;
+      font-size: 14px;
     }
   }
 }
@@ -230,8 +255,15 @@ const { t } = useI18n();
   }
   
   .features {
-    flex-direction: column;
-    align-items: center;
+    grid-template-columns: repeat(2, 1fr);
+    padding: 60px 32px;
+  }
+}
+
+@media (max-width: 640px) {
+  .features {
+    grid-template-columns: 1fr;
+    padding: 40px 20px;
   }
 }
 </style>

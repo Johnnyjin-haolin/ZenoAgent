@@ -1,6 +1,6 @@
 package com.aiagent.api.controller;
 
-import com.aiagent.api.dto.MessageDTO;
+import com.aiagent.api.dto.MessageResponse;
 import com.aiagent.api.dto.Page;
 import com.aiagent.api.dto.PageResult;
 import com.aiagent.domain.conversation.ConversationService;
@@ -57,10 +57,10 @@ public class AgentConversationController {
      * 获取会话消息列表（从MySQL读取）
      */
     @GetMapping("/conversation/{id}/messages")
-    public Result<List<MessageDTO>> getConversationMessages(
+    public Result<List<MessageResponse>> getConversationMessages(
             @PathVariable("id") String conversationId,
             @RequestParam(required = false, defaultValue = "50") Integer limit) {
-        List<MessageDTO> messages =
+        List<MessageResponse> messages =
             messageService.getMessages(conversationId, limit);
 
         return Result.success(messages);
@@ -74,6 +74,17 @@ public class AgentConversationController {
             @RequestParam String conversationId,
             @RequestParam String title) {
         conversationService.updateTitle(conversationId, title);
+        return Result.success("更新成功", true);
+    }
+
+    /**
+     * 更新会话绑定的 Agent
+     */
+    @PutMapping("/conversation/agent")
+    public Result<Boolean> updateConversationAgent(
+            @RequestParam String conversationId,
+            @RequestParam(required = false) String agentId) {
+        conversationService.updateAgentId(conversationId, agentId);
         return Result.success("更新成功", true);
     }
 

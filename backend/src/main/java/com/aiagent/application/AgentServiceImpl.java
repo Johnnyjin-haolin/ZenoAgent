@@ -1,19 +1,23 @@
 package com.aiagent.application;
 
 import com.aiagent.domain.context.AgentContextService;
+import com.aiagent.domain.model.bo.ExecutionProcessRecord;
+import com.aiagent.domain.model.bo.MessageBO;
 import com.aiagent.infrastructure.config.AgentConfig;
 import com.aiagent.common.constant.AgentConstants;
 import com.aiagent.domain.conversation.ConversationService;
-import com.aiagent.domain.model.bo.ReActExecutionResult;
+import com.aiagent.domain.model.bo.AgentExecutionResult;
 import com.aiagent.domain.memory.MemorySystem;
 import com.aiagent.api.dto.AgentEventData;
 import com.aiagent.api.dto.AgentRequest;
 import com.aiagent.domain.model.bo.AgentContext;
 import com.aiagent.common.util.UUIDGenerator;
+import com.aiagent.application.SseAgentEventPublisher;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -22,10 +26,13 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 
 /**
- * AI Agent 服务实现（ReAct架构版本）
- * 
- * 使用ReAct循环实现自主思考和决策能力
- * 
+ * AI Agent 服务实现
+ *
+ * <p>当前默认使用 {@link FunctionCallingEngine}（支持 Function Calling 的主流模型）。
+ * 如需切换为 Prompt 引导的备选引擎，将 {@code @Qualifier} 值改为 {@code "promptReActEngine"}。
+ *
+ * @see FunctionCallingEngine
+ * @see PromptReActEngine
  * @author aiagent
  */
 @Slf4j
@@ -34,8 +41,9 @@ public class AgentServiceImpl implements IAgentService {
     private static final long STEP_EVENT_THRESHOLD_MS = 300;
     
     @Autowired
-    private ReActEngine reActEngine;
-    
+    @Qualifier("functionCallingEngine")
+    private AgentEngine agentEngine;
+
     @Autowired
     private MemorySystem memorySystem;
     
@@ -56,6 +64,7 @@ public class AgentServiceImpl implements IAgentService {
     
     @Autowired
     private StopRequestManager stopRequestManager;
+
     
     @Override
     //todo 前端UI界面参照Google的炫酷画面
@@ -83,7 +92,7 @@ public class AgentServiceImpl implements IAgentService {
         // 5. 异步执行任务
         CompletableFuture.runAsync(() -> {
             try {
-                executeWithReAct(request, requestId, emitter);
+                executeWithEngine(request, requestId, emitter);
             } catch (Exception e) {
                 log.error("Agent任务执行失败", e);
                 streamingService.sendEvent(emitter, AgentEventData.builder()
@@ -100,9 +109,9 @@ public class AgentServiceImpl implements IAgentService {
     }
     
     /**
-     * 使用ReAct循环执行任务
+     * 使用 AgentEngine 执行任务
      */
-    private void executeWithReAct(AgentRequest request, String requestId, SseEmitter emitter) {
+    private void executeWithEngine(AgentRequest request, String requestId, SseEmitter emitter) {
         long totalStartNs = System.nanoTime();
         long stepStartNs = System.nanoTime();
         
@@ -119,21 +128,18 @@ public class AgentServiceImpl implements IAgentService {
 
             // 2. 保存用户消息到记忆和MySQL（统一通过MemorySystem处理）
             UserMessage userMessage = new UserMessage(request.getContent());
-            memorySystem.saveShortTermMemory(conversationId, userMessage, null, null, null, null);
-            if (context.getMessages() == null) {
-                context.setMessages(new java.util.ArrayList<>());
-            }
-            context.getMessages().add(userMessage);
+            // 用户消息不携带 agentId（agentId 只用于 assistant 消息）
+            memorySystem.saveShortTermMemory(conversationId, userMessage, null, null, null, null, null);
+            context.addMessage(userMessage);
             stepStartNs = logStep("save_user_message", stepStartNs, requestId, conversationId, null, emitter);
 
-            // 3. 设置上下文变量（使用具体属性）
-            // 智能选择模型：如果未指定modelId，使用配置的默认模型
-            String modelId = request.getModelId();
+            // 3. 补充：若 AgentContextService 未能确定 modelId（请求和缓存均为空），则 fallback 到系统默认模型
+            String modelId = context.getModelId();
             if (modelId == null || modelId.trim().isEmpty()) {
                 modelId = agentConfig.getModel().getDefaultModelId();
+                context.setModelId(modelId);
                 log.info("未指定模型，使用默认模型: {}", modelId);
 
-                // 发送模型选择事件
                 streamingService.sendEvent(emitter, AgentEventData.builder()
                     .requestId(requestId)
                     .event(AgentConstants.EVENT_AGENT_THINKING)
@@ -143,51 +149,30 @@ public class AgentServiceImpl implements IAgentService {
             } else {
                 log.info("使用指定模型: {}", modelId);
             }
-            context.setModelId(modelId);
-            context.setEnabledMcpGroups(request.getEnabledMcpGroups());
-            context.setKnowledgeIds(request.getKnowledgeIds());
-            // 设置启用的工具名称列表（为空则允许所有工具）
-            context.setEnabledTools(request.getEnabledTools());
             context.setRequestId(requestId);
             stepStartNs = logStep("init_context_vars", stepStartNs, requestId, conversationId,
                 "modelId=" + modelId, emitter);
 
-            // 设置事件发布器，用于各个Engine向前端发送进度事件
-            context.setEventPublisher(eventData -> {
-                // 自动填充requestId和conversationId
-                if (eventData.getRequestId() == null) {
-                    eventData.setRequestId(requestId);
-                }
-                if (eventData.getConversationId() == null) {
-                    eventData.setConversationId(context.getConversationId());
-                }
-                streamingService.sendEvent(emitter, eventData);
-            });
+            // 设置事件发布器（SseAgentEventPublisher 将语义调用翻译为 SSE 事件）
+            SseAgentEventPublisher publisher = new SseAgentEventPublisher(
+                requestId, context.getConversationId(), emitter, streamingService);
+            context.setEventPublisher(publisher);
 
             // 3.1 设置流式输出回调（使用CountDownLatch确保流式完成后再关闭SSE）
+            // onToken / onComplete 委托给 publisher 路由，引擎内部只调 publisher 接口
             CountDownLatch streamingCompleteLatch = new CountDownLatch(1);
             context.setStreamingCallback(new StreamingCallback() {
                 @Override
                 public void onToken(String token) {
-                    // 实时发送token到前端
-                    streamingService.sendEvent(emitter, AgentEventData.builder()
-                        .requestId(requestId)
-                        .event(AgentConstants.EVENT_AGENT_MESSAGE)
-                        .content(token)
-                        .conversationId(context.getConversationId())
-                        .build());
+                    // FunctionCallingEngine 内部已通过 publisher.onToken / publisher.onThinkingToken 路由
+                    // 此处仅作兜底（PromptReActEngine 等可能直接触发此回调）
+                    publisher.onToken(token);
                 }
 
                 @Override
                 public void onComplete(String fullText) {
                     log.debug("LLM生成完成，文本长度: {}", fullText.length());
-                    // 发送流式完成事件，通知前端所有token都已发送
-                    streamingService.sendEvent(emitter, AgentEventData.builder()
-                        .requestId(requestId)
-                        .event(AgentConstants.EVENT_AGENT_STREAM_COMPLETE)
-                    .message(AgentConstants.MESSAGE_STREAM_COMPLETE)
-                        .conversationId(context.getConversationId())
-                        .build());
+                    publisher.onStreamComplete();
                     // 释放锁，允许主线程继续执行并关闭SSE
                     streamingCompleteLatch.countDown();
                 }
@@ -195,12 +180,7 @@ public class AgentServiceImpl implements IAgentService {
                 @Override
                 public void onError(Throwable error) {
                     log.error("LLM流式输出错误", error);
-                    streamingService.sendEvent(emitter, AgentEventData.builder()
-                        .requestId(requestId)
-                        .event(AgentConstants.EVENT_AGENT_ERROR)
-                        .message("生成失败: " + error.getMessage())
-                        .conversationId(context.getConversationId())
-                        .build());
+                    publisher.onError("生成失败: " + error.getMessage());
                     // 发生错误也要释放锁
                     streamingCompleteLatch.countDown();
                 }
@@ -236,26 +216,24 @@ public class AgentServiceImpl implements IAgentService {
             });
             stepStartNs = logStep("init_state_machine", stepStartNs, requestId, conversationId, null, emitter);
 
-            // 5. 执行ReAct循环
+            // 5. 执行推理循环
             streamingService.sendEvent(emitter, AgentEventData.builder()
                 .requestId(requestId)
                 .event(AgentConstants.EVENT_AGENT_THINKING)
-                .message("开始ReAct循环...")
+                .message("开始推理循环...")
                 .conversationId(context.getConversationId())
                 .build());
 
-            long reactStartNs = System.nanoTime();
-            //todo 简单咨询模式
-            //todo react 复杂任务模式
-            ReActExecutionResult executionResult = reActEngine.execute(request.getContent(), context);
-            stepStartNs = logStep("react_execute", reactStartNs, requestId, conversationId,
+            long engineStartNs = System.nanoTime();
+            AgentExecutionResult executionResult = agentEngine.execute(context);
+            stepStartNs = logStep("engine_execute", engineStartNs, requestId, conversationId,
                 "modelId=" + modelId + ", iterations=" + executionResult.getIterations(), emitter);
 
-            // 6. 处理最终结果
-            // AI消息已经在 ObservationEngine 的观察阶段即时持久化了，无需再次保存
-            List<ChatMessage> allMessages = executionResult.getMessages();
-            log.debug("执行结果包含 {} 条消息（已在观察阶段持久化）",
-                allMessages != null ? allMessages.size() : 0);
+            // 6. 批量保存本轮新增的 AI/Tool 消息（UserMessage 已在步骤2保存，此处跳过）
+            // executionResult.getMessages() 是完整消息列表，新增消息 = 总数 - 加载到历史消息数 - 1(本轮user)
+            // 但最简单可靠的方式：保存 context 中类型非 USER 且非 SYSTEM 的新增消息
+            saveNewAssistantMessages(context, context.getModelId(), conversationId);
+            stepStartNs = logStep("save_assistant_messages", stepStartNs, requestId, conversationId, null, emitter);
 
             // 更新对话消息数量
             try {
@@ -332,6 +310,68 @@ public class AgentServiceImpl implements IAgentService {
                 .build());
         }
         return System.nanoTime();
+    }
+
+    /**
+     * 批量保存本轮新增的 AI/Tool 消息到 MySQL
+     * 策略：从 messageDTOs 中找出新增的非 USER 消息（通过简单时序判断）
+     *
+     * <p>对于最后一条（最新）AI 最终回复消息，会将 {@code context.executionProcess}（执行过程记录）
+     * 注入到 customMetadata，持久化到 {@code MessageEntity.metadata.executionProcess}，
+     * 供历史对话加载时还原 ReAct 迭代展示。
+     */
+    private void saveNewAssistantMessages(AgentContext context, String modelId, String conversationId) {
+        List<MessageBO> allDTOs = context.getMessageBOS();
+        if (allDTOs == null || allDTOs.isEmpty()) {
+            return;
+        }
+
+        // 判断是否有执行过程记录（有工具调用时才有）
+        ExecutionProcessRecord executionProcess = context.getExecutionProcess();
+
+        // 从 context 获取本轮使用的 agentId（assistant 消息专用）
+        String agentId = context.getAgentId();
+
+        // 简单策略：遍历最后几条消息，保存所有 AI / TOOL_EXECUTION 类型
+        // （因为执行循环中多次 addMessage，这些消息一定是新增的）
+        int savedCount = 0;
+        boolean firstAiSaved = false; // 是否已保存过最后一条 AI 消息（最终回复）
+
+        for (int i = allDTOs.size() - 1; i >= 0 && savedCount < 20; i--) {
+            MessageBO dto = allDTOs.get(i);
+            String type = dto.getType();
+
+            // 只保存 AI 和 TOOL_EXECUTION，跳过 USER/SYSTEM
+            if ("AI".equals(type) || "TOOL_EXECUTION".equals(type)) {
+                try {
+                    ChatMessage message = dto.toChatMessage();
+                    if (message != null) {
+                        // 对最后一条 AI 消息（最终回复），附带执行过程记录
+                        java.util.Map<String, Object> metadata = null;
+                        if ("AI".equals(type) && !firstAiSaved && executionProcess != null
+                                && !executionProcess.getIterations().isEmpty()) {
+                            metadata = new java.util.HashMap<>();
+                            metadata.put("executionProcess", executionProcess);
+                            firstAiSaved = true;
+                        }
+                        // AI/assistant 消息携带 agentId；TOOL_EXECUTION 消息不需要
+                        String msgAgentId = "AI".equals(type) ? agentId : null;
+                        memorySystem.saveShortTermMemory(conversationId, message, modelId, msgAgentId, null, null, metadata);
+                        savedCount++;
+                    }
+                } catch (Exception e) {
+                    log.warn("保存消息失败，跳过: type={}, error={}", type, e.getMessage());
+                }
+            } else if ("USER".equals(type)) {
+                // 遇到 USER 消息说明前面的都是历史消息，停止遍历
+                break;
+            }
+        }
+
+        if (savedCount > 0) {
+            log.info("批量保存本轮新增消息完成: conversationId={}, count={}, agentId={}, hasExecutionProcess={}",
+                conversationId, savedCount, agentId, executionProcess != null && !executionProcess.getIterations().isEmpty());
+        }
     }
 }
 

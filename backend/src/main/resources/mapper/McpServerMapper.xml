@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiagent.infrastructure.mapper.McpServerMapper">
+
+    <resultMap id="BaseResultMap" type="com.aiagent.domain.model.entity.McpServerEntity">
+        <id     column="id"              property="id"/>
+        <result column="name"            property="name"/>
+        <result column="description"     property="description"/>
+        <result column="scope"           property="scope"/>
+        <result column="owner_user_id"   property="ownerUserId"/>
+        <result column="connection_type" property="connectionType"/>
+        <result column="endpoint_url"    property="endpointUrl"/>
+        <result column="auth_header"     property="authHeader"/>
+        <result column="extra_headers"   property="extraHeaders"/>
+        <result column="timeout_ms"      property="timeoutMs"/>
+        <result column="read_timeout_ms" property="readTimeoutMs"/>
+        <result column="retry_count"     property="retryCount"/>
+        <result column="enabled"         property="enabled"/>
+        <result column="created_by"      property="createdBy"/>
+        <result column="created_at"      property="createdAt"/>
+        <result column="updated_at"      property="updatedAt"/>
+    </resultMap>
+
+    <insert id="insert">
+        INSERT INTO mcp_server (id, name, description, scope, owner_user_id,
+                                connection_type, endpoint_url, auth_header,
+                                extra_headers, timeout_ms, read_timeout_ms, retry_count,
+                                enabled, created_by)
+        VALUES (#{id}, #{name}, #{description}, #{scope}, #{ownerUserId},
+                #{connectionType}, #{endpointUrl}, #{authHeader},
+                #{extraHeaders}, #{timeoutMs}, #{readTimeoutMs}, #{retryCount},
+                #{enabled}, #{createdBy})
+    </insert>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM mcp_server WHERE id = #{id}
+    </select>
+
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT * FROM mcp_server ORDER BY scope ASC, name ASC
+    </select>
+
+    <select id="selectByScope" resultMap="BaseResultMap">
+        SELECT * FROM mcp_server WHERE scope = #{scope} ORDER BY name ASC
+    </select>
+
+    <select id="selectByIds" resultMap="BaseResultMap">
+        SELECT * FROM mcp_server
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+    <update id="update">
+        UPDATE mcp_server
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="connectionType != null">connection_type = #{connectionType},</if>
+            <if test="endpointUrl != null">endpoint_url = #{endpointUrl},</if>
+            <if test="authHeader != null">auth_header = #{authHeader},</if>
+            extra_headers = #{extraHeaders},
+            <if test="timeoutMs != null">timeout_ms = #{timeoutMs},</if>
+            <if test="readTimeoutMs != null">read_timeout_ms = #{readTimeoutMs},</if>
+            <if test="retryCount != null">retry_count = #{retryCount},</if>
+            <if test="enabled != null">enabled = #{enabled},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateEnabled">
+        UPDATE mcp_server SET enabled = #{enabled} WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM mcp_server WHERE id = #{id}
+    </delete>
+
+    <select id="countById" resultType="int">
+        SELECT COUNT(*) FROM mcp_server WHERE id = #{id}
+    </select>
+
+</mapper>

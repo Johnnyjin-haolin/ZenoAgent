@@ -118,7 +118,8 @@ defineExpose({ focusInput });
 <style scoped lang="less">
 .chat-footer {
   background: transparent;
-  padding: 0 24px 24px;
+  // 使用父容器的 CSS 变量，水平和底部 padding 均响应式
+  padding: 0 var(--content-padding-x, 24px) var(--content-padding-bottom, 24px);
   flex-shrink: 0;
   position: relative;
   z-index: 10;
@@ -141,7 +142,8 @@ defineExpose({ focusInput });
 
   .input-container {
     padding: 0;
-    max-width: 900px;
+    // 跟随父容器 CSS 变量，与消息内容宽度对齐
+    max-width: var(--content-max-width, 900px);
     margin: 0 auto;
     width: 100%;
   }

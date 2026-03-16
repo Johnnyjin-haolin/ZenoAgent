@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiagent.infrastructure.mapper.AgentMapper">
+
+    <resultMap id="BaseResultMap" type="com.aiagent.domain.model.entity.AgentEntity">
+        <id     column="id"           property="id"/>
+        <result column="name"         property="name"/>
+        <result column="description"  property="description"/>
+        <result column="system_prompt" property="systemPrompt"/>
+        <result column="tools_config"   property="toolsConfig"/>
+        <result column="context_config" property="contextConfig"/>
+        <result column="rag_config"     property="ragConfig"/>
+        <result column="skill_tree"     property="skillTree"/>
+        <result column="is_builtin"     property="isBuiltin"/>
+        <result column="status"       property="status"/>
+        <result column="create_time"  property="createTime"/>
+        <result column="update_time"  property="updateTime"/>
+    </resultMap>
+
+    <insert id="insert">
+        INSERT INTO agent (id, name, description, system_prompt, tools_config, context_config, rag_config, skill_tree, is_builtin, status)
+        VALUES (#{id}, #{name}, #{description}, #{systemPrompt}, #{toolsConfig}, #{contextConfig}, #{ragConfig}, #{skillTree}, #{isBuiltin}, #{status})
+    </insert>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM agent WHERE id = #{id} AND status != 'deleted'
+    </select>
+
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT * FROM agent WHERE status != 'deleted' ORDER BY is_builtin DESC, create_time ASC
+    </select>
+
+    <select id="selectPage" resultMap="BaseResultMap">
+        SELECT * FROM agent WHERE status != 'deleted'
+        ORDER BY is_builtin DESC, create_time ASC
+        LIMIT #{pageSize} OFFSET #{offset}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM agent WHERE status != 'deleted'
+    </select>
+
+    <select id="selectByStatus" resultMap="BaseResultMap">
+        SELECT * FROM agent WHERE status = #{status} ORDER BY is_builtin DESC, create_time ASC
+    </select>
+
+    <update id="update">
+        UPDATE agent
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="systemPrompt != null">system_prompt = #{systemPrompt},</if>
+            <if test="toolsConfig != null">tools_config = #{toolsConfig},</if>
+            <if test="contextConfig != null">context_config = #{contextConfig},</if>
+            <if test="ragConfig != null">rag_config = #{ragConfig},</if>
+            skill_tree = #{skillTree},
+            <if test="status != null">status = #{status},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <update id="deleteById">
+        UPDATE agent SET status = 'deleted' WHERE id = #{id}
+    </update>
+
+    <select id="countById" resultType="int">
+        SELECT COUNT(*) FROM agent WHERE id = #{id}
+    </select>
+
+</mapper>

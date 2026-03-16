@@ -6,12 +6,12 @@ import lombok.Data;
 import java.util.Date;
 
 /**
- * 消息数据传输对象
+ * 消息响应对象（API 层）
  * 
  * @author aiagent
  */
 @Data
-public class MessageDTO {
+public class MessageResponse {
     
     /**
      * 消息唯一标识
@@ -32,6 +32,11 @@ public class MessageDTO {
      * 使用的模型ID
      */
     private String modelId;
+
+    /**
+     * 执行此消息的 Agent ID（assistant 消息时有值）
+     */
+    private String agentId;
     
     /**
      * Token数量

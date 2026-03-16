@@ -30,14 +30,15 @@ public class McpJsonConfig {
     public static class McpServerJsonDefinition {
         /**
          * 连接类型：
-         * - streamableHttp: Streamable HTTP传输（推荐，用于远程MCP服务器）
+         * - streamable-http: Streamable HTTP传输（推荐，用于远程MCP服务器）
          * - stdio: 标准输入输出传输（本地进程）
-         * - websocket: WebSocket传输（未来支持）
+         * - websocket: WebSocket传输
+         * - sse: Server-Sent Events
          */
         private String type;
         
         /**
-         * 服务器URL（type=streamableHttp时使用）
+         * 服务器URL（type=streamable-http/sse/websocket时使用）
          */
         private String url;
         
@@ -47,7 +48,7 @@ public class McpJsonConfig {
         private Object command;
         
         /**
-         * HTTP请求头（type=streamableHttp时使用）
+         * HTTP请求头（type=streamable-http时使用）
          */
         private Map<String, String> headers;
         
@@ -60,12 +61,13 @@ public class McpJsonConfig {
          * 服务器描述
          */
         private String description;
-        
+
         /**
-         * 分组名称（前端按此分组展示）
+         * 作用域：0=GLOBAL（服务端执行），1=PERSONAL（客户端执行）
+         * 默认 0
          */
-        private String group;
-        
+        private Integer scope;
+
         /**
          * 是否启用（默认true）
          */

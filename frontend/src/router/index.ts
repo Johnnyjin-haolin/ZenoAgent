@@ -41,6 +41,46 @@ const routes: RouteRecordRaw[] = [
           title: '知识库详情',
         },
       },
+      {
+        path: 'agents',
+        name: 'AgentList',
+        component: () => import('@/views/agents/AgentList.vue'),
+        meta: {
+          title: 'Agent 管理',
+        },
+      },
+      {
+        path: 'agents/new',
+        name: 'AgentNew',
+        component: () => import('@/views/agents/AgentEdit.vue'),
+        meta: {
+          title: '新建 Agent',
+        },
+      },
+      {
+        path: 'agents/:id/edit',
+        name: 'AgentEdit',
+        component: () => import('@/views/agents/AgentEdit.vue'),
+        meta: {
+          title: '编辑 Agent',
+        },
+      },
+      {
+        path: 'skills',
+        name: 'SkillList',
+        component: () => import('@/views/skills/SkillList.vue'),
+        meta: {
+          title: 'Skill 管理',
+        },
+      },
+      {
+        path: 'mcp',
+        name: 'McpServerList',
+        component: () => import('@/views/mcp/McpServerList.vue'),
+        meta: {
+          title: 'MCP 服务器管理',
+        },
+      },
     ],
   },
 ];

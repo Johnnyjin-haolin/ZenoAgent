@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
 public class McpToolExecutor {
     
     @Autowired
-    private McpGroupManager mcpGroupManager;
+    private McpManager mcpManager;
     
     /**
      * 执行MCP工具（直接调用）
@@ -38,7 +38,7 @@ public class McpToolExecutor {
         String serverId = toolInfo.getServerId();
         String toolName = toolInfo.getName();
 
-        McpClient client = mcpGroupManager.getMcpClient(serverId);
+        McpClient client = mcpManager.getMcpClient(serverId);
         if (client == null) {
             throw new IllegalStateException(
                     String.format("MCP客户端未找到: serverId=%s, connectionType=%s", serverId, toolInfo.getConnectionType()));
@@ -53,7 +53,9 @@ public class McpToolExecutor {
                 .arguments(params)
                 .build();
         // 调用工具
-        return client.executeTool(request);
+        ToolExecutionResult toolExecutionResult = client.executeTool(request);
+        log.info("MCP工具执行结果: {}", toolExecutionResult);
+        return toolExecutionResult;
 
     }
 

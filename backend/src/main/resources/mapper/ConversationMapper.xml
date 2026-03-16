@@ -7,6 +7,7 @@
         <id column="id" property="id"/>
         <result column="title" property="title"/>
         <result column="user_id" property="userId"/>
+        <result column="agent_id" property="agentId"/>
         <result column="model_id" property="modelId"/>
         <result column="model_name" property="modelName"/>
         <result column="status" property="status"/>
@@ -16,8 +17,8 @@
     </resultMap>
     
     <insert id="insert">
-        INSERT INTO agent_conversation (id, title, user_id, model_id, model_name, status, message_count)
-        VALUES (#{id}, #{title}, #{userId}, #{modelId}, #{modelName}, #{status}, #{messageCount})
+        INSERT INTO agent_conversation (id, title, user_id, agent_id, model_id, model_name, status, message_count)
+        VALUES (#{id}, #{title}, #{userId}, #{agentId}, #{modelId}, #{modelName}, #{status}, #{messageCount})
     </insert>
     
     <select id="selectById" resultMap="BaseResultMap">
@@ -44,6 +45,10 @@
         </where>
     </select>
     
+    <update id="updateAgentId">
+        UPDATE agent_conversation SET agent_id = #{agentId} WHERE id = #{id}
+    </update>
+
     <update id="updateTitle">
         UPDATE agent_conversation SET title = #{title} WHERE id = #{id}
     </update>

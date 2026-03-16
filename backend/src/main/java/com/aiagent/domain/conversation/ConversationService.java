@@ -31,6 +31,7 @@ public class ConversationService {
         entity.setId(info.getId());
         entity.setTitle(info.getTitle());
         entity.setUserId(info.getUserId());
+        entity.setAgentId(info.getAgentId());
         entity.setModelId(info.getModelId());
         entity.setModelName(info.getModelName());
         entity.setStatus(info.getStatus() != null ? info.getStatus() : "active");
@@ -79,6 +80,15 @@ public class ConversationService {
     }
     
     /**
+     * 更新会话绑定的 Agent
+     */
+    public boolean updateAgentId(String conversationId, String agentId) {
+        conversationMapper.updateAgentId(conversationId, agentId);
+        log.info("更新会话 agentId: id={}, agentId={}", conversationId, agentId);
+        return true;
+    }
+
+    /**
      * 更新会话状态
      */
     public boolean updateStatus(String conversationId, String status) {
@@ -110,6 +120,7 @@ public class ConversationService {
             .id(entity.getId())
             .title(entity.getTitle())
             .userId(entity.getUserId())
+            .agentId(entity.getAgentId())
             .modelId(entity.getModelId())
             .modelName(entity.getModelName())
             .status(entity.getStatus())

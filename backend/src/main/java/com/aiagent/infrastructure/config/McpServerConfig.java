@@ -1,244 +1,265 @@
 package com.aiagent.infrastructure.config;
 
 import com.aiagent.common.enums.ConnectionTypeEnums;
+import com.aiagent.common.enums.McpScope;
 import com.aiagent.common.util.StringUtils;
+import com.aiagent.domain.model.entity.McpServerEntity;
+import com.aiagent.infrastructure.mapper.McpServerMapper;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 /**
- * MCP服务器配置类
- * 从JSON文件（config/mcp.json）读取MCP配置
- * 
- * @author aiagent
+ * MCP 服务器配置
+ * <p>
+ * 加载优先级：
+ * 1. 数据库 mcp_server 表（GLOBAL 类型，可通过管理页面维护）
+ * 2. mcp.json 文件（降级兜底，数据库有数据时跳过）
+ * <p>
+ * 注意：只有 GLOBAL（scope=0）类型的 MCP 服务器才需要在服务端加载客户端。
+ * PERSONAL（scope=1）类型由浏览器客户端执行。
  */
 @Slf4j
 @Data
 @Component
 public class McpServerConfig {
-    
+
     @Autowired
     private McpConfigLoader configLoader;
-    
+
     /**
-     * 是否启用MCP功能（可通过application.yml配置）
+     * 注意：使用 @Lazy 避免与 McpServerRepository 的循环依赖
      */
+    @Autowired
+    @Lazy
+    private McpServerMapper mcpServerMapper;
+
     @Value("${aiagent.mcp.enabled:true}")
     private boolean enabled = true;
-    
+
     /**
-     * MCP服务器列表（从JSON文件加载）
+     * GLOBAL MCP 服务器列表（内存缓存，供 McpClientFactory 使用）
      */
-    private List<McpServerDefinition> servers = new ArrayList<>();
-    
+    private List<McpServerDefinition> servers = new CopyOnWriteArrayList<>();
+
+    /**
+     * 配置变更监听器列表
+     */
+    private final List<Runnable> changeListeners = new CopyOnWriteArrayList<>();
+
     @PostConstruct
     public void init() {
-        loadFromJson();
-        
-        // 注册配置变更监听器，支持热加载
-        configLoader.addConfigChangeListener(this::loadFromJson);
+        reload();
+        // mcp.json 变更时也触发 reload（降级场景）
+        configLoader.addConfigChangeListener(this::reload);
     }
-    
+
     /**
-     * 从JSON配置加载服务器列表
+     * 重新加载配置
+     * 优先从数据库，数据库无数据则降级到 mcp.json
      */
-    private void loadFromJson() {
+    public void reload() {
+        List<McpServerDefinition> loaded = loadFromDatabase();
+        if (!loaded.isEmpty()) {
+            servers = new CopyOnWriteArrayList<>(loaded);
+            log.info("从数据库加载 GLOBAL MCP 服务器: {} 个", servers.size());
+        } else {
+            loaded = loadFromJson();
+            servers = new CopyOnWriteArrayList<>(loaded);
+            log.info("数据库无 GLOBAL MCP 配置，降级使用 mcp.json: {} 个", servers.size());
+        }
+        notifyListeners();
+    }
+
+    /**
+     * 从数据库加载 GLOBAL MCP 服务器（scope=0，enabled=1）
+     */
+    private List<McpServerDefinition> loadFromDatabase() {
         try {
-            McpJsonConfig jsonConfig = configLoader.getCurrentConfig();
-            
-            if (jsonConfig == null || jsonConfig.getMcpServers() == null) {
-                log.warn("JSON配置为空，使用空服务器列表");
-                servers = new ArrayList<>();
-                return;
+            List<McpServerEntity> entities = mcpServerMapper.selectByScope(McpScope.GLOBAL.getValue());
+            if (entities == null || entities.isEmpty()) {
+                return new ArrayList<>();
             }
-            
-            // 将JSON配置转换为内部格式
-            servers = jsonConfig.getMcpServers().entrySet().stream()
-                .map(entry -> convertToServerDefinition(entry.getKey(), entry.getValue()))
-                .collect(Collectors.toList());
-            
-            log.info("从JSON配置加载了 {} 个MCP服务器", servers.size());
-            
+            return entities.stream()
+                    .filter(e -> e.getEnabled() != null && e.getEnabled() == 1)
+                    .map(this::entityToDefinition)
+                    .collect(Collectors.toList());
         } catch (Exception e) {
-            log.error("从JSON配置加载服务器列表失败", e);
-            servers = new ArrayList<>();
+            log.warn("从数据库加载 MCP 配置失败，降级到文件: {}", e.getMessage());
+            return new ArrayList<>();
         }
     }
-    
+
     /**
-     * 将JSON配置转换为内部服务器定义
+     * 从 mcp.json 加载（降级兜底，只加载 GLOBAL 类型）
      */
-    private McpServerDefinition convertToServerDefinition(
-            String serverId, 
-            McpJsonConfig.McpServerJsonDefinition jsonDef) {
-        
+    private List<McpServerDefinition> loadFromJson() {
+        try {
+            McpJsonConfig jsonConfig = configLoader.getCurrentConfig();
+            if (jsonConfig == null || jsonConfig.getMcpServers() == null) {
+                return new ArrayList<>();
+            }
+            return jsonConfig.getMcpServers().entrySet().stream()
+                    .filter(entry -> {
+                        Integer scope = entry.getValue().getScope();
+                        // scope 为 null 或 0 均视为 GLOBAL
+                        return scope == null || scope == McpScope.GLOBAL.getValue();
+                    })
+                    .map(entry -> convertJsonToDefinition(entry.getKey(), entry.getValue()))
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("从 mcp.json 加载配置失败", e);
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * 按 ID 查找（供 McpServerService 使用）
+     */
+    public McpServerDefinition findById(String id) {
+        return servers.stream()
+                .filter(s -> id.equals(s.getId()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * 注册配置变更监听器
+     */
+    public void addChangeListener(Runnable listener) {
+        changeListeners.add(listener);
+    }
+
+    /**
+     * 兼容旧代码：getConfigLoader()
+     */
+    public McpConfigLoader getConfigLoader() {
+        return configLoader;
+    }
+
+    private void notifyListeners() {
+        for (Runnable listener : changeListeners) {
+            try {
+                listener.run();
+            } catch (Exception e) {
+                log.error("MCP 配置变更监听器执行失败", e);
+            }
+        }
+    }
+
+    // ── 转换方法 ──────────────────────────────────────────────────────────────
+
+    private McpServerDefinition entityToDefinition(McpServerEntity entity) {
+        McpServerDefinition def = new McpServerDefinition();
+        def.setId(entity.getId());
+        def.setName(entity.getName());
+        def.setDescription(entity.getDescription());
+        def.setEnabled(true);
+
+        ConnectionConfig conn = new ConnectionConfig();
+        conn.setType(ConnectionTypeEnums.fromString(entity.getConnectionType()));
+        conn.setUrl(entity.getEndpointUrl());
+        conn.setTimeout(entity.getTimeoutMs() != null ? entity.getTimeoutMs() : 10000);
+        conn.setReadTimeout(entity.getReadTimeoutMs() != null ? entity.getReadTimeoutMs() : 30000);
+        conn.setRetryCount(entity.getRetryCount() != null ? entity.getRetryCount() : 3);
+        conn.setRetryInterval(1000);
+        conn.setCacheEnabled(true);
+        conn.setCacheTtl(300);
+
+        // 认证信息：从 authHeader JSON 解析所有请求头键值对
+        java.util.Map<String, String> authHeaders =
+                com.aiagent.domain.mcp.McpServerService.parseAuthHeaders(entity.getAuthHeader());
+        if (!authHeaders.isEmpty()) {
+            conn.setHeaders(authHeaders);
+            // 兼容 apiKey：取 Authorization 头的值（去掉 "Bearer " 前缀）
+            String authValue = authHeaders.get("Authorization");
+            if (StringUtils.isNotEmpty(authValue)) {
+                conn.setApiKey(authValue.startsWith("Bearer ")
+                        ? authValue.substring(7) : authValue);
+            }
+        }
+
+        def.setConnection(conn);
+        return def;
+    }
+
+    private McpServerDefinition convertJsonToDefinition(
+            String serverId, McpJsonConfig.McpServerJsonDefinition jsonDef) {
         McpServerDefinition def = new McpServerDefinition();
         def.setId(serverId);
         def.setName(jsonDef.getName());
         def.setDescription(jsonDef.getDescription());
-        def.setGroup(jsonDef.getGroup());
         def.setEnabled(jsonDef.getEnabled() != null ? jsonDef.getEnabled() : true);
-        
-        // 转换连接配置
-        ConnectionConfig connection = new ConnectionConfig();
-        
-        // 转换类型：使用枚举解析，支持多种格式
-        ConnectionTypeEnums connectionType = ConnectionTypeEnums.fromString(jsonDef.getType());
-        connection.setType(connectionType);
-        
-        connection.setUrl(jsonDef.getUrl());
-        
-        // 处理命令（stdio类型）
+
+        ConnectionConfig conn = new ConnectionConfig();
+        conn.setType(ConnectionTypeEnums.fromString(jsonDef.getType()));
+        conn.setUrl(jsonDef.getUrl());
+
         if (jsonDef.getCommand() != null) {
             if (jsonDef.getCommand() instanceof String) {
-                connection.setUrl((String) jsonDef.getCommand());
+                conn.setUrl((String) jsonDef.getCommand());
             } else if (jsonDef.getCommand() instanceof List) {
-                // 命令数组转换为字符串（用空格分隔）
                 @SuppressWarnings("unchecked")
                 List<String> cmdList = (List<String>) jsonDef.getCommand();
-                connection.setUrl(String.join(" ", cmdList));
+                conn.setUrl(String.join(" ", cmdList));
             }
         }
-        
-        // 处理headers：保存完整的headers Map，同时提取apiKey便于单独使用
+
         if (jsonDef.getHeaders() != null && !jsonDef.getHeaders().isEmpty()) {
-            // 保存完整的headers Map
-            connection.setHeaders(jsonDef.getHeaders());
-            
-            // 如果headers中有Authorization，提取token部分为apiKey（去掉"Bearer "前缀）
-            // 这样既保留了完整的headers，也方便某些场景直接使用纯token
+            conn.setHeaders(jsonDef.getHeaders());
             String authHeader = jsonDef.getHeaders().get("Authorization");
             if (StringUtils.isNotEmpty(authHeader)) {
-                // 移除 "Bearer " 前缀，只保留token
                 if (authHeader.startsWith("Bearer ")) {
-                    connection.setApiKey(authHeader.substring(7));
-                } else if (authHeader.startsWith("Basic ")) {
-                    // 移除 "Basic " 前缀
-                    connection.setApiKey(authHeader.substring(6));
+                    conn.setApiKey(authHeader.substring(7));
                 } else {
-                    // 如果不是标准格式，直接使用整个值
-                    connection.setApiKey(authHeader);
+                    conn.setApiKey(authHeader);
                 }
             }
         }
-        
-        // 设置超时和重试配置
-        connection.setTimeout(jsonDef.getTimeout() != null ? jsonDef.getTimeout() : 10000);
-        connection.setReadTimeout(jsonDef.getReadTimeout() != null ? jsonDef.getReadTimeout() : 30000);
-        connection.setRetryCount(jsonDef.getRetryCount() != null ? jsonDef.getRetryCount() : 3);
-        connection.setRetryInterval(jsonDef.getRetryInterval() != null ? jsonDef.getRetryInterval() : 1000);
-        connection.setCacheEnabled(jsonDef.getCacheEnabled() != null ? jsonDef.getCacheEnabled() : true);
-        connection.setCacheTtl(jsonDef.getCacheTtl() != null ? jsonDef.getCacheTtl() : 300);
-        
-        def.setConnection(connection);
-        
+
+        conn.setTimeout(jsonDef.getTimeout() != null ? jsonDef.getTimeout() : 10000);
+        conn.setReadTimeout(jsonDef.getReadTimeout() != null ? jsonDef.getReadTimeout() : 30000);
+        conn.setRetryCount(jsonDef.getRetryCount() != null ? jsonDef.getRetryCount() : 3);
+        conn.setRetryInterval(jsonDef.getRetryInterval() != null ? jsonDef.getRetryInterval() : 1000);
+        conn.setCacheEnabled(jsonDef.getCacheEnabled() != null ? jsonDef.getCacheEnabled() : true);
+        conn.setCacheTtl(jsonDef.getCacheTtl() != null ? jsonDef.getCacheTtl() : 300);
+
+        def.setConnection(conn);
         return def;
     }
-    
-    /**
-     * MCP服务器定义
-     */
+
+    // ── 内部数据结构（保持不变，供 McpClientFactory 使用）──────────────────────
+
     @Data
     public static class McpServerDefinition {
-        /**
-         * 服务器唯一标识
-         */
         private String id;
-        
-        /**
-         * 服务器显示名称
-         */
         private String name;
-        
-        /**
-         * 服务器描述
-         */
         private String description;
-        
-        /**
-         * 分组名称（前端按此分组展示）
-         */
-        private String group;
-        
-        /**
-         * 是否启用（默认true）
-         */
         private boolean enabled = true;
-        
-        /**
-         * 连接配置
-         */
         private ConnectionConfig connection = new ConnectionConfig();
     }
-    
-    /**
-     * 连接配置
-     */
+
     @Data
     public static class ConnectionConfig {
-        /**
-         * 连接类型
-         * - STREAMABLE_HTTP: Streamable HTTP传输（推荐，用于远程MCP服务器）
-         * - STDIO: 标准输入输出传输（本地进程）
-         * - WEBSOCKET: WebSocket传输（未来支持）
-         * - DOCKER: Docker传输（未来支持）
-         */
         private ConnectionTypeEnums type = ConnectionTypeEnums.STDIO;
-        
-        /**
-         * 服务器URL或命令：
-         * - type=streamable-http时：POST端点URL（如 http://localhost:3001/mcp）
-         * - type=stdio时：命令字符串（如 "node mcp-server.js" 或完整命令路径）
-         * - type=websocket时：WebSocket URL（如 ws://localhost:3001/mcp/ws）
-         */
         private String url;
-        
-        /**
-         * API密钥（从headers中的Authorization提取，用于认证）
-         */
         private String apiKey;
-        
-        /**
-         * HTTP请求头（保留，用于扩展）
-         */
         private Map<String, String> headers;
-        
-        /**
-         * 连接超时时间（毫秒），默认10秒
-         */
         private int timeout = 10000;
-        
-        /**
-         * 读取超时时间（毫秒），默认30秒
-         */
         private int readTimeout = 30000;
-        
-        /**
-         * 重试次数，默认3次
-         */
         private int retryCount = 3;
-        
-        /**
-         * 重试间隔（毫秒），默认1秒
-         */
         private long retryInterval = 1000;
-        
-        /**
-         * 是否启用缓存，默认true
-         */
         private boolean cacheEnabled = true;
-        
-        /**
-         * 缓存时间（秒），默认5分钟
-         */
         private long cacheTtl = 300;
     }
 }
