@@ -87,7 +87,63 @@ RAG 配置示例见 [BACKEND_CONFIG.md](../BACKEND_CONFIG.md#-postgresql--pgvect
 
 ---
 
-## 5. 应用与部署配置
+## 5. Web Search 配置（Playwright 浏览器）
+
+ZenoAgent 支持两种 Web Search 实现模式：
+
+| 模式 | 说明 | 适用场景 |
+|------|------|----------|
+| `http` | 轻量级 HTTP 请求（Jsoup 爬取） | 默认模式，无需额外依赖 |
+| `playwright` | 真实无头浏览器搜索 | 高级功能，支持 JS 渲染、Cookie 持久化、反爬虫检测 |
+
+### 5.1 配置项
+
+| 配置项 | 说明 | 默认值 | 配置位置 |
+|--------|------|--------|----------|
+| `aiagent.tools.web-search.engine` | 搜索引擎类型：`http` 或 `playwright` | `http` | application.yml / profile yml |
+| `aiagent.tools.web-search.timeout-seconds` | 请求超时（秒）；playwright 模式建议 30+ | `15` | application.yml / profile yml |
+| `aiagent.tools.web-search.max-results` | 搜索结果最大条数 | `5` | application.yml / profile yml |
+| `aiagent.tools.web-search.max-content-chars` | fetch_url 返回正文最大字符数 | `5000` | application.yml / profile yml |
+| `aiagent.tools.web-search.user-agent` | 模拟浏览器 User-Agent | Chrome 120 UA | application.yml / profile yml |
+| `aiagent.tools.web-search.headless` | Playwright 无头模式（Docker 中必须为 true） | `true` | application.yml / profile yml |
+| `aiagent.tools.web-search.user-data-dir` | Playwright 用户数据目录（持久化 Cookie） | `./playwright-data` | application.yml / profile yml |
+
+### 5.2 配置示例
+
+```yaml
+aiagent:
+  tools:
+    web-search:
+      # 搜索引擎：http（轻量）或 playwright（真实浏览器）
+      engine: playwright
+      # 请求超时（秒）；playwright 模式建议 30+
+      timeout-seconds: 30
+      # 搜索结果最大条数
+      max-results: 5
+      # fetch_url 返回正文最大字符数
+      max-content-chars: 5000
+      # 模拟浏览器 User-Agent
+      user-agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      # Playwright 无头模式（true=无头生产，false=有窗口调试）
+      headless: true
+      # Playwright 用户数据目录（持久化 Cookie/Session，提升搜索质量）
+      user-data-dir: ./playwright-data
+```
+
+### 5.3 Playwright 安装
+
+使用 `playwright` 模式需要安装浏览器，详见 [部署指南 - 安装 Playwright 浏览器](../DEPLOYMENT.md#安装-playwright-浏览器可选)。
+
+快速安装命令：
+
+```bash
+cd backend
+mvn exec:java -e -D exec.mainClass=com.microsoft.playwright.CLI -D exec.args="install chromium"
+```
+
+---
+
+## 6. 应用与部署配置
 
 | 变量名 | 说明 | 默认值 | 必填 | 配置位置 |
 |--------|------|--------|------|----------|
@@ -96,7 +152,7 @@ RAG 配置示例见 [BACKEND_CONFIG.md](../BACKEND_CONFIG.md#-postgresql--pgvect
 | `FRONTEND_PORT` | 前端服务端口 | 5173 | 否 | env |
 | `AIAGENT_MODEL_DEFAULT_MODEL_ID` | 默认模型 ID | gpt-4o-mini | 否 | env / yml |
 
-### 5.1 前端配置（VITE_*）
+### 6.1 前端配置（VITE_*）
 
 前端将 **构建时** 环境变量集中读入 `frontend/src/config/env.ts`，仅以 `VITE_` 开头的变量会被打包进前端资源。
 
@@ -109,7 +165,7 @@ RAG 配置示例见 [BACKEND_CONFIG.md](../BACKEND_CONFIG.md#-postgresql--pgvect
 - **前后端不同域**：构建时设置 `VITE_API_BASE_URL=https://api.example.com` 等完整后端地址，并确保后端 CORS 允许该前端域名。
 - Docker 构建前端时需通过 `--build-arg VITE_API_BASE_URL=...` 传入（若需覆盖默认）。
 
-### 5.2 LLM 请求超时
+### 6.2 LLM 请求超时
 
 若日志出现 `TimeoutException: request timed out` 或 `HttpTimeoutException: request timed out`，说明调用 LLM（含本地 Ollama）时 HTTP 请求超时。
 
@@ -123,7 +179,7 @@ RAG 配置示例见 [BACKEND_CONFIG.md](../BACKEND_CONFIG.md#-postgresql--pgvect
 
 ---
 
-## 6. 快速配置示例
+## 7. 快速配置示例
 
 ### Docker 部署
 
@@ -143,7 +199,7 @@ docker-compose up -d
 
 ---
 
-## 7. 相关文档
+## 8. 相关文档
 
 - [后端服务配置](../BACKEND_CONFIG.md) - Redis、MySQL、PostgreSQL 安装与配置
 - [部署指南](../DEPLOYMENT.md) - 生产环境部署

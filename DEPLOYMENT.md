@@ -18,6 +18,7 @@
 - Redis 6.0+ (必需)
 - MySQL 8.0+ (必需，用于持久化存储)
 - PostgreSQL with pgvector (可选，RAG 功能需要)
+- Playwright 浏览器 (可选，Web Search 高级搜索功能需要)
 
 详细的后端服务配置说明请参考 [后端服务配置文档](./BACKEND_CONFIG.md)，配置项一览见 [配置变量参考](./docs/CONFIG_REFERENCE.md)。
 
@@ -143,6 +144,65 @@ sudo systemctl enable redis
 cd backend
 mvn clean package -DskipTests
 ```
+
+#### 安装 Playwright 浏览器（可选）
+
+如果需要使用 **Web Search 高级搜索功能**（真实浏览器搜索，支持 JS 渲染、Cookie 持久化、反爬虫检测），需要安装 Playwright 浏览器：
+
+**方式一：使用 Maven 插件自动安装（推荐）**
+
+```bash
+cd backend
+# 安装 Playwright 浏览器（Chromium）
+mvn exec:java -e -D exec.mainClass=com.microsoft.playwright.CLI -D exec.args="install chromium"
+```
+
+**方式二：手动下载安装**
+
+```bash
+# 下载 Playwright CLI JAR
+wget https://repo1.maven.org/maven2/com/microsoft/playwright/playwright/1.44.0/playwright-1.44.0.jar
+
+# 安装 Chromium 浏览器
+java -jar playwright-1.44.0.jar install chromium
+
+# 安装所有浏览器（可选，包括 Chromium、Firefox、WebKit）
+java -jar playwright-1.44.0.jar install
+```
+
+**方式三：使用 Playwright 命令行**
+
+```bash
+# 如果系统已安装 Node.js，可使用 npx
+npx playwright install chromium
+```
+
+**Docker 环境下安装**
+
+在 Dockerfile 中添加 Playwright 安装：
+
+```dockerfile
+# 在运行阶段添加 Playwright 依赖
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ttf-freefont
+
+# 设置环境变量指向系统 Chromium
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV CHROMIUM_PATH=/usr/bin/chromium-browser
+```
+
+**验证安装**
+
+```bash
+# 检查 Playwright 浏览器是否安装成功
+java -jar playwright-1.44.0.jar --help
+```
+
+> **注意**：Playwright 浏览器约需 **300-500MB** 磁盘空间。如果不需要 Web Search 高级功能，可在配置中将 `aiagent.tools.web-search.engine` 设置为 `http`（使用轻量级 HTTP 请求），无需安装浏览器。
 
 #### 运行 JAR 包
 ```bash
@@ -368,6 +428,71 @@ sudo systemctl reload nginx
 1. 检查 Redis 是否运行：`redis-cli ping`
 2. 检查防火墙规则
 3. 验证 Redis 配置
+
+### Playwright 浏览器初始化失败
+
+**症状**：启动日志中出现 `[PlaywrightPool] Playwright 初始化失败，将降级使用 HTTP 模式`
+
+**常见原因及解决方案**：
+
+| 原因 | 解决方案 |
+|------|----------|
+| 浏览器未安装 | 执行 `mvn exec:java -e -D exec.mainClass=com.microsoft.playwright.CLI -D exec.args="install chromium"` 安装 Chromium |
+| Docker 容器缺少依赖 | 在 Dockerfile 中添加 `chromium`、`nss`、`freetype`、`harfbuzz` 等依赖包 |
+| 内存不足 | 确保系统至少有 2GB 可用内存，Playwright 浏览器运行需要一定内存 |
+| 权限问题 | 确保 `playwright-data` 目录有读写权限：`chmod -R 755 ./playwright-data` |
+
+**验证 Playwright 是否正常工作**：
+
+```bash
+# 测试 Playwright 安装
+java -cp target/ai-agent-standalone-1.0.0.jar com.microsoft.playwright.CLI --help
+
+# 或使用 Maven
+mvn exec:java -e -D exec.mainClass=com.microsoft.playwright.CLI -D exec.args="--help"
+```
+
+**降级方案**：如果无法安装 Playwright，可在配置中将搜索引擎切换为 HTTP 模式：
+
+```yaml
+aiagent:
+  tools:
+    web-search:
+      engine: http  # 使用轻量级 HTTP 请求，无需浏览器
+```
+
+**Docker 环境特殊配置**：
+
+Docker 容器中运行 Playwright 需要额外的系统依赖和配置：
+
+```dockerfile
+# 使用支持 Playwright 的基础镜像（推荐）
+FROM mcr.microsoft.com/playwright/java:v1.44.0-jammy
+
+# 或在 Alpine 中安装依赖
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ttf-freefont \
+    dbus \
+    xvfb
+
+# 设置环境变量
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV CHROMIUM_PATH=/usr/bin/chromium-browser
+```
+
+```yaml
+# application.yml 配置（Docker 环境）
+aiagent:
+  tools:
+    web-search:
+      engine: playwright
+      headless: true  # Docker 中必须为 true
+      user-data-dir: /app/playwright-data  # 容器内路径
+```
 
 ### 前端无法访问后端
 
